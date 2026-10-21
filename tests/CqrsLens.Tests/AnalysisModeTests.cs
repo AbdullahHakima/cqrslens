@@ -75,6 +75,19 @@ public sealed class AnalysisModeTests : IDisposable
             {
                 public DbSet<Order> Orders { get; set; } = null!;
             }
+
+            public static class Nested
+            {
+                public sealed record PingQuery : IRequest<int>;
+
+                public sealed class PingQueryHandler : IRequestHandler<PingQuery, int>
+                {
+                }
+
+                public sealed class PingQueryValidator : AbstractValidator<PingQuery>
+                {
+                }
+            }
             """);
     }
 

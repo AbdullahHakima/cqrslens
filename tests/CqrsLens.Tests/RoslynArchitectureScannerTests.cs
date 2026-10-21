@@ -77,6 +77,27 @@ public class RoslynArchitectureScannerTests
     }
 
     [Fact]
+    public void ReportsUnresolvedContractReferencesInsteadOfSilentlyReturningZero()
+    {
+        var files = new[]
+        {
+            Source("NoUsing.cs", """
+                namespace Shop.Application;
+
+                public sealed record PlaceOrder : IRequest<Guid>;
+                """),
+        };
+
+        var result = Scan(files);
+
+        Assert.Empty(result.Requests);
+        var warning = Assert.Single(result.Checks);
+        Assert.Equal("RoslynUnresolvedContracts", warning.Code);
+        Assert.Equal(CheckSeverity.Warning, warning.Severity);
+        Assert.Contains("IRequest", warning.Message);
+    }
+
+    [Fact]
     public void FindsShapesInRealPackageStyleSourceWithoutInjectedContracts()
     {
         var files = new[]
