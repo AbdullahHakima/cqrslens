@@ -305,12 +305,18 @@ public static partial class CSharpScanner
     /// Turns one file's fragment into analysis entries. DbSets are attributed to the
     /// DbContext class whose body span contains them (supports several contexts per file).
     /// </summary>
-    public static void ApplyScan(FileScan scan, string code, string? projectName, AnalysisResult result)
+    public static void ApplyScan(
+        FileScan scan,
+        string code,
+        string? projectName,
+        AnalysisResult result,
+        string? filePath = null)
     {
         var contextClasses = new List<(ClassDecl Decl, DbContextInfo Info)>();
 
         foreach (var decl in scan.Classes)
         {
+            var location = SourceLocation.Create(filePath, result.RootPath, code, decl.BodySpan.Start);
             // Open generic / abstract base declarations are not concrete shapes.
             var typeParameters = new HashSet<string>(decl.TypeParameters, StringComparer.Ordinal);
             bool IsConcreteTarget(string? target) =>
@@ -326,6 +332,7 @@ public static partial class CSharpScanner
                     Namespace = decl.Namespace,
                     ResponseType = response,
                     ProjectName = projectName,
+                    Location = location,
                 };
                 request.ContainingTypes.AddRange(decl.ContainingTypes);
                 result.Requests.Add(request);
@@ -351,6 +358,7 @@ public static partial class CSharpScanner
                     RequestName = UnqualifiedTypeName(requestType),
                     RequestNamespace = NamespaceOfType(requestType) is { Length: > 0 } ns ? ns : null,
                     ProjectName = projectName,
+                    Location = location,
                 };
                 handler.ContainingTypes.AddRange(decl.ContainingTypes);
                 result.Handlers.Add(handler);
@@ -379,6 +387,7 @@ public static partial class CSharpScanner
                     TargetType = UnqualifiedTypeName(validatorTarget),
                     TargetNamespace = NamespaceOfType(validatorTarget) is { Length: > 0 } ns ? ns : null,
                     ProjectName = projectName,
+                    Location = location,
                 };
                 validator.ContainingTypes.AddRange(decl.ContainingTypes);
                 result.Validators.Add(validator);
@@ -387,7 +396,12 @@ public static partial class CSharpScanner
             // IPipelineBehavior<...> -> a pipeline behavior
             if (decl.BaseList.Contains("IPipelineBehavior<", StringComparison.Ordinal))
             {
-                result.Behaviors.Add(new BehaviorInfo { Name = decl.Name, ProjectName = projectName });
+                result.Behaviors.Add(new BehaviorInfo
+                {
+                    Name = decl.Name,
+                    ProjectName = projectName,
+                    Location = location,
+                });
             }
 
             // : DbContext (or *DbContext, e.g. IdentityDbContext) -> a DbContext
@@ -398,6 +412,7 @@ public static partial class CSharpScanner
                     Name = decl.Name,
                     Namespace = decl.Namespace,
                     ProjectName = projectName,
+                    Location = location,
                 };
                 ctx.ContainingTypes.AddRange(decl.ContainingTypes);
                 contextClasses.Add((decl, ctx));
@@ -451,11 +466,15 @@ public static partial class CSharpScanner
     /// Convenience for tests and single-file scans: scan text directly into a result.
     /// (v0.1-compatible entry point; files scanned this way get no marker resolution.)
     /// </summary>
-    public static void ScanText(string code, string? projectName, AnalysisResult result)
-        => ApplyScan(ScanText(code), code, projectName, result);
+    public static void ScanText(
+        string code,
+        string? projectName,
+        AnalysisResult result,
+        string? filePath = null)
+        => ApplyScan(ScanText(code), code, projectName, result, filePath);
 
     public static void ScanFile(string path, string? projectName, AnalysisResult result)
-        => ScanText(File.ReadAllText(path), projectName, result);
+        => ScanText(File.ReadAllText(path), projectName, result, path);
 
     /// <summary>
     /// Extracts the top-level generic arguments of the first

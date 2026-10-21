@@ -9,27 +9,43 @@ public static class Analyzer
     private static readonly IArchitectureScanner DefaultScanner = new TextArchitectureScanner();
     private static readonly IArchitectureScanner RoslynScanner = new RoslynArchitectureScanner();
 
-    public static AnalysisResult Analyze(string rootPath, IReadOnlySet<string>? markers = null)
-        => Analyze(rootPath, DefaultScanner, markers);
+    public static AnalysisResult Analyze(
+        string rootPath,
+        IReadOnlySet<string>? markers = null,
+        DateTimeOffset? generatedAt = null)
+        => Analyze(rootPath, DefaultScanner, markers, generatedAt);
 
     public static AnalysisResult Analyze(
         string rootPath,
         AnalysisMode mode,
-        IReadOnlySet<string>? markers = null)
+        IReadOnlySet<string>? markers = null,
+        DateTimeOffset? generatedAt = null)
         => Analyze(
             rootPath,
             mode == AnalysisMode.Roslyn ? RoslynScanner : DefaultScanner,
-            markers);
+            markers,
+            generatedAt);
 
     internal static AnalysisResult Analyze(
         string rootPath,
         IArchitectureScanner scanner,
-        IReadOnlySet<string>? markers = null)
+        IReadOnlySet<string>? markers = null,
+        DateTimeOffset? generatedAt = null)
     {
         var stopwatch = Stopwatch.StartNew();
         var root = Path.GetFullPath(rootPath);
         var markerSet = markers ?? new HashSet<string>(StringComparer.Ordinal);
-        var result = new AnalysisResult { RootPath = root };
+        var result = new AnalysisResult
+        {
+            RootPath = root,
+            ScannerName = scanner.GetType().Name switch
+            {
+                nameof(TextArchitectureScanner) => "text",
+                nameof(RoslynArchitectureScanner) => "roslyn",
+                var name => name,
+            },
+            GeneratedAt = generatedAt ?? DateTimeOffset.UtcNow,
+        };
 
         result.Projects.AddRange(CsprojParser.LoadProjects(root));
         foreach (var project in result.Projects)
@@ -67,6 +83,18 @@ public static class Analyzer
         scanner.Scan(sourceFiles, markerSet, result);
         result.SkippedFiles.Sort(StringComparer.OrdinalIgnoreCase);
         result.FileCount = Math.Max(0, result.DiscoveredFileCount - result.SkippedFiles.Count);
+
+        foreach (var skipped in result.SkippedFiles)
+        {
+            var fullPath = Path.Combine(root, skipped.Replace('/', Path.DirectorySeparatorChar));
+            var project = FindOwningProject(result.Projects, fullPath);
+            result.RecordDiagnostic(new AnalysisDiagnostic(
+                AnalysisResult.SourceFileSkippedCode,
+                AnalysisDiagnosticSeverity.Warning,
+                $"Source file `{skipped}` could not be read or scanned; shapes in this file are missing.",
+                SourceLocation.FromLine(fullPath, root, 1, 1),
+                project?.Name));
+        }
 
         Link(result);
         result.Checks.AddRange(ArchitectureChecker.RunChecks(result));
@@ -133,11 +161,40 @@ public static class Analyzer
                 : null;
         }
 
+        void RecordAmbiguousLink(
+            string ownerKind,
+            string owner,
+            string target,
+            SourceLocation? location,
+            string? project)
+        {
+            if (!bySimpleName.TryGetValue(target, out var matches) || matches.Count < 2)
+                return;
+
+            var names = string.Join(
+                ", ",
+                matches.Select(m => m.FullName).OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+            result.RecordDiagnostic(new AnalysisDiagnostic(
+                AnalysisResult.AmbiguousLinkCode,
+                AnalysisDiagnosticSeverity.Warning,
+                $"{ownerKind} `{owner}` targets `{target}`, which matches {matches.Count} requests ({names}); the link was omitted.",
+                location,
+                project));
+        }
+
         foreach (var handler in result.Handlers.OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase))
         {
             var request = Resolve(handler.RequestName, handler.RequestNamespace, handler.Namespace);
             if (request is null)
+            {
+                RecordAmbiguousLink(
+                    "Handler",
+                    handler.FullName,
+                    handler.RequestName,
+                    handler.Location,
+                    handler.ProjectName);
                 continue;
+            }
 
             // Text mode only knows a written namespace when the generic argument was
             // qualified. Once linking has identified the real request, retain that
@@ -151,7 +208,15 @@ public static class Analyzer
         {
             var request = Resolve(validator.TargetType, validator.TargetNamespace, validator.Namespace);
             if (request is null)
+            {
+                RecordAmbiguousLink(
+                    "Validator",
+                    validator.FullName,
+                    validator.TargetType,
+                    validator.Location,
+                    validator.ProjectName);
                 continue;
+            }
 
             validator.TargetNamespace ??= request.Namespace;
             if (!request.Validators.Contains(validator.FullName))

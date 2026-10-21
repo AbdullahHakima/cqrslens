@@ -54,10 +54,14 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             {
                 foreach (var file in ownFiles)
                     result.RecordSkippedFile(file.Path);
-                result.Checks.Add(new CheckFinding(
-                    CheckSeverity.Warning,
-                    "RoslynScanFailure",
-                    $"Roslyn could not scan project `{ProjectLabel(project.Key)}`: {ex.Message}"));
+                result.RecordDiagnostic(new AnalysisDiagnostic(
+                    AnalysisResult.RoslynScanFailureCode,
+                    AnalysisDiagnosticSeverity.Error,
+                    $"Roslyn could not scan project `{ProjectLabel(project.Key)}`: {ex.Message}",
+                    ownFiles.Count > 0
+                        ? SourceLocation.FromLine(ownFiles[0].Path, result.RootPath, 1, 1)
+                        : null,
+                    ProjectLabel(project.Key)));
             }
         }
     }
@@ -94,10 +98,12 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             catch (Exception ex)
             {
                 result.RecordSkippedFile(file.Path);
-                result.Checks.Add(new CheckFinding(
-                    CheckSeverity.Warning,
-                    "RoslynScanFailure",
-                    $"Roslyn could not scan `{file.Path}`: {ex.Message}"));
+                result.RecordDiagnostic(new AnalysisDiagnostic(
+                    AnalysisResult.RoslynScanFailureCode,
+                    AnalysisDiagnosticSeverity.Error,
+                    $"Roslyn could not scan `{file.Path}`: {ex.Message}",
+                    SourceLocation.FromLine(file.Path, result.RootPath, 1, 1),
+                    file.ProjectName));
             }
         }
     }
@@ -115,6 +121,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         AnalysisResult result)
     {
         var unresolved = new SortedSet<string>(StringComparer.Ordinal);
+        SourceLocation? firstLocation = null;
 
         foreach (var (file, tree) in parsed.Where(p => ownPaths.Contains(p.File.Path)))
         {
@@ -126,19 +133,24 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                     continue;
 
                 var info = model.GetSymbolInfo(name);
-                if (info.Symbol is null && info.CandidateSymbols.Length == 0)
-                    unresolved.Add(text);
+                if (info.Symbol is not null || info.CandidateSymbols.Length != 0)
+                    continue;
+
+                unresolved.Add(text);
+                firstLocation ??= LocationOf(name.GetLocation(), result.RootPath);
             }
         }
 
         if (unresolved.Count == 0)
             return;
 
-        result.Checks.Add(new CheckFinding(
-            CheckSeverity.Warning,
-            "RoslynUnresolvedContracts",
+        result.RecordDiagnostic(new AnalysisDiagnostic(
+            AnalysisResult.RoslynUnresolvedContractsCode,
+            AnalysisDiagnosticSeverity.Warning,
             $"Roslyn could not bind {string.Join(", ", unresolved)} in project `{projectLabel}`. " +
-            "Add the package/using or use text mode for a fallback scan."));
+            "Add the package/using or use text mode for a fallback scan.",
+            firstLocation,
+            projectLabel));
     }
 
     private static void ProcessTree(
@@ -218,6 +230,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             ResponseType = response is null ? null : DisplayType(response),
             ProjectName = projectName,
             ViaMarker = viaMarker,
+            Location = LocationOf(symbol, result.RootPath),
         };
         request.ContainingTypes.AddRange(ContainingTypeNames(symbol));
 
@@ -264,6 +277,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 RequestName = targetName,
                 RequestNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace,
                 ProjectName = projectName,
+                Location = LocationOf(symbol, result.RootPath),
             };
             handler.ContainingTypes.AddRange(ContainingTypeNames(symbol));
             result.Handlers.Add(handler);
@@ -309,6 +323,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 TargetType = targetName,
                 TargetNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace,
                 ProjectName = projectName,
+                Location = LocationOf(symbol, result.RootPath),
             };
             validator.ContainingTypes.AddRange(ContainingTypeNames(symbol));
             result.Validators.Add(validator);
@@ -431,6 +446,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         {
             Name = symbol.Name,
             ProjectName = projectName,
+            Location = LocationOf(symbol, result.RootPath),
         });
     }
 
@@ -455,6 +471,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             Name = symbol.Name,
             Namespace = ns,
             ProjectName = projectName,
+            Location = LocationOf(symbol, result.RootPath),
         };
         context.ContainingTypes.AddRange(containingTypes);
 
@@ -516,6 +533,22 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         => symbol.ContainingNamespace is { IsGlobalNamespace: false } ns
             ? ns.ToDisplayString()
             : "";
+
+    private static SourceLocation? LocationOf(ISymbol symbol, string rootPath)
+    {
+        var location = symbol.Locations.FirstOrDefault(l => l.IsInSource);
+        return location is null ? null : LocationOf(location, rootPath);
+    }
+
+    private static SourceLocation? LocationOf(Location location, string rootPath)
+    {
+        var lineSpan = location.GetLineSpan();
+        return SourceLocation.FromLine(
+            location.SourceTree?.FilePath,
+            rootPath,
+            lineSpan.StartLinePosition.Line + 1,
+            lineSpan.StartLinePosition.Character + 1);
+    }
 
     private static string ProjectLabel(string project)
         => string.IsNullOrEmpty(project) ? "(no project)" : project;

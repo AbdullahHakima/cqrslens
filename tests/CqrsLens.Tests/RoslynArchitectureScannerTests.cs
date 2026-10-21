@@ -91,9 +91,9 @@ public class RoslynArchitectureScannerTests
         var result = Scan(files);
 
         Assert.Empty(result.Requests);
-        var warning = Assert.Single(result.Checks);
-        Assert.Equal("RoslynUnresolvedContracts", warning.Code);
-        Assert.Equal(CheckSeverity.Warning, warning.Severity);
+        var warning = Assert.Single(result.Diagnostics);
+        Assert.Equal(AnalysisResult.RoslynUnresolvedContractsCode, warning.Code);
+        Assert.Equal(AnalysisDiagnosticSeverity.Warning, warning.Severity);
         Assert.Contains("IRequest", warning.Message);
     }
 

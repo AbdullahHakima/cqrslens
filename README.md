@@ -70,6 +70,11 @@ the target project's full MSBuild/package reference graph. Text mode remains the
 default and fallback. Parity with text mode is enforced on `samples/SampleShop`
 by the test suite.
 
+Reports record the scanner, a single generation timestamp, source locations and a
+diagnostics section for skipped files, unresolved contracts and ambiguous links.
+`--strict` only exits with code 4 when the scan is complete enough to trust its
+architecture errors; on an incomplete scan it reports the diagnostics instead.
+
 ### Custom marker interfaces
 
 Many codebases wrap MediatR in their own abstractions. CqrsLens follows interface
