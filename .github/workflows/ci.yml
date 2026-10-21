@@ -5,9 +5,18 @@ on:
     branches: [main]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -16,19 +25,116 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
-      - name: Restore
-        run: dotnet restore CqrsLens.sln
+      - name: Restore (locked)
+        run: dotnet restore CqrsLens.sln --locked-mode
 
       - name: Build
-        run: dotnet build CqrsLens.sln -c Release --no-restore
+        run: dotnet build CqrsLens.sln -c Release --no-restore --nologo
 
       - name: Test
-        run: dotnet test CqrsLens.sln -c Release --no-build
+        run: dotnet test CqrsLens.sln -c Release --no-build --nologo
 
       - name: Pack
         run: dotnet pack src/CqrsLens/CqrsLens.csproj -c Release --no-build -o artifacts
 
-      - name: Smoke test the tool on the sample solution
+      - name: Smoke test the source tree
+        shell: bash
         run: |
-          dotnet run --project src/CqrsLens -c Release --no-build -- samples/SampleShop -o /tmp/ARCHITECTURE.md
-          grep -q "CQRS Map" /tmp/ARCHITECTURE.md
+          set -euo pipefail
+          dotnet run --project src/CqrsLens -c Release --no-build -- \
+            samples/SampleShop \
+            --analysis text \
+            --strict \
+            --generated-at 2026-01-02T03:04:05Z \
+            -o "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "| Requests (commands + queries) | 4 |" \
+            "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "| Handlers | 4 |" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "| Validators | 2 |" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "| Pipeline behaviors | 1 |" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "| DbContexts | 1 |" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "## CQRS Map" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          test -s "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+
+      - name: Upload package
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-${{ matrix.os }}
+          path: artifacts/*.nupkg
+          if-no-files-found: error
+
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.os }}
+          path: artifacts/ARCHITECTURE-*.md
+          if-no-files-found: error
+
+  package-smoke:
+    name: installed package smoke
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Download package
+        uses: actions/download-artifact@v4
+        with:
+          name: package-ubuntu-latest
+          path: artifacts
+
+      - name: Install the packed tool and scan the sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n1)
+          test -n "$version"
+          ls -l artifacts
+          dotnet tool install --global CqrsLens --version "$version" \
+            --add-source "$PWD/artifacts"
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          cqrslens --version
+          cqrslens samples/SampleShop \
+            --analysis text \
+            --strict \
+            --generated-at 2026-01-02T03:04:05Z \
+            -o artifacts/installed-ARCHITECTURE.md
+          grep -q "| Requests (commands + queries) | 4 |" artifacts/installed-ARCHITECTURE.md
+          grep -q "| Handlers | 4 |" artifacts/installed-ARCHITECTURE.md
+          grep -q "| Validators | 2 |" artifacts/installed-ARCHITECTURE.md
+          grep -q "| Pipeline behaviors | 1 |" artifacts/installed-ARCHITECTURE.md
+          grep -q "| DbContexts | 1 |" artifacts/installed-ARCHITECTURE.md
+          grep -q "## CQRS Map" artifacts/installed-ARCHITECTURE.md
+          test -s artifacts/installed-ARCHITECTURE.md
+
+      - name: Verify CLI exit codes from the installed tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.dotnet/tools:$PATH"
+
+          set +e
+          cqrslens --analysis nope > /dev/null 2>&1
+          usage_code=$?
+          set -e
+          test "$usage_code" -eq 1
+
+          set +e
+          cqrslens tests/fixtures/StrictFailure --strict \
+            -o artifacts/strict-failure.md > /dev/null 2>&1
+          strict_code=$?
+          set -e
+          test "$strict_code" -eq 4
+
+      - name: Upload installed-tool report
+        uses: actions/upload-artifact@v4
+        with:
+          name: installed-report
+          path: artifacts/installed-ARCHITECTURE.md
+          if-no-files-found: error
