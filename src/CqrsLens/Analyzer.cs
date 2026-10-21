@@ -6,7 +6,15 @@ namespace CqrsLens;
 /// <summary>Runs the full static analysis over a directory tree.</summary>
 public static class Analyzer
 {
+    private static readonly IArchitectureScanner DefaultScanner = new TextArchitectureScanner();
+
     public static AnalysisResult Analyze(string rootPath, IReadOnlySet<string>? markers = null)
+        => Analyze(rootPath, DefaultScanner, markers);
+
+    internal static AnalysisResult Analyze(
+        string rootPath,
+        IArchitectureScanner scanner,
+        IReadOnlySet<string>? markers = null)
     {
         var stopwatch = Stopwatch.StartNew();
         var root = Path.GetFullPath(rootPath);
@@ -20,15 +28,12 @@ public static class Analyzer
         var files = CsprojParser.FindSourceFiles(root);
         result.FileCount = files.Count;
 
-        // Scan files in parallel into per-file fragments; merging happens afterwards
-        // in deterministic (sorted path) order, so output ordering is stable.
-        var fragments = new ConcurrentBag<(string File, string Code, CSharpScanner.FileScan Scan)>();
+        var sources = new ConcurrentBag<(string File, string Code)>();
         Parallel.ForEach(files, file =>
         {
             try
             {
-                var code = File.ReadAllText(file);
-                fragments.Add((file, code, CSharpScanner.ScanText(code)));
+                sources.Add((file, File.ReadAllText(file)));
             }
             catch
             {
@@ -36,47 +41,15 @@ public static class Analyzer
             }
         });
 
-        var ordered = fragments
+        var sourceFiles = sources
             .OrderBy(f => f.File, StringComparer.OrdinalIgnoreCase)
+            .Select(f => new SourceFile(
+                f.File,
+                f.Code,
+                FindOwningProject(result.Projects, f.File)?.Name))
             .ToList();
 
-        var rawInterfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var (_, _, scan) in ordered)
-        {
-            foreach (var (name, bases) in scan.Interfaces)
-            {
-                var fullName = string.IsNullOrEmpty(scan.Namespace) ? name : $"{scan.Namespace}.{name}";
-                if (!rawInterfaceMap.TryGetValue(fullName, out var list))
-                    rawInterfaceMap[fullName] = list = new List<string>();
-                foreach (var b in bases)
-                    if (!list.Contains(b)) list.Add(b);
-            }
-        }
-
-        var interfacesBySimpleName = rawInterfaceMap.Keys
-            .GroupBy(CSharpScanner.SimpleName, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
-
-        var interfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var (name, bases) in rawInterfaceMap)
-        {
-            var ns = CSharpScanner.NamespaceOf(name);
-            interfaceMap[name] = bases
-                .Select(b => ResolveInterfaceName(b, ns, rawInterfaceMap, interfacesBySimpleName))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
-        }
-
-        var projectByFile = ordered.ToDictionary(
-            f => f.File,
-            f => FindOwningProject(result.Projects, f.File)?.Name,
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (file, code, scan) in ordered)
-        {
-            CSharpScanner.ApplyScan(scan, code, projectByFile[file], result);
-            DiscoverMarkerRequests(scan, projectByFile[file], interfaceMap, interfacesBySimpleName, markerSet, result);
-        }
+        scanner.Scan(sourceFiles, markerSet, result);
 
         Link(result);
         result.Checks.AddRange(ArchitectureChecker.RunChecks(result));
@@ -84,85 +57,6 @@ public static class Analyzer
         stopwatch.Stop();
         result.ElapsedMilliseconds = stopwatch.ElapsedMilliseconds;
         return result;
-    }
-
-    /// <summary>
-    /// Finds request classes hidden behind marker/custom interfaces (issue #2):
-    /// classes whose interface closure reaches IRequest (through custom
-    /// abstractions) or any configured --markers root.
-    /// </summary>
-    private static void DiscoverMarkerRequests(
-        CSharpScanner.FileScan scan,
-        string? projectName,
-        Dictionary<string, List<string>> interfaceMap,
-        Dictionary<string, List<string>> interfacesBySimpleName,
-        IReadOnlySet<string> markers,
-        AnalysisResult result)
-    {
-        foreach (var decl in scan.Classes)
-        {
-            if (decl.BaseRawNames.Contains("IRequest")) continue; // direct hit already recorded
-            if (decl.BaseRawNames.Contains("IRequestHandler")) continue;
-            if (decl.BaseRawNames.Count == 0) continue;
-
-            // Skip types that are other known shapes.
-            if (decl.BaseRawNames.Any(b => b is "DbContext" or "IdentityDbContext" or
-                                                "AbstractValidator" or "IValidator" or
-                                                "IPipelineBehavior"))
-                continue;
-
-            var directInterfaces = decl.BaseTypeNames
-                .Select(name => ResolveInterfaceName(name, scan.Namespace, interfaceMap, interfacesBySimpleName));
-            var reached = MarkerResolver.ReachableMarkers(directInterfaces, interfaceMap, markers);
-            if (reached.Count == 0) continue;
-
-            // A class is only a request when the closure reaches IRequest or a
-            // configured marker — ReachableMarkers only returns such roots.
-            if (!reached.Contains("IRequest") && !reached.Any(markers.Contains))
-                continue;
-
-            var via = reached.FirstOrDefault(m => m != "IRequest")
-                      ?? decl.BaseRawNames.FirstOrDefault(b => b != "IRequest");
-
-            // Avoid double-reporting the same type name + namespace (e.g. partials).
-            if (result.Requests.Any(r => r.Name == decl.Name && r.Namespace == scan.Namespace))
-                continue;
-
-            var request = new CqrsRequest
-            {
-                Name = decl.Name,
-                Namespace = scan.Namespace,
-                ProjectName = projectName,
-                ViaMarker = via,
-            };
-            request.ResponseType =
-                MarkerResolver.TryExtractMarkerResponse(decl, reached)
-                ?? decl.BaseRawNames
-                    .Select(b => CSharpScanner.ExtractGenericArguments(decl.BaseList, b)?.FirstOrDefault())
-                    .FirstOrDefault(a => a is not null);
-            if (!request.Name.EndsWith("Command", StringComparison.Ordinal) &&
-                !request.Name.EndsWith("Query", StringComparison.Ordinal))
-                request.Kind = MarkerResolver.ClassifyMarkerRequest(
-                    request.Name, decl.BaseRawNames.Concat(reached));
-            result.Requests.Add(request);
-        }
-    }
-
-    private static string ResolveInterfaceName(
-        string name,
-        string currentNamespace,
-        IReadOnlyDictionary<string, List<string>> interfaceMap,
-        IReadOnlyDictionary<string, List<string>> interfacesBySimpleName)
-    {
-        if (name.Contains('.')) return name;
-
-        var localName = string.IsNullOrEmpty(currentNamespace) ? name : $"{currentNamespace}.{name}";
-        if (interfaceMap.ContainsKey(localName))
-            return localName;
-
-        return interfacesBySimpleName.TryGetValue(name, out var candidates) && candidates.Count == 1
-            ? candidates[0]
-            : name;
     }
 
     private static ProjectInfo? FindOwningProject(List<ProjectInfo> projects, string file)
