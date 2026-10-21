@@ -100,7 +100,7 @@ public static class Analyzer
         result.Checks.AddRange(ArchitectureChecker.RunChecks(result));
 
         stopwatch.Stop();
-        result.ElapsedMilliseconds = stopwatch.ElapsedMilliseconds;
+        result.ElapsedMilliseconds = generatedAt is null ? stopwatch.ElapsedMilliseconds : 0;
         return result;
     }
 

@@ -4,8 +4,9 @@ using System.Text;
 namespace CqrsLens;
 
 /// <summary>
-/// Generates a self-contained HTML architecture report (issue #5): embedded CSS,
-/// stat cards, and Mermaid diagrams rendered in the browser via the Mermaid CDN.
+/// Generates a portable HTML architecture report (issue #5) with embedded CSS,
+/// stat cards and Mermaid source blocks. Mermaid itself is loaded from a pinned,
+/// SRI-checked CDN script; diagrams need network access on first view.
 /// </summary>
 public static class HtmlReportGenerator
 {
@@ -202,7 +203,10 @@ public static class HtmlReportGenerator
                         "static analysis only; the target solution was not built.</p>");
 
         html.AppendLine("</main>");
-        html.AppendLine("<script src=\"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js\"></script>");
+        html.AppendLine(
+            "<script src=\"https://cdn.jsdelivr.net/npm/mermaid@10.9.4/dist/mermaid.min.js\" " +
+            "integrity=\"sha384-fGOpyux4znQZ+n4tUrYReB2Ulu6K1MtBxIkbHauU09YM1hvCyA5oX9JUc1hRkDEr\" " +
+            "crossorigin=\"anonymous\"></script>");
         html.AppendLine("<script>mermaid.initialize({ startOnLoad: true });</script>");
         html.AppendLine("</body>");
         html.AppendLine("</html>");

@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace CqrsLens;
 
 public sealed class CliOptions
@@ -6,6 +8,7 @@ public sealed class CliOptions
     public string? Output { get; set; }
     public string? Format { get; set; }
     public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.Text;
+    public DateTimeOffset? GeneratedAt { get; set; }
     public bool Strict { get; set; }
     public HashSet<string> Markers { get; } = new(StringComparer.Ordinal);
 }
@@ -59,6 +62,17 @@ public static class CliParser
                         options.AnalysisMode = AnalysisMode.Roslyn;
                     else
                         return Error($"error: unknown analysis mode '{analysis}' - use text or roslyn.");
+                    break;
+                case "--generated-at":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --generated-at needs an ISO-8601 timestamp.");
+                    if (!DateTimeOffset.TryParse(
+                            args[++i],
+                            CultureInfo.InvariantCulture,
+                            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                            out var generatedAt))
+                        return Error($"error: invalid --generated-at timestamp '{args[i]}'.");
+                    options.GeneratedAt = generatedAt;
                     break;
                 case "--markers":
                     if (i + 1 >= args.Length)
@@ -153,7 +167,11 @@ public static class CliRunner
             return ExitCodes.NoProjects;
         }
 
-        var result = Analyzer.Analyze(path, options.AnalysisMode, options.Markers);
+        var result = Analyzer.Analyze(
+            path,
+            options.AnalysisMode,
+            options.Markers,
+            options.GeneratedAt);
 
         var isHtml = options.Format == "html" ||
                      (options.Format is null &&
@@ -218,12 +236,14 @@ public static class CliRunner
     {
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--analysis text|roslyn] [--markers ICommand,IQuery] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (or .html) in the current directory.");
         writer.WriteLine("  --format      Report format: md (default) or html. A .html -o path implies html.");
         writer.WriteLine("  --analysis    Analysis backend: text (default) or roslyn (opt-in).");
+        writer.WriteLine("  --generated-at  Fixed ISO-8601 timestamp for reproducible reports (tests/CI);");
+        writer.WriteLine("                timing is reported as 0 ms in this mode.");
         writer.WriteLine("  --markers     Comma-separated custom marker interface names that also count");
         writer.WriteLine("                as request roots (e.g. ICommand,IQuery,IMessage). Requests hidden");
         writer.WriteLine("                behind interfaces deriving from IRequest are always followed.");

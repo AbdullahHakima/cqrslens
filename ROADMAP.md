@@ -19,7 +19,8 @@ where they exist; the dates are not promises.
 - Namespace-aware linking (#3): fully-qualified resolution, so same-named
   requests in different namespaces keep their own handlers and validators
 - Multiple DbContexts per file (#4): DbSets attributed per context class
-- HTML report output (#5): `--format md|html`, one self-contained file
+- HTML report output (#5): `--format md|html`, one portable file with pinned,
+  SRI-checked Mermaid from a CDN
 - Architecture checks: `MissingHandler` and `LayerViolation` errors,
   `CommandWithoutValidator` warnings, `--strict` to fail CI on errors
 - GitHub Action: scan a repo and upload the report as a workflow artifact

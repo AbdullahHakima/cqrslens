@@ -38,10 +38,11 @@ All notable changes to CqrsLens are documented here.
   DbContext class that declares them (class-span analysis) instead of to the
   whole file.
 - **HTML output** (#5) — `--format md|html` (default `md`; a `.html` output
-  path implies HTML). The HTML report is a single self-contained file with
-  embedded CSS, summary stat cards, and the diagrams/tables rendered via
-  Mermaid in the browser. Diagram rendering sits behind a single seam method,
-  so a future pre-rendered mode can replace it without touching the generator.
+  path implies HTML). The HTML report is a single portable file with embedded
+  CSS, summary stat cards, and diagrams/tables rendered via Mermaid in the
+  browser (Mermaid is loaded from a pinned, SRI-checked CDN, so first view needs
+  network access). Diagram rendering sits behind a single seam method, so a
+  future pre-rendered mode can replace it without touching the generator.
 - **Architecture checks + `--strict`** — every report gains an
   *Architecture Checks* section: `MissingHandler` (error), `LayerViolation`
   (error — a Domain project referencing Infrastructure / Api / Web), and
