@@ -107,6 +107,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             AddRequest(symbol, file.ProjectName, markers, result);
             AddHandlers(symbol, file.ProjectName, result);
             AddValidators(symbol, file.ProjectName, result);
+            AddBehavior(symbol, file.ProjectName, result);
+            AddDbContext(symbol, file.ProjectName, result);
         }
     }
 
@@ -116,6 +118,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         IReadOnlySet<string> markers,
         AnalysisResult result)
     {
+        if (symbol.IsAbstract) return;
+
         var interfaces = ImplementedInterfaces(symbol).ToList();
         var requestInterface = interfaces.FirstOrDefault(i =>
             i.Name == "IRequest" && i.TypeArguments.Length > 0);
@@ -179,6 +183,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         string? projectName,
         AnalysisResult result)
     {
+        if (symbol.IsAbstract) return;
+
         foreach (var handlerInterface in ImplementedInterfaces(symbol)
                      .Where(i => i.Name == "IRequestHandler" && i.TypeArguments.Length >= 1))
         {
@@ -214,6 +220,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         string? projectName,
         AnalysisResult result)
     {
+        if (symbol.IsAbstract) return;
+
         var targets = new List<ITypeSymbol>();
 
         var validatorBase = FindBaseType(symbol, "AbstractValidator");
@@ -349,6 +357,77 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         foreach (var member in members)
             sb.AppendLine("    " + member);
         sb.AppendLine("}");
+    }
+
+    private static void AddBehavior(
+        INamedTypeSymbol symbol,
+        string? projectName,
+        AnalysisResult result)
+    {
+        if (!ImplementedInterfaces(symbol).Any(i =>
+                i.Name == "IPipelineBehavior" &&
+                i.TypeArguments.Length == 2))
+            return;
+
+        if (result.Behaviors.Any(b => b.Name == symbol.Name && b.ProjectName == projectName))
+            return;
+
+        result.Behaviors.Add(new BehaviorInfo
+        {
+            Name = symbol.Name,
+            ProjectName = projectName,
+        });
+    }
+
+    private static void AddDbContext(
+        INamedTypeSymbol symbol,
+        string? projectName,
+        AnalysisResult result)
+    {
+        if (symbol.IsAbstract || !IsDbContext(symbol))
+            return;
+
+        var ns = NamespaceOf(symbol);
+        var containingTypes = ContainingTypeNames(symbol);
+        if (result.DbContexts.Any(c =>
+                c.Name == symbol.Name &&
+                c.Namespace == ns &&
+                c.ContainingTypes.SequenceEqual(containingTypes)))
+            return;
+
+        var context = new DbContextInfo
+        {
+            Name = symbol.Name,
+            Namespace = ns,
+            ProjectName = projectName,
+        };
+        context.ContainingTypes.AddRange(containingTypes);
+
+        foreach (var property in symbol.GetMembers().OfType<IPropertySymbol>())
+        {
+            if (property.Type is not INamedTypeSymbol propertyType ||
+                propertyType.Name != "DbSet" ||
+                propertyType.TypeArguments.Length != 1)
+                continue;
+
+            context.DbSets.Add(new DbSetInfo(
+                DisplayType(propertyType.TypeArguments[0]),
+                property.Name));
+        }
+
+        result.DbContexts.Add(context);
+    }
+
+    private static bool IsDbContext(INamedTypeSymbol symbol)
+    {
+        for (var current = symbol.BaseType; current is not null; current = current.BaseType)
+        {
+            if (current.Name == "DbContext") return true;
+            if (current.Name.EndsWith("DbContext", StringComparison.Ordinal) &&
+                !current.Name.StartsWith('I'))
+                return true;
+        }
+        return false;
     }
 
     private static IEnumerable<INamedTypeSymbol> ImplementedInterfaces(INamedTypeSymbol symbol)
