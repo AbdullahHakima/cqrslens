@@ -26,6 +26,14 @@ inputs:
     description: Fail the step when architecture checks report any error.
     required: false
     default: 'false'
+  markers:
+    description: Comma-separated custom marker interfaces (e.g. ICommand,IQuery).
+    required: false
+    default: ''
+  version:
+    description: CqrsLens NuGet tool version to install.
+    required: false
+    default: '0.2.0'
 
 outputs:
   report-path:
@@ -42,7 +50,12 @@ runs:
 
     - name: Install CqrsLens
       shell: bash
-      run: dotnet tool install --global CqrsLens --version 0.2.1
+      env:
+        CQRSLENS_VERSION: ${{ inputs.version }}
+      run: |
+        if ! dotnet tool install --global CqrsLens --version "$CQRSLENS_VERSION"; then
+          dotnet tool update --global CqrsLens --version "$CQRSLENS_VERSION"
+        fi
 
     - name: Scan
       id: scan
@@ -52,16 +65,22 @@ runs:
         CQRSLENS_OUTPUT: ${{ inputs.output }}
         CQRSLENS_FORMAT: ${{ inputs.format }}
         CQRSLENS_STRICT: ${{ inputs.strict }}
+        CQRSLENS_MARKERS: ${{ inputs.markers }}
       run: |
         args=("$CQRSLENS_PATH" -o "$CQRSLENS_OUTPUT" --format "$CQRSLENS_FORMAT")
         if [ "$CQRSLENS_STRICT" = "true" ]; then
           args+=(--strict)
         fi
+        if [ -n "$CQRSLENS_MARKERS" ]; then
+          args+=(--markers "$CQRSLENS_MARKERS")
+        fi
         cqrslens "${args[@]}"
         echo "report-path=$CQRSLENS_OUTPUT" >> "$GITHUB_OUTPUT"
 
     - name: Upload report
+      if: always()
       uses: actions/upload-artifact@v4
       with:
         name: cqrslens-architecture-report
         path: ${{ inputs.output }}
+        if-no-files-found: warn
