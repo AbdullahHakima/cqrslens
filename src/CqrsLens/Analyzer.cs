@@ -136,14 +136,25 @@ public static class Analyzer
         foreach (var handler in result.Handlers.OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase))
         {
             var request = Resolve(handler.RequestName, handler.RequestNamespace, handler.Namespace);
-            if (request is not null && !request.Handlers.Contains(handler.FullName))
+            if (request is null)
+                continue;
+
+            // Text mode only knows a written namespace when the generic argument was
+            // qualified. Once linking has identified the real request, retain that
+            // identity so text and Roslyn results describe the same shape.
+            handler.RequestNamespace ??= request.Namespace;
+            if (!request.Handlers.Contains(handler.FullName))
                 request.Handlers.Add(handler.FullName);
         }
 
         foreach (var validator in result.Validators.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase))
         {
             var request = Resolve(validator.TargetType, validator.TargetNamespace, validator.Namespace);
-            if (request is not null && !request.Validators.Contains(validator.FullName))
+            if (request is null)
+                continue;
+
+            validator.TargetNamespace ??= request.Namespace;
+            if (!request.Validators.Contains(validator.FullName))
                 request.Validators.Add(validator.FullName);
         }
 

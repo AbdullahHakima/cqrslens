@@ -54,7 +54,7 @@ Text analysis remains the default:
 cqrslens <path> --analysis text
 ```
 
-It is build-free and tolerant of incomplete solutions. The experimental Roslyn
+It is build-free and tolerant of incomplete solutions. The opt-in Roslyn
 backend can be selected with:
 
 ```bash
@@ -62,10 +62,13 @@ cqrslens <path> --analysis roslyn
 ```
 
 Roslyn mode resolves source-defined symbols, aliases and declaration namespaces
-instead of matching declaration text. It still does not build or restore the
-target solution, and it does not yet evaluate the target project's full
-MSBuild/package reference graph. Text mode remains the fallback while that work
-continues.
+instead of matching declaration text. It compiles all source groups together so
+cross-project request/handler types bind, and injects minimal MediatR,
+FluentValidation and EF Core contracts only when the source does not define them.
+It still does not build or restore the target solution, and it does not evaluate
+the target project's full MSBuild/package reference graph. Text mode remains the
+default and fallback. Parity with text mode is enforced on `samples/SampleShop`
+by the test suite.
 
 ### Custom marker interfaces
 
@@ -254,8 +257,9 @@ The whole scan took 145 ms.
 
 CqrsLens defaults to targeted source-text matching with no build or package
 restore. That makes text mode fast and able to map solutions that do not compile,
-at the cost of some precision. Experimental `--analysis roslyn` uses Roslyn
-symbols for source-shape discovery while keeping the same no-build workflow:
+at the cost of some precision. Opt-in `--analysis roslyn` uses Roslyn symbols for
+source-shape discovery while keeping the same no-build workflow. It shims known
+MediatR/FluentValidation/EF Core contracts that are not present in the source:
 
 - Requests are followed through custom marker interfaces (anything deriving from
   `IRequest`, plus `--markers` roots), but not through base *classes*.

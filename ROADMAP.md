@@ -33,11 +33,13 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- **Roslyn-based analysis** (#1): the experimental source-symbol backend now
-  covers requests, handlers, validators, behaviors and DbContexts behind
-  `--analysis roslyn`. Next: load the target project's evaluated references and
-  compare real-codebase output before considering it as the default. Text mode
-  stays as the fast fallback.
+- **Roslyn-based analysis** (#1): the opt-in source-symbol backend covers
+  requests, handlers, validators, behaviors and DbContexts behind
+  `--analysis roslyn`. It compiles source groups together and safely shims
+  missing MediatR/FluentValidation/EF Core contracts; `samples/SampleShop` parity
+  with text mode is enforced by tests. Next: load evaluated MSBuild/package
+  references and compare broader real codebases before considering it as the
+  default. Text mode stays as the fast fallback.
 - **EF Core ER diagram** (#6): entity relationships from navigation
   properties and foreign keys, not just DbSet lists.
 - **Pre-rendered SVG diagrams**: diagrams compiled to SVG ahead of time

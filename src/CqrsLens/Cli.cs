@@ -5,6 +5,7 @@ public sealed class CliOptions
     public string? Path { get; set; }
     public string? Output { get; set; }
     public string? Format { get; set; }
+    public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.Text;
     public bool Strict { get; set; }
     public HashSet<string> Markers { get; } = new(StringComparer.Ordinal);
 }
@@ -47,6 +48,17 @@ public static class CliParser
                     if (i + 1 >= args.Length)
                         return Error("error: --format needs a value: md or html");
                     options.Format = args[++i].ToLowerInvariant();
+                    break;
+                case "--analysis":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --analysis needs a value: text or roslyn");
+                    var analysis = args[++i].ToLowerInvariant();
+                    if (analysis == "text")
+                        options.AnalysisMode = AnalysisMode.Text;
+                    else if (analysis == "roslyn")
+                        options.AnalysisMode = AnalysisMode.Roslyn;
+                    else
+                        return Error($"error: unknown analysis mode '{analysis}' - use text or roslyn.");
                     break;
                 case "--markers":
                     if (i + 1 >= args.Length)
@@ -141,7 +153,7 @@ public static class CliRunner
             return ExitCodes.NoProjects;
         }
 
-        var result = Analyzer.Analyze(path, options.Markers);
+        var result = Analyzer.Analyze(path, options.AnalysisMode, options.Markers);
 
         var isHtml = options.Format == "html" ||
                      (options.Format is null &&
@@ -193,11 +205,12 @@ public static class CliRunner
     {
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--markers ICommand,IQuery] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--analysis text|roslyn] [--markers ICommand,IQuery] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (or .html) in the current directory.");
         writer.WriteLine("  --format      Report format: md (default) or html. A .html -o path implies html.");
+        writer.WriteLine("  --analysis    Analysis backend: text (default) or roslyn (opt-in).");
         writer.WriteLine("  --markers     Comma-separated custom marker interface names that also count");
         writer.WriteLine("                as request roots (e.g. ICommand,IQuery,IMessage). Requests hidden");
         writer.WriteLine("                behind interfaces deriving from IRequest are always followed.");

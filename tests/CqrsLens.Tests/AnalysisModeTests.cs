@@ -110,9 +110,82 @@ public sealed class AnalysisModeTests : IDisposable
             roslynResult.DbContexts.Select(ContextSignature).OrderBy(x => x));
     }
 
+    [Fact]
+    public void RoslynMode_MatchesTextModeForSampleShop()
+    {
+        var root = Path.Combine(FindRepositoryRoot(), "samples", "SampleShop");
+
+        var textResult = Analyzer.Analyze(root, AnalysisMode.Text);
+        var roslynResult = Analyzer.Analyze(root, AnalysisMode.Roslyn);
+
+        Assert.Equal(4, textResult.Requests.Count);
+        Assert.Equal(4, textResult.Handlers.Count);
+        Assert.Equal(2, textResult.Validators.Count);
+        Assert.Single(textResult.Behaviors);
+        Assert.Single(textResult.DbContexts);
+
+        AssertSame(
+            textResult.Requests.Select(RequestSignature),
+            roslynResult.Requests.Select(RequestSignature));
+
+        AssertSame(
+            textResult.Handlers.Select(HandlerSignature),
+            roslynResult.Handlers.Select(HandlerSignature));
+
+        AssertSame(
+            textResult.Validators.Select(ValidatorSignature),
+            roslynResult.Validators.Select(ValidatorSignature));
+
+        AssertSame(
+            textResult.Behaviors.Select(b => $"{b.Name}|{b.ProjectName}"),
+            roslynResult.Behaviors.Select(b => $"{b.Name}|{b.ProjectName}"));
+
+        AssertSame(
+            textResult.DbContexts.Select(ContextSignature),
+            roslynResult.DbContexts.Select(ContextSignature));
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory);
+             directory is not null;
+             directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "CqrsLens.sln")))
+                return directory.FullName;
+        }
+
+        throw new InvalidOperationException("Could not find CqrsLens.sln above the test output directory.");
+    }
+
+    private static void AssertSame(IEnumerable<string> text, IEnumerable<string> roslyn)
+    {
+        var expected = text.OrderBy(x => x, StringComparer.Ordinal).ToArray();
+        var actual = roslyn.OrderBy(x => x, StringComparer.Ordinal).ToArray();
+
+        for (var i = 0; i < Math.Min(expected.Length, actual.Length); i++)
+        {
+            if (!string.Equals(expected[i], actual[i], StringComparison.Ordinal))
+            {
+                Assert.Fail(
+                    $"Text/Roslyn mismatch at {i}:{Environment.NewLine}" +
+                    $"text:   {expected[i]}{Environment.NewLine}" +
+                    $"roslyn: {actual[i]}");
+            }
+        }
+
+        Assert.Equal(expected.Length, actual.Length);
+    }
+
     private static string RequestSignature(CqrsRequest request)
         => $"{request.FullName}|{request.Kind}|{request.ResponseType}|{request.ViaMarker}|" +
-           $"{string.Join(",", request.Handlers)}|{string.Join(",", request.Validators)}";
+           $"{request.ProjectName}|{string.Join(",", request.Handlers)}|{string.Join(",", request.Validators)}";
+
+    private static string HandlerSignature(HandlerInfo handler)
+        => $"{handler.FullName}|{handler.RequestName}|{handler.RequestNamespace}|{handler.ProjectName}";
+
+    private static string ValidatorSignature(ValidatorInfo validator)
+        => $"{validator.FullName}|{validator.TargetType}|{validator.TargetNamespace}|{validator.ProjectName}";
 
     private static string ContextSignature(DbContextInfo context)
         => $"{context.Namespace}.{context.Name}|{context.ProjectName}|" +

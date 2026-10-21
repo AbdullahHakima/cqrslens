@@ -36,6 +36,8 @@ public class CliTests : IDisposable
     {
         WriteProject();
         WriteFile("Ping.cs", """
+            using MediatR;
+
             namespace App;
 
             public sealed record PingQuery : IRequest<int>;
@@ -98,6 +100,7 @@ public class CliTests : IDisposable
     [InlineData("-o")]
     [InlineData("--output")]
     [InlineData("--format")]
+    [InlineData("--analysis")]
     [InlineData("--markers")]
     public void OptionWithoutValue_IsUsageError(string option)
     {
@@ -123,6 +126,28 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Usage, result.Code);
         Assert.Contains("unknown format 'pdf'", result.Stderr);
+    }
+
+    [Fact]
+    public void UnknownAnalysisMode_IsRejected()
+    {
+        var result = Run(new[] { _root, "--analysis", "magic" });
+
+        Assert.Equal(ExitCodes.Usage, result.Code);
+        Assert.Contains("unknown analysis mode 'magic'", result.Stderr);
+    }
+
+    [Fact]
+    public void RoslynMode_RunsThroughTheCli()
+    {
+        WriteValidFixture();
+        var output = Path.Combine(_root, "roslyn.md");
+
+        var result = Run(new[] { _root, "--analysis", "roslyn", "-o", output });
+
+        Assert.Equal(ExitCodes.Success, result.Code);
+        Assert.Contains("1 request(s), 1 handler(s)", result.Stdout);
+        Assert.True(File.Exists(output));
     }
 
     [Fact]
@@ -226,7 +251,8 @@ public class CliTests : IDisposable
     {
         var command = CliParser.Parse(new[]
         {
-            "src", "-o", "out.html", "--format", "HTML", "--markers", "ICommand, App.IQuery", "--strict",
+            "src", "-o", "out.html", "--format", "HTML", "--analysis", "roslyn",
+            "--markers", "ICommand, App.IQuery", "--strict",
         });
 
         Assert.Equal(CliCommandKind.Run, command.Kind);
@@ -234,6 +260,7 @@ public class CliTests : IDisposable
         Assert.Equal("src", options.Path);
         Assert.Equal("out.html", options.Output);
         Assert.Equal("html", options.Format);
+        Assert.Equal(AnalysisMode.Roslyn, options.AnalysisMode);
         Assert.True(options.Strict);
         Assert.Equal(new[] { "ICommand", "IQuery" }, options.Markers.OrderBy(m => m));
     }
