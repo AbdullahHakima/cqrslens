@@ -212,6 +212,33 @@ public class CliTests : IDisposable
     }
 
     [Fact]
+    public void Strict_WithAmbiguousScan_DoesNotFailOnLowConfidenceChecks()
+    {
+        WriteProject();
+        WriteFile("Requests.cs", """
+            namespace Alpha;
+            public sealed record PingCommand : IRequest<int>;
+
+            namespace Beta;
+            public sealed record PingCommand : IRequest<int>;
+            """);
+        WriteFile("Handler.cs", """
+            namespace Handlers;
+            public sealed class PingCommandHandler : IRequestHandler<PingCommand, int>
+            {
+            }
+            """);
+
+        var output = Path.Combine(_root, "ARCHITECTURE.md");
+        var result = Run(new[] { _root, "-o", output, "--strict" });
+
+        Assert.Equal(ExitCodes.Success, result.Code);
+        Assert.Contains("scan diagnostic", result.Stderr);
+        Assert.Contains("strict skipped", result.Stderr);
+        Assert.True(File.Exists(output));
+    }
+
+    [Fact]
     public void NonStrictRunWithCheckErrors_StillSucceeds()
     {
         WriteProject();

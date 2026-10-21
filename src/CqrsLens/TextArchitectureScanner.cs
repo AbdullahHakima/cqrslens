@@ -70,15 +70,15 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
 
         foreach (var (file, scan) in ordered)
         {
-            CSharpScanner.ApplyScan(scan, file.Code, file.ProjectName, result);
+            CSharpScanner.ApplyScan(scan, file.Code, file.ProjectName, result, file.Path);
             DiscoverMarkerRequests(
                 scan,
-                file.ProjectName,
+                file,
                 interfaceMap,
                 interfacesBySimpleName,
                 markers,
                 result);
-            DiscoverIndirectShapes(scan, file.ProjectName, hierarchy, result);
+            DiscoverIndirectShapes(scan, file, hierarchy, result);
         }
     }
 
@@ -99,7 +99,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
     /// </summary>
     private static void DiscoverIndirectShapes(
         CSharpScanner.FileScan scan,
-        string? projectName,
+        SourceFile file,
         TypeHierarchy hierarchy,
         AnalysisResult result)
     {
@@ -107,6 +107,8 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         {
             if (decl.IsAbstract) continue;
             var typeParameters = new HashSet<string>(decl.TypeParameters, StringComparer.Ordinal);
+            var location = SourceLocation.Create(
+                file.Path, result.RootPath, file.Code, decl.BodySpan.Start);
 
             foreach (var part in CSharpScanner.SplitTopLevel(decl.BaseList))
             {
@@ -133,7 +135,8 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                             RequestNamespace = CSharpScanner.NamespaceOfType(requestType) is { Length: > 0 } ns
                                 ? ns
                                 : null,
-                            ProjectName = projectName,
+                            ProjectName = file.ProjectName,
+                            Location = location,
                         };
                         handler.ContainingTypes.AddRange(decl.ContainingTypes);
                         result.Handlers.Add(handler);
@@ -159,7 +162,8 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                             TargetNamespace = CSharpScanner.NamespaceOfType(validatorTarget) is { Length: > 0 } ns
                                 ? ns
                                 : null,
-                            ProjectName = projectName,
+                            ProjectName = file.ProjectName,
+                            Location = location,
                         };
                         validator.ContainingTypes.AddRange(decl.ContainingTypes);
                         result.Validators.Add(validator);
@@ -171,7 +175,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
 
     private static void DiscoverMarkerRequests(
         CSharpScanner.FileScan scan,
-        string? projectName,
+        SourceFile file,
         Dictionary<string, List<string>> interfaceMap,
         Dictionary<string, List<string>> interfacesBySimpleName,
         IReadOnlySet<string> markers,
@@ -189,6 +193,8 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                                                 "IPipelineBehavior"))
                 continue;
 
+            var location = SourceLocation.Create(
+                file.Path, result.RootPath, file.Code, decl.BodySpan.Start);
             var directInterfaces = decl.BaseTypeNames
                 .Select(name => ResolveInterfaceName(name, decl.Namespace, interfaceMap, interfacesBySimpleName));
             var reached = MarkerResolver.ReachableMarkers(directInterfaces, interfaceMap, markers);
@@ -210,8 +216,9 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             {
                 Name = decl.Name,
                 Namespace = decl.Namespace,
-                ProjectName = projectName,
+                ProjectName = file.ProjectName,
                 ViaMarker = via,
+                Location = location,
             };
             request.ContainingTypes.AddRange(decl.ContainingTypes);
             request.ResponseType =

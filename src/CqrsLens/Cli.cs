@@ -187,6 +187,11 @@ public static class CliRunner
         if (result.SkippedFiles.Count > 0)
             stderr.WriteLine($"warning: {result.SkippedFiles.Count} source file(s) skipped - see the report.");
 
+        var nonSkipDiagnostics = result.Diagnostics.Count(d =>
+            d.Code != AnalysisResult.SourceFileSkippedCode);
+        if (nonSkipDiagnostics > 0)
+            stderr.WriteLine($"warning: {nonSkipDiagnostics} scan diagnostic(s) - see the report.");
+
         var errors = result.Checks.Count(c => c.Severity == CheckSeverity.Error);
         var warnings = result.Checks.Count - errors;
         if (result.Checks.Count > 0)
@@ -194,6 +199,14 @@ public static class CliRunner
 
         if (options.Strict && errors > 0)
         {
+            if (!result.CanRunStrictChecks)
+            {
+                stderr.WriteLine(
+                    "warning: --strict skipped because the scan is incomplete or ambiguous; " +
+                    "see the diagnostics in the report.");
+                return ExitCodes.Success;
+            }
+
             stderr.WriteLine($"error: --strict - {errors} architecture check error(s) found.");
             return ExitCodes.StrictFailure;
         }
@@ -214,7 +227,8 @@ public static class CliRunner
         writer.WriteLine("  --markers     Comma-separated custom marker interface names that also count");
         writer.WriteLine("                as request roots (e.g. ICommand,IQuery,IMessage). Requests hidden");
         writer.WriteLine("                behind interfaces deriving from IRequest are always followed.");
-        writer.WriteLine("  --strict      Exit with code 4 when architecture checks report any error.");
+        writer.WriteLine("  --strict      Exit with code 4 when architecture checks report an error");
+        writer.WriteLine("                and the scan is complete; incomplete scans report diagnostics.");
         writer.WriteLine("  --version     Print the tool version and exit.");
         writer.WriteLine("  -h, --help    Show this help.");
         writer.WriteLine();
