@@ -2,6 +2,21 @@
 
 All notable changes to CqrsLens are documented here.
 
+## [0.2.1] - 2026-10-21
+
+### Fixed
+
+- Keep handler and validator identities fully-qualified after linking, so
+  same-named types in different namespaces remain separate Mermaid nodes (#7).
+- Ignore generic `where` constraints when detecting implemented request shapes,
+  avoiding false requests such as pipeline behaviors constrained by `IRequest<T>`
+  (#8).
+- Resolve custom marker-interface inheritance by namespace before falling back
+  to a simple-name match, preventing unrelated `ICommand<T>` interfaces from
+  sharing inheritance (#9).
+- Pin the GitHub Action to the matching CqrsLens package version, so a tagged
+  action does not silently install a later NuGet release (#10).
+
 ## [0.2.0] - 2026-10-21
 
 ### Added
