@@ -44,14 +44,24 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
         var interfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var (name, bases) in rawInterfaceMap)
+        foreach (var (_, scan) in ordered)
         {
-            var ns = CSharpScanner.NamespaceOf(name);
-            interfaceMap[name] = bases
-                .Select(b => ResolveInterfaceName(b, ns, rawInterfaceMap, interfacesBySimpleName))
-                .Distinct(StringComparer.Ordinal)
-                .ToList();
+            foreach (var decl in scan.InterfaceDecls)
+            {
+                var fullName = decl.FullName;
+                if (!interfaceMap.TryGetValue(fullName, out var list))
+                    interfaceMap[fullName] = list = new List<string>();
+                foreach (var b in CSharpScanner.ExtractBaseTypeNames(decl.BaseList))
+                {
+                    var resolved = ResolveInterfaceName(b, decl.Namespace, rawInterfaceMap, interfacesBySimpleName);
+                    if (!list.Contains(resolved)) list.Add(resolved);
+                }
+            }
         }
+
+        var hierarchy = new TypeHierarchy(
+            ordered.SelectMany(o => o.Scan.Classes),
+            ordered.SelectMany(o => o.Scan.InterfaceDecls));
 
         foreach (var (file, scan) in ordered)
         {
@@ -63,6 +73,88 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                 interfacesBySimpleName,
                 markers,
                 result);
+            DiscoverIndirectShapes(scan, file.ProjectName, hierarchy, result);
+        }
+    }
+
+    private static readonly HashSet<string> HandlerRoots = new(StringComparer.Ordinal)
+    {
+        "IRequestHandler",
+    };
+
+    private static readonly HashSet<string> ValidatorRoots = new(StringComparer.Ordinal)
+    {
+        "AbstractValidator",
+        "IValidator",
+    };
+
+    /// <summary>
+    /// Finds handlers/validators declared through application-specific interfaces or
+    /// base classes. Direct roots are already handled by <see cref="CSharpScanner.ApplyScan"/>.
+    /// </summary>
+    private static void DiscoverIndirectShapes(
+        CSharpScanner.FileScan scan,
+        string? projectName,
+        TypeHierarchy hierarchy,
+        AnalysisResult result)
+    {
+        foreach (var decl in scan.Classes)
+        {
+            if (decl.IsAbstract) continue;
+            var typeParameters = new HashSet<string>(decl.TypeParameters, StringComparer.Ordinal);
+
+            foreach (var part in CSharpScanner.SplitTopLevel(decl.BaseList))
+            {
+                var (name, args) = CSharpScanner.ParseTypeReference(part);
+                var simple = CSharpScanner.SimpleName(name);
+                if (simple is "DbContext" or "IdentityDbContext") continue;
+
+                if (simple != "IRequestHandler" &&
+                    hierarchy.TryResolveShapeTarget(decl.Namespace, part, HandlerRoots, out var requestType))
+                {
+                    var requestName = CSharpScanner.UnqualifiedTypeName(requestType);
+                    if (requestName.Length > 0 && !typeParameters.Contains(requestName) &&
+                        !result.Handlers.Any(h =>
+                            h.Namespace == decl.Namespace &&
+                            h.Name == decl.Name &&
+                            h.RequestName == requestName))
+                    {
+                        result.Handlers.Add(new HandlerInfo
+                        {
+                            Name = decl.Name,
+                            Namespace = decl.Namespace,
+                            RequestName = requestName,
+                            RequestNamespace = CSharpScanner.NamespaceOfType(requestType) is { Length: > 0 } ns
+                                ? ns
+                                : null,
+                            ProjectName = projectName,
+                        });
+                    }
+                }
+
+                if (simple is not ("AbstractValidator" or "IValidator") &&
+                    hierarchy.TryResolveShapeTarget(decl.Namespace, part, ValidatorRoots, out var validatorTarget))
+                {
+                    var targetName = CSharpScanner.UnqualifiedTypeName(validatorTarget);
+                    if (targetName.Length > 0 && !typeParameters.Contains(targetName) &&
+                        !result.Validators.Any(v =>
+                            v.Namespace == decl.Namespace &&
+                            v.Name == decl.Name &&
+                            v.TargetType == targetName))
+                    {
+                        result.Validators.Add(new ValidatorInfo
+                        {
+                            Name = decl.Name,
+                            Namespace = decl.Namespace,
+                            TargetType = targetName,
+                            TargetNamespace = CSharpScanner.NamespaceOfType(validatorTarget) is { Length: > 0 } ns
+                                ? ns
+                                : null,
+                            ProjectName = projectName,
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -76,6 +168,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
     {
         foreach (var decl in scan.Classes)
         {
+            if (decl.IsAbstract) continue;
             if (decl.BaseRawNames.Contains("IRequest")) continue;
             if (decl.BaseRawNames.Contains("IRequestHandler")) continue;
             if (decl.BaseRawNames.Count == 0) continue;
@@ -86,7 +179,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                 continue;
 
             var directInterfaces = decl.BaseTypeNames
-                .Select(name => ResolveInterfaceName(name, scan.Namespace, interfaceMap, interfacesBySimpleName));
+                .Select(name => ResolveInterfaceName(name, decl.Namespace, interfaceMap, interfacesBySimpleName));
             var reached = MarkerResolver.ReachableMarkers(directInterfaces, interfaceMap, markers);
             if (reached.Count == 0) continue;
 
@@ -96,13 +189,13 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             var via = reached.FirstOrDefault(m => m != "IRequest")
                       ?? decl.BaseRawNames.FirstOrDefault(b => b != "IRequest");
 
-            if (result.Requests.Any(r => r.Name == decl.Name && r.Namespace == scan.Namespace))
+            if (result.Requests.Any(r => r.Name == decl.Name && r.Namespace == decl.Namespace))
                 continue;
 
             var request = new CqrsRequest
             {
                 Name = decl.Name,
-                Namespace = scan.Namespace,
+                Namespace = decl.Namespace,
                 ProjectName = projectName,
                 ViaMarker = via,
             };
