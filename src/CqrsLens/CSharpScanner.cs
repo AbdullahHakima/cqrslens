@@ -17,6 +17,7 @@ public static partial class CSharpScanner
     {
         public required string Namespace { get; init; }
         public List<ClassDecl> Classes { get; } = new();
+        public List<InterfaceDecl> InterfaceDecls { get; } = new();
 
         /// <summary>Interface name → its base interface names as written, generics stripped.</summary>
         public Dictionary<string, List<string>> Interfaces { get; } = new(StringComparer.Ordinal);
@@ -26,6 +27,7 @@ public static partial class CSharpScanner
     public sealed class ClassDecl
     {
         public required string Name { get; init; }
+        public required string Namespace { get; init; }
         public required string BaseList { get; init; }
 
         /// <summary>All base type names from the declaration, generics stripped.</summary>
@@ -34,17 +36,34 @@ public static partial class CSharpScanner
         /// <summary>Simple names for the same base types.</summary>
         public required List<string> BaseRawNames { get; init; }
 
+        /// <summary>Declared generic parameter names (e.g. TRequest, TResponse).</summary>
+        public List<string> TypeParameters { get; init; } = new();
+
+        public bool IsAbstract { get; init; }
+
         /// <summary>Span of the class body in the source text (for DbSet attribution).</summary>
         public required (int Start, int End) BodySpan { get; init; }
+
+        public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
+    }
+
+    /// <summary>An interface declaration, including its raw base list for generic substitution.</summary>
+    public sealed class InterfaceDecl
+    {
+        public required string Name { get; init; }
+        public required string Namespace { get; init; }
+        public required string BaseList { get; init; }
+        public List<string> TypeParameters { get; init; } = new();
+        public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
     }
 
     // Matches: class|record|struct Name<...> (primary-ctor) : <base list> { or ;
-    [GeneratedRegex(@"(?:class|record(?:\s+class|\s+struct)?|struct)\s+(\w+)(?:<[^>]*>)?\s*(?:\([^)]*\))?\s*:\s*([^{;]+?)(?:\s+where\s+\w+\s*:[^{;]+)?[{;]",
+    [GeneratedRegex(@"(?:class|record(?:\s+class|\s+struct)?|struct)\s+(\w+)(?:<([^>]*)>)?\s*(?:\([^{};]*\))?\s*:\s*([^{;]+?)(?:\s+where\s+\w+\s*:[^{;]+)?[{;]",
         RegexOptions.Singleline)]
     private static partial Regex DeclarationRegex();
 
     // Matches: interface Name<...> : <base list> { or ;
-    [GeneratedRegex(@"\binterface\s+(\w+)(?:<[^>]*>)?\s*(?::\s*([^{;]+?))?(?:\s+where\s+\w+\s*:[^{;]+)?[{;]",
+    [GeneratedRegex(@"\binterface\s+(\w+)(?:<([^>]*)>)?\s*(?::\s*([^{;]+?))?(?:\s+where\s+\w+\s*:[^{;]+)?[{;]",
         RegexOptions.Singleline)]
     private static partial Regex InterfaceDeclarationRegex();
 
@@ -62,9 +81,6 @@ public static partial class CSharpScanner
     [GeneratedRegex(@"(?:^|[,\s])(\w*DbContext)\b")]
     private static partial Regex DbContextBaseRegex();
 
-    [GeneratedRegex(@"[a-zA-Z_][\w.]*")]
-    private static partial Regex IdentifierRegex();
-
     /// <summary>Extracts the namespace declared in a source file ("" when none).</summary>
     public static string ExtractNamespace(string code)
     {
@@ -81,11 +97,58 @@ public static partial class CSharpScanner
         return idx >= 0 ? name[(idx + 1)..] : name;
     }
 
+    /// <summary>
+    /// The simple type name, removing namespace, generic arguments and nullable
+    /// annotations: <c>App.Queries.GetThing&lt;int&gt;?</c> → <c>GetThing</c>.
+    /// </summary>
+    public static string UnqualifiedTypeName(string name)
+    {
+        var value = StripGenericArguments(name.Trim());
+        value = value.TrimEnd('?');
+        value = value.TrimEnd('[', ']');
+        var idx = value.LastIndexOf('.');
+        return idx >= 0 ? value[(idx + 1)..] : value;
+    }
+
+    /// <summary>The namespace part of a type reference, or "" when it is unqualified.</summary>
+    public static string NamespaceOfType(string name)
+    {
+        var value = StripGenericArguments(name.Trim());
+        value = value.TrimEnd('?');
+        value = value.TrimEnd('[', ']');
+        var idx = value.LastIndexOf('.');
+        return idx >= 0 ? value[..idx] : "";
+    }
+
+    private static string StripGenericArguments(string value)
+    {
+        if (value.StartsWith("global::", StringComparison.Ordinal))
+            value = value[8..];
+        var angle = value.IndexOf('<');
+        return angle >= 0 ? value[..angle].Trim() : value;
+    }
+
     /// <summary>The namespace part of a dotted name ("" when the name is simple).</summary>
     public static string NamespaceOf(string name)
     {
         var idx = name.LastIndexOf('.');
         return idx >= 0 ? name[..idx] : "";
+    }
+
+    /// <summary>Parses declared generic parameters, discarding variance markers.</summary>
+    public static List<string> ParseTypeParameters(string? parameters)
+    {
+        var result = new List<string>();
+        if (string.IsNullOrWhiteSpace(parameters)) return result;
+        foreach (var raw in SplitTopLevel(parameters))
+        {
+            var name = raw.Trim();
+            if (name.StartsWith("in ", StringComparison.Ordinal) ||
+                name.StartsWith("out ", StringComparison.Ordinal))
+                name = name[3..].Trim();
+            if (name.Length > 0) result.Add(name);
+        }
+        return result;
     }
 
     /// <summary>Base-type names from a base list, generic arguments stripped.</summary>
@@ -94,18 +157,62 @@ public static partial class CSharpScanner
         var names = new List<string>();
         foreach (var part in SplitTopLevel(baseList))
         {
-            var angle = part.IndexOf('<');
-            var raw = (angle >= 0 ? part[..angle] : part).Trim();
-            if (raw.Length == 0) continue;
-            var id = IdentifierRegex().Match(raw);
-            if (id.Success)
-                names.Add(id.Value);
+            var (raw, _) = ParseTypeReference(part);
+            if (raw.Length > 0)
+                names.Add(raw);
         }
         return names;
     }
 
     public static List<string> ExtractBaseRawNames(string baseList)
         => ExtractBaseTypeNames(baseList).Select(SimpleName).ToList();
+
+    /// <summary>
+    /// Splits a type reference into its name and top-level generic arguments:
+    /// <c>App.IHandler&lt;Foo, Bar&lt;int&gt;&gt;</c> → name + ["Foo", "Bar&lt;int&gt;"].
+    /// </summary>
+    public static (string Name, List<string> Arguments) ParseTypeReference(string typeReference)
+    {
+        var text = typeReference.Trim();
+        if (text.StartsWith("global::", StringComparison.Ordinal))
+            text = text[8..];
+
+        var angle = text.IndexOf('<');
+        if (angle < 0)
+            return (text.Trim(), new List<string>());
+
+        var name = text[..angle].Trim();
+        var depth = 0;
+        var start = angle + 1;
+        for (var i = angle; i < text.Length; i++)
+        {
+            if (text[i] == '<') depth++;
+            else if (text[i] == '>')
+            {
+                depth--;
+                if (depth == 0)
+                    return (name, SplitTopLevel(text.Substring(start, i - start)));
+            }
+        }
+        return (name, new List<string>());
+    }
+
+    /// <summary>
+    /// True when the declaration immediately preceding <paramref name="declarationIndex"/>
+    /// carries the <c>abstract</c> modifier. Best-effort for line-wrapped modifiers.
+    /// </summary>
+    public static bool IsAbstractDeclaration(string code, int declarationIndex)
+    {
+        var lineStart = code.LastIndexOf('\n', declarationIndex);
+        var prefix = code[(lineStart + 1)..declarationIndex];
+        if (prefix.Contains("abstract", StringComparison.Ordinal)) return true;
+
+        var start = Math.Max(0, declarationIndex - 300);
+        var segment = code[start..declarationIndex];
+        var boundary = segment.LastIndexOfAny(new[] { ';', '}' });
+        if (boundary >= 0) segment = segment[(boundary + 1)..];
+        return System.Text.RegularExpressions.Regex.IsMatch(segment, @"\babstract\b");
+    }
 
     /// <summary>Scans one file's text into a fragment (pure; safe to run in parallel).</summary>
     public static FileScan ScanText(string code)
@@ -115,15 +222,23 @@ public static partial class CSharpScanner
         foreach (Match m in InterfaceDeclarationRegex().Matches(code))
         {
             var name = m.Groups[1].Value;
+            var baseList = m.Groups[3].Value;
+            scan.InterfaceDecls.Add(new InterfaceDecl
+            {
+                Name = name,
+                Namespace = scan.Namespace,
+                BaseList = baseList,
+                TypeParameters = ParseTypeParameters(m.Groups[2].Value),
+            });
             if (!scan.Interfaces.ContainsKey(name))
                 scan.Interfaces[name] = new List<string>();
-            scan.Interfaces[name].AddRange(ExtractBaseTypeNames(m.Groups[2].Value));
+            scan.Interfaces[name].AddRange(ExtractBaseTypeNames(baseList));
         }
 
         foreach (Match m in DeclarationRegex().Matches(code))
         {
             var typeName = m.Groups[1].Value;
-            var baseList = m.Groups[2].Value;
+            var baseList = m.Groups[3].Value;
             // The match ends with the declaration's '{' (class with body) or ';'
             // (primary-constructor record/struct without a body).
             var openBrace = m.Value.EndsWith('{') ? m.Index + m.Length - 1 : -1;
@@ -131,9 +246,12 @@ public static partial class CSharpScanner
             scan.Classes.Add(new ClassDecl
             {
                 Name = typeName,
+                Namespace = scan.Namespace,
                 BaseList = baseList,
                 BaseTypeNames = ExtractBaseTypeNames(baseList),
                 BaseRawNames = ExtractBaseRawNames(baseList),
+                TypeParameters = ParseTypeParameters(m.Groups[2].Value),
+                IsAbstract = IsAbstractDeclaration(code, m.Index),
                 BodySpan = span,
             });
         }
@@ -171,44 +289,67 @@ public static partial class CSharpScanner
 
         foreach (var decl in scan.Classes)
         {
+            // Open generic / abstract base declarations are not concrete shapes.
+            var typeParameters = new HashSet<string>(decl.TypeParameters, StringComparer.Ordinal);
+            bool IsConcreteTarget(string? target) =>
+                !decl.IsAbstract && target is not null && !typeParameters.Contains(target);
+
             // IRequest<...> / IRequest  -> a CQRS request
-            if (Regex.IsMatch(decl.BaseList, @"\bIRequest\b"))
+            if (!decl.IsAbstract && decl.BaseRawNames.Contains("IRequest"))
             {
                 var response = ExtractGenericArguments(decl.BaseList, "IRequest")?.FirstOrDefault();
                 result.Requests.Add(new CqrsRequest
                 {
                     Name = decl.Name,
-                    Namespace = scan.Namespace,
+                    Namespace = decl.Namespace,
                     ResponseType = response,
                     ProjectName = projectName,
                 });
             }
 
-            // IRequestHandler<TRequest, TResponse> -> a handler
-            var handlerArgs = ExtractGenericArguments(decl.BaseList, "IRequestHandler");
-            if (handlerArgs is { Count: >= 1 })
+            // IRequestHandler<TRequest, TResponse> -> a handler for every interface.
+            foreach (var handlerArgs in ExtractAllGenericArguments(decl.BaseList, "IRequestHandler"))
             {
+                if (handlerArgs.Count < 1) continue;
+                var requestType = handlerArgs[0];
+                if (!IsConcreteTarget(UnqualifiedTypeName(requestType))) continue;
+                if (result.Handlers.Any(h =>
+                        h.Namespace == decl.Namespace &&
+                        h.Name == decl.Name &&
+                        h.RequestName == UnqualifiedTypeName(requestType)))
+                    continue;
+
                 result.Handlers.Add(new HandlerInfo
                 {
                     Name = decl.Name,
-                    Namespace = scan.Namespace,
-                    RequestName = SimpleName(handlerArgs[0]),
-                    RequestNamespace = NamespaceOf(handlerArgs[0]) is { Length: > 0 } ns ? ns : null,
+                    Namespace = decl.Namespace,
+                    RequestName = UnqualifiedTypeName(requestType),
+                    RequestNamespace = NamespaceOfType(requestType) is { Length: > 0 } ns ? ns : null,
                     ProjectName = projectName,
                 });
             }
 
-            // AbstractValidator<T> / IValidator<T> -> a validator for T
-            var validatorTarget = ExtractGenericArguments(decl.BaseList, "AbstractValidator")?.FirstOrDefault()
-                                  ?? ExtractGenericArguments(decl.BaseList, "IValidator")?.FirstOrDefault();
-            if (validatorTarget is not null)
+            // AbstractValidator<T> / IValidator<T> -> a validator for every target.
+            var validatorTargets = new List<string>();
+            foreach (var root in new[] { "AbstractValidator", "IValidator" })
+                validatorTargets.AddRange(ExtractAllGenericArguments(decl.BaseList, root)
+                    .Where(a => a.Count >= 1)
+                    .Select(a => a[0]));
+            foreach (var validatorTarget in validatorTargets.Distinct(StringComparer.Ordinal))
             {
+                if (!IsConcreteTarget(UnqualifiedTypeName(validatorTarget))) continue;
+                if (result.Validators.Any(v =>
+                        v.Namespace == decl.Namespace &&
+                        v.Name == decl.Name &&
+                        v.TargetType == UnqualifiedTypeName(validatorTarget)))
+                    continue;
+
                 result.Validators.Add(new ValidatorInfo
                 {
                     Name = decl.Name,
-                    Namespace = scan.Namespace,
-                    TargetType = SimpleName(validatorTarget),
-                    TargetNamespace = NamespaceOf(validatorTarget) is { Length: > 0 } ns ? ns : null,
+                    Namespace = decl.Namespace,
+                    TargetType = UnqualifiedTypeName(validatorTarget),
+                    TargetNamespace = NamespaceOfType(validatorTarget) is { Length: > 0 } ns ? ns : null,
                     ProjectName = projectName,
                 });
             }
@@ -220,12 +361,12 @@ public static partial class CSharpScanner
             }
 
             // : DbContext (or *DbContext, e.g. IdentityDbContext) -> a DbContext
-            if (DbContextBaseRegex().IsMatch(decl.BaseList))
+            if (!decl.IsAbstract && DbContextBaseRegex().IsMatch(decl.BaseList))
             {
                 var ctx = new DbContextInfo
                 {
                     Name = decl.Name,
-                    Namespace = scan.Namespace,
+                    Namespace = decl.Namespace,
                     ProjectName = projectName,
                 };
                 contextClasses.Add((decl, ctx));
@@ -260,45 +401,31 @@ public static partial class CSharpScanner
         => ScanText(File.ReadAllText(path), projectName, result);
 
     /// <summary>
-    /// Extracts the top-level generic arguments of <paramref name="interfaceName"/>
-    /// as written in a base list, e.g. IRequestHandler&lt;Foo, Bar&gt; -> ["Foo", "Bar"].
-    /// Returns null when the interface (with generic arguments) is not present.
+    /// Extracts the top-level generic arguments of the first
+    /// <paramref name="interfaceName"/> occurrence in a base list, e.g.
+    /// IRequestHandler&lt;Foo, Bar&gt; -> ["Foo", "Bar"]. Returns null when absent.
     /// </summary>
     public static List<string>? ExtractGenericArguments(string baseList, string interfaceName)
+        => ExtractAllGenericArguments(baseList, interfaceName).FirstOrDefault();
+
+    /// <summary>
+    /// Extracts the generic arguments of every occurrence of <paramref name="interfaceName"/>
+    /// in a base list, preserving declaration order.
+    /// </summary>
+    public static List<List<string>> ExtractAllGenericArguments(string baseList, string interfaceName)
     {
-        var idx = baseList.IndexOf(interfaceName, StringComparison.Ordinal);
-        while (idx >= 0)
+        var results = new List<List<string>>();
+        foreach (var part in SplitTopLevel(baseList))
         {
-            var after = idx + interfaceName.Length;
-            // The next char must be '<' (possibly after spaces) — otherwise this is a
-            // longer identifier that merely starts with the same text.
-            var i = after;
-            while (i < baseList.Length && char.IsWhiteSpace(baseList[i])) i++;
-            if (i < baseList.Length && baseList[i] == '<')
-            {
-                var depth = 0;
-                var start = i + 1;
-                for (var j = i; j < baseList.Length; j++)
-                {
-                    if (baseList[j] == '<') depth++;
-                    else if (baseList[j] == '>')
-                    {
-                        depth--;
-                        if (depth == 0)
-                        {
-                            var inner = baseList.Substring(start, j - start);
-                            return SplitTopLevel(inner);
-                        }
-                    }
-                }
-                return null;
-            }
-            idx = baseList.IndexOf(interfaceName, idx + 1, StringComparison.Ordinal);
+            var (name, args) = ParseTypeReference(part);
+            if (args.Count == 0) continue;
+            if (string.Equals(SimpleName(name), interfaceName, StringComparison.Ordinal))
+                results.Add(args);
         }
-        return null;
+        return results;
     }
 
-    private static List<string> SplitTopLevel(string inner)
+    public static List<string> SplitTopLevel(string inner)
     {
         var parts = new List<string>();
         var depth = 0;
