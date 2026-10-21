@@ -30,10 +30,11 @@ public static class MarkerResolver
             var current = queue.Dequeue();
             if (!visited.Add(current)) continue;
 
-            if (current is "IRequest")
+            var simpleName = CSharpScanner.SimpleName(current);
+            if (simpleName is "IRequest")
                 reachesRequest = true;
-            if (markerRoots.Contains(current) && foundSet.Add(current))
-                found.Add(current);
+            if (markerRoots.Contains(simpleName) && foundSet.Add(simpleName))
+                found.Add(simpleName);
 
             if (interfaceMap.TryGetValue(current, out var bases))
                 foreach (var b in bases)

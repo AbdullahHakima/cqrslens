@@ -40,17 +40,31 @@ public static class Analyzer
             .OrderBy(f => f.File, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        // Global interface-inheritance map: interface name -> base interface names.
-        var interfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        var rawInterfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var (_, _, scan) in ordered)
         {
             foreach (var (name, bases) in scan.Interfaces)
             {
-                if (!interfaceMap.TryGetValue(name, out var list))
-                    interfaceMap[name] = list = new List<string>();
+                var fullName = string.IsNullOrEmpty(scan.Namespace) ? name : $"{scan.Namespace}.{name}";
+                if (!rawInterfaceMap.TryGetValue(fullName, out var list))
+                    rawInterfaceMap[fullName] = list = new List<string>();
                 foreach (var b in bases)
                     if (!list.Contains(b)) list.Add(b);
             }
+        }
+
+        var interfacesBySimpleName = rawInterfaceMap.Keys
+            .GroupBy(CSharpScanner.SimpleName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        var interfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var (name, bases) in rawInterfaceMap)
+        {
+            var ns = CSharpScanner.NamespaceOf(name);
+            interfaceMap[name] = bases
+                .Select(b => ResolveInterfaceName(b, ns, rawInterfaceMap, interfacesBySimpleName))
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
         }
 
         var projectByFile = ordered.ToDictionary(
@@ -61,7 +75,7 @@ public static class Analyzer
         foreach (var (file, code, scan) in ordered)
         {
             CSharpScanner.ApplyScan(scan, code, projectByFile[file], result);
-            DiscoverMarkerRequests(scan, projectByFile[file], interfaceMap, markerSet, result);
+            DiscoverMarkerRequests(scan, projectByFile[file], interfaceMap, interfacesBySimpleName, markerSet, result);
         }
 
         Link(result);
@@ -81,6 +95,7 @@ public static class Analyzer
         CSharpScanner.FileScan scan,
         string? projectName,
         Dictionary<string, List<string>> interfaceMap,
+        Dictionary<string, List<string>> interfacesBySimpleName,
         IReadOnlySet<string> markers,
         AnalysisResult result)
     {
@@ -96,7 +111,9 @@ public static class Analyzer
                                                 "IPipelineBehavior"))
                 continue;
 
-            var reached = MarkerResolver.ReachableMarkers(decl.BaseRawNames, interfaceMap, markers);
+            var directInterfaces = decl.BaseTypeNames
+                .Select(name => ResolveInterfaceName(name, scan.Namespace, interfaceMap, interfacesBySimpleName));
+            var reached = MarkerResolver.ReachableMarkers(directInterfaces, interfaceMap, markers);
             if (reached.Count == 0) continue;
 
             // A class is only a request when the closure reaches IRequest or a
@@ -129,6 +146,23 @@ public static class Analyzer
                     request.Name, decl.BaseRawNames.Concat(reached));
             result.Requests.Add(request);
         }
+    }
+
+    private static string ResolveInterfaceName(
+        string name,
+        string currentNamespace,
+        IReadOnlyDictionary<string, List<string>> interfaceMap,
+        IReadOnlyDictionary<string, List<string>> interfacesBySimpleName)
+    {
+        if (name.Contains('.')) return name;
+
+        var localName = string.IsNullOrEmpty(currentNamespace) ? name : $"{currentNamespace}.{name}";
+        if (interfaceMap.ContainsKey(localName))
+            return localName;
+
+        return interfacesBySimpleName.TryGetValue(name, out var candidates) && candidates.Count == 1
+            ? candidates[0]
+            : name;
     }
 
     private static ProjectInfo? FindOwningProject(List<ProjectInfo> projects, string file)
