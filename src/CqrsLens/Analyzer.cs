@@ -177,15 +177,15 @@ public static class Analyzer
         foreach (var handler in result.Handlers.OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase))
         {
             var request = Resolve(handler.RequestName, handler.RequestNamespace, handler.Namespace);
-            if (request is not null && !request.Handlers.Contains(handler.Name))
-                request.Handlers.Add(handler.Name);
+            if (request is not null && !request.Handlers.Contains(handler.FullName))
+                request.Handlers.Add(handler.FullName);
         }
 
         foreach (var validator in result.Validators.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase))
         {
             var request = Resolve(validator.TargetType, validator.TargetNamespace, validator.Namespace);
-            if (request is not null && !request.Validators.Contains(validator.Name))
-                request.Validators.Add(validator.Name);
+            if (request is not null && !request.Validators.Contains(validator.FullName))
+                request.Validators.Add(validator.FullName);
         }
 
         foreach (var request in result.Requests)

@@ -69,10 +69,10 @@ public static class DiagramBuilder
             sb.AppendLine($"    {NodeId(r)}[\"{r.Name}\"]");
             foreach (var h in r.Handlers)
                 if (emittedHandlers.Add(h))
-                    sb.AppendLine($"    {MermaidId(h)}([\"{h}\"])");
+                    sb.AppendLine($"    {MermaidId(h)}([\"{CSharpScanner.SimpleName(h)}\"])");
             foreach (var v in r.Validators)
                 if (emittedValidators.Add(v))
-                    sb.AppendLine($"    {MermaidId(v)}{{\"{v}\"}}");
+                    sb.AppendLine($"    {MermaidId(v)}{{\"{CSharpScanner.SimpleName(v)}\"}}");
         }
         foreach (var r in result.Requests)
         {

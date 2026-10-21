@@ -69,8 +69,8 @@ public static class HtmlReportGenerator
                     $"<td>{E(r.Name)}</td>" +
                     $"<td>{E(r.Kind)}</td>" +
                     $"<td>{E(r.ResponseType ?? "—")}</td>" +
-                    $"<td>{E(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers) : "—")}</td>" +
-                    $"<td>{E(r.Validators.Count > 0 ? string.Join(", ", r.Validators) : "—")}</td>" +
+                    $"<td>{E(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers.Select(CSharpScanner.SimpleName)) : "—")}</td>" +
+                    $"<td>{E(r.Validators.Count > 0 ? string.Join(", ", r.Validators.Select(CSharpScanner.SimpleName)) : "—")}</td>" +
                     $"<td>{E(r.ProjectName ?? "—")}</td>" +
                     "</tr>");
             }

@@ -85,8 +85,8 @@ public static class ReportGenerator
             foreach (var r in result.Requests)
             {
                 md.AppendLine($"| {r.Name} | {r.Kind} | {r.ResponseType ?? "—"} | " +
-                              $"{(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers) : "—")} | " +
-                              $"{(r.Validators.Count > 0 ? string.Join(", ", r.Validators) : "—")} | " +
+                              $"{(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers.Select(CSharpScanner.SimpleName)) : "—")} | " +
+                              $"{(r.Validators.Count > 0 ? string.Join(", ", r.Validators.Select(CSharpScanner.SimpleName)) : "—")} | " +
                               $"{r.ProjectName ?? "—"} |");
             }
         }
