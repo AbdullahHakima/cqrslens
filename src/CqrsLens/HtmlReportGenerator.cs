@@ -1,0 +1,221 @@
+using System.Net;
+using System.Text;
+
+namespace CqrsLens;
+
+/// <summary>
+/// Generates a self-contained HTML architecture report (issue #5): embedded CSS,
+/// stat cards, and Mermaid diagrams rendered in the browser via the Mermaid CDN.
+/// </summary>
+public static class HtmlReportGenerator
+{
+    private static string E(string? value) => WebUtility.HtmlEncode(value ?? "");
+
+    public static string Generate(AnalysisResult result)
+    {
+        var rootName = new DirectoryInfo(result.RootPath).Name;
+        var html = new StringBuilder();
+
+        html.AppendLine("<!DOCTYPE html>");
+        html.AppendLine("<html lang=\"en\">");
+        html.AppendLine("<head>");
+        html.AppendLine("<meta charset=\"utf-8\">");
+        html.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
+        html.AppendLine($"<title>Architecture Report — {E(rootName)}</title>");
+        html.AppendLine("<style>");
+        html.AppendLine(Css);
+        html.AppendLine("</style>");
+        html.AppendLine("</head>");
+        html.AppendLine("<body>");
+        html.AppendLine("<main>");
+
+        html.AppendLine("<h1>Architecture Report</h1>");
+        html.AppendLine($"<p class=\"meta\">Source: <code>{E(rootName)}</code> · {E(ReportGenerator.TimingFooter(result))}</p>");
+
+        // ---- Stat cards ------------------------------------------------------
+        html.AppendLine("<section class=\"cards\">");
+        AppendCard(html, "Projects", result.Projects.Count);
+        AppendCard(html, "Requests", result.Requests.Count);
+        AppendCard(html, "Handlers", result.Handlers.Count);
+        AppendCard(html, "Validators", result.Validators.Count);
+        AppendCard(html, "Pipeline behaviors", result.Behaviors.Count);
+        AppendCard(html, "DbContexts", result.DbContexts.Count);
+        html.AppendLine("</section>");
+
+        // ---- Diagrams ----------------------------------------------------------
+        AppendDiagram(html, "Project Dependency Graph", DiagramBuilder.ProjectGraph(result),
+            "No projects found.");
+        AppendDiagram(html, "Layers", DiagramBuilder.LayerGraph(result),
+            "No projects found.");
+        html.AppendLine("<p class=\"note\">Projects are grouped by Clean Architecture naming convention " +
+                        "(Domain / Application / Infrastructure / Api / Web / UI); projects matching no " +
+                        "convention are grouped by their top-level folder.</p>");
+        AppendDiagram(html, "CQRS Map", DiagramBuilder.CqrsMap(result),
+            "No MediatR requests found.");
+        // ---- Requests table ------------------------------------------------------
+        html.AppendLine("<h2>Requests</h2>");
+        if (result.Requests.Count == 0)
+        {
+            html.AppendLine("<p><em>No MediatR requests found.</em></p>");
+        }
+        else
+        {
+            html.AppendLine("<table>");
+            html.AppendLine("<thead><tr><th>Request</th><th>Type</th><th>Response</th><th>Handler</th><th>Validators</th><th>Project</th></tr></thead>");
+            html.AppendLine("<tbody>");
+            foreach (var r in result.Requests)
+            {
+                html.AppendLine("<tr>" +
+                    $"<td>{E(r.Name)}</td>" +
+                    $"<td>{E(r.Kind)}</td>" +
+                    $"<td>{E(r.ResponseType ?? "—")}</td>" +
+                    $"<td>{E(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers) : "—")}</td>" +
+                    $"<td>{E(r.Validators.Count > 0 ? string.Join(", ", r.Validators) : "—")}</td>" +
+                    $"<td>{E(r.ProjectName ?? "—")}</td>" +
+                    "</tr>");
+            }
+            html.AppendLine("</tbody>");
+            html.AppendLine("</table>");
+        }
+
+        // ---- Behaviors -------------------------------------------------------------
+        html.AppendLine("<h2>Pipeline Behaviors</h2>");
+        if (result.Behaviors.Count == 0)
+        {
+            html.AppendLine("<p><em>No IPipelineBehavior implementations found.</em></p>");
+        }
+        else
+        {
+            html.AppendLine("<table>");
+            html.AppendLine("<thead><tr><th>Behavior</th><th>Project</th></tr></thead>");
+            html.AppendLine("<tbody>");
+            foreach (var b in result.Behaviors.OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase))
+                html.AppendLine($"<tr><td>{E(b.Name)}</td><td>{E(b.ProjectName ?? "—")}</td></tr>");
+            html.AppendLine("</tbody>");
+            html.AppendLine("</table>");
+        }
+
+        // ---- Data model ----------------------------------------------------------------
+        html.AppendLine("<h2>Data Access (DbContexts)</h2>");
+        if (result.DbContexts.Count == 0)
+        {
+            html.AppendLine("<p><em>No DbContext classes found.</em></p>");
+        }
+        else
+        {
+            html.AppendLine("<table>");
+            html.AppendLine("<thead><tr><th>DbContext</th><th>Project</th><th>DbSets (property → entity)</th></tr></thead>");
+            html.AppendLine("<tbody>");
+            foreach (var ctx in result.DbContexts.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                var sets = ctx.DbSets.Count > 0
+                    ? string.Join(", ", ctx.DbSets.Select(s => $"{s.Property} → {s.Entity}"))
+                    : "—";
+                html.AppendLine($"<tr><td>{E(ctx.Name)}</td><td>{E(ctx.ProjectName ?? "—")}</td><td>{E(sets)}</td></tr>");
+            }
+            html.AppendLine("</tbody>");
+            html.AppendLine("</table>");
+        }
+
+        // ---- Checks -----------------------------------------------------------------------
+        html.AppendLine("<h2>Architecture Checks</h2>");
+        if (result.Checks.Count == 0)
+        {
+            html.AppendLine("<p>All checks passed.</p>");
+        }
+        else
+        {
+            var errors = result.Checks.Count(c => c.Severity == CheckSeverity.Error);
+            var warnings = result.Checks.Count - errors;
+            html.AppendLine($"<p>{errors} error(s), {warnings} warning(s):</p>");
+            html.AppendLine("<ul class=\"checks\">");
+            foreach (var check in result.Checks)
+            {
+                var cls = check.Severity == CheckSeverity.Error ? "error" : "warning";
+                var badge = check.Severity == CheckSeverity.Error ? "❌ Error" : "⚠️ Warning";
+                html.AppendLine($"<li class=\"{cls}\">{badge} <strong>{E(check.Code)}</strong> — {E(check.Message)}</li>");
+            }
+            html.AppendLine("</ul>");
+        }
+
+        html.AppendLine("<hr>");
+        html.AppendLine($"<p class=\"footer\">{E(ReportGenerator.TimingFooter(result))}<br>" +
+                        "Report generated by <a href=\"https://github.com/AbdullahHakima/cqrslens\">CqrsLens</a> — " +
+                        "static analysis only; the target solution was not built.</p>");
+
+        html.AppendLine("</main>");
+        html.AppendLine("<script src=\"https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js\"></script>");
+        html.AppendLine("<script>mermaid.initialize({ startOnLoad: true });</script>");
+        html.AppendLine("</body>");
+        html.AppendLine("</html>");
+
+        return html.ToString();
+    }
+
+    private static void AppendCard(StringBuilder html, string label, int value)
+    {
+        html.AppendLine($"<div class=\"card\"><div class=\"card-value\">{value}</div><div class=\"card-label\">{E(label)}</div></div>");
+    }
+
+    private static void AppendDiagram(StringBuilder html, string title, string? diagram, string emptyText)
+    {
+        html.AppendLine($"<h2>{E(title)}</h2>");
+        if (diagram is null)
+        {
+            html.AppendLine($"<p><em>{E(emptyText)}</em></p>");
+        }
+        else
+        {
+            html.AppendLine(RenderDiagram(diagram));
+        }
+    }
+
+    /// <summary>
+    /// RENDERING SEAM: turns a Mermaid diagram source into its HTML representation.
+    /// Today this emits a &lt;pre class="mermaid"&gt; block rendered in the browser by
+    /// Mermaid.js (see the script tags at the end of the page). A future pre-rendered
+    /// mode (--render svg, using an AOT Mermaid-&gt;SVG compiler such as Ondine) only
+    /// has to replace this method's body to produce zero-JS reports — nothing else
+    /// in the generator changes.
+    /// </summary>
+    public static string RenderDiagram(string mermaidCode)
+        => $"<pre class=\"mermaid\">{E(mermaidCode)}</pre>";
+
+    private const string Css = """
+        :root { color-scheme: light dark; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+               background: #f6f7f9; color: #1c1e21; }
+        main { max-width: 1080px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        h1 { font-size: 1.8rem; margin: 0 0 .25rem; }
+        h2 { font-size: 1.25rem; margin: 2rem 0 .75rem; border-bottom: 1px solid #d6d9de; padding-bottom: .35rem; }
+        .meta, .footer, .note { color: #5a6068; font-size: .9rem; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin: 1.25rem 0 .5rem; }
+        .card { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; padding: 1rem; text-align: center; }
+        .card-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
+        .card-label { color: #5a6068; font-size: .85rem; margin-top: .25rem; }
+        pre.mermaid { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; padding: 1rem; overflow-x: auto; }
+        table { border-collapse: collapse; width: 100%; background: #ffffff; }
+        th, td { border: 1px solid #d6d9de; padding: .45rem .6rem; text-align: left; font-size: .92rem; }
+        th { background: #eceef1; }
+        ul.checks { list-style: none; padding: 0; }
+        ul.checks li { padding: .4rem .6rem; border-radius: 6px; margin-bottom: .35rem; }
+        ul.checks li.error { background: #fdecec; }
+        ul.checks li.warning { background: #fff6db; }
+        code { background: #eceef1; padding: .1rem .3rem; border-radius: 4px; }
+        hr { border: none; border-top: 1px solid #d6d9de; margin: 2rem 0 1rem; }
+        a { color: #0b5fff; }
+        @media (prefers-color-scheme: dark) {
+          body { background: #16181c; color: #e6e8eb; }
+          .card, table, pre.mermaid { background: #1f2227; border-color: #3a3e45; }
+          th { background: #26292f; }
+          th, td { border-color: #3a3e45; }
+          h2 { border-color: #3a3e45; }
+          code { background: #26292f; }
+          ul.checks li.error { background: #3a2226; }
+          ul.checks li.warning { background: #38331c; }
+          .meta, .footer, .note, .card-label { color: #9aa0a8; }
+          hr { border-color: #3a3e45; }
+        }
+        """;
+}
