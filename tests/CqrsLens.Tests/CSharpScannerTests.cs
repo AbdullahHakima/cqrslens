@@ -85,6 +85,20 @@ public class CSharpScannerTests
     }
 
     [Fact]
+    public void GenericConstraintOnPipelineBehavior_IsNotARequest()
+    {
+        var result = Scan("""
+            public sealed class LoggingBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+                where TRequest : IRequest<TResponse>
+            {
+            }
+            """);
+
+        Assert.Empty(result.Requests);
+        Assert.Single(result.Behaviors);
+    }
+
+    [Fact]
     public void DetectsDbContextAndExtractsDbSets()
     {
         var result = Scan("""

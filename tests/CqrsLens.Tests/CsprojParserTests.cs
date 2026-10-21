@@ -74,6 +74,34 @@ public class CsprojParserTests : IDisposable
     }
 
     [Fact]
+    public void LoadProjects_ScansRootThatLivesBeneathBinFolder()
+    {
+        var scanRoot = Path.Combine(_root, "bin", "scan");
+        WriteProject(Path.Combine("bin", "scan", "App"), "App");
+
+        var projects = CsprojParser.LoadProjects(scanRoot);
+
+        var project = Assert.Single(projects);
+        Assert.Equal("App", project.Name);
+    }
+
+    [Fact]
+    public void FindSourceFiles_UsesRootRelativeSkipFolders()
+    {
+        var scanRoot = Path.Combine(_root, "bin", "scan");
+        WriteProject(Path.Combine("bin", "scan", "App"), "App");
+        var app = Path.Combine(scanRoot, "App");
+        File.WriteAllText(Path.Combine(app, "Real.cs"), "namespace App;");
+        Directory.CreateDirectory(Path.Combine(app, "obj"));
+        File.WriteAllText(Path.Combine(app, "obj", "Ghost.cs"), "namespace Ghost;");
+
+        var files = CsprojParser.FindSourceFiles(scanRoot);
+
+        var file = Assert.Single(files);
+        Assert.Equal("Real.cs", Path.GetFileName(file));
+    }
+
+    [Fact]
     public void GetProjectReferenceIncludes_MalformedXml_ReturnsEmpty()
     {
         var dir = Path.Combine(_root, "Broken");

@@ -1,0 +1,11 @@
+﻿flowchart LR
+    ArchiveWidgetCommand["ArchiveWidgetCommand"]
+    ArchiveWidgetCommandHandler(["ArchiveWidgetCommandHandler"])
+    ArchiveWidgetCommandValidator{"ArchiveWidgetCommandValidator"}
+    CreateWidgetCommand["CreateWidgetCommand"]
+    CreateWidgetCommandHandler(["CreateWidgetCommandHandler"])
+    CreateWidgetCommandValidator{"CreateWidgetCommandValidator"}
+    ArchiveWidgetCommand --> ArchiveWidgetCommandHandler
+    ArchiveWidgetCommandValidator -.-> ArchiveWidgetCommand
+    CreateWidgetCommand --> CreateWidgetCommandHandler
+    CreateWidgetCommandValidator -.-> CreateWidgetCommand

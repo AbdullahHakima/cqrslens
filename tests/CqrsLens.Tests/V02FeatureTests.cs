@@ -81,6 +81,33 @@ public class V02FeatureTests : IDisposable
     }
 
     [Fact]
+    public void Marker_SameNameInDifferentNamespaces_DoesNotShareInheritance()
+    {
+        WriteFile("AlphaMarkers.cs", """
+            namespace Alpha;
+            public interface ICommand<T> : IRequest<T> { }
+            """);
+        WriteFile("BetaMarkers.cs", """
+            namespace Beta;
+            public interface ICommand<T> { }
+            """);
+        WriteFile("AlphaFeature.cs", """
+            namespace Alpha;
+            public sealed record PlaceOrder() : ICommand<Guid>;
+            """);
+        WriteFile("BetaFeature.cs", """
+            namespace Beta;
+            public sealed record RebuildIndex() : ICommand<Guid>;
+            """);
+
+        var result = Analyzer.Analyze(_root);
+
+        var request = Assert.Single(result.Requests);
+        Assert.Equal("PlaceOrder", request.Name);
+        Assert.Equal("Alpha", request.Namespace);
+    }
+
+    [Fact]
     public void Marker_Classification_SuffixWinsThenMarkerNameThenCommand()
     {
         // Suffix beats the marker it was reached through.
@@ -118,9 +145,9 @@ public class V02FeatureTests : IDisposable
         Assert.Equal(2, result.Requests.Count);
         var alpha = result.Requests.Single(r => r.Namespace == "Alpha");
         var beta = result.Requests.Single(r => r.Namespace == "Beta");
-        Assert.Equal(new[] { "AlphaGetDataHandler" }, alpha.Handlers);
-        Assert.Equal(new[] { "GetDataQueryValidator" }, alpha.Validators);
-        Assert.Equal(new[] { "BetaGetDataHandler" }, beta.Handlers);
+        Assert.Equal(new[] { "Alpha.AlphaGetDataHandler" }, alpha.Handlers);
+        Assert.Equal(new[] { "Alpha.GetDataQueryValidator" }, alpha.Validators);
+        Assert.Equal(new[] { "Beta.BetaGetDataHandler" }, beta.Handlers);
         Assert.Empty(beta.Validators);
 
         // The diagram keeps the two requests distinct.
@@ -128,6 +155,33 @@ public class V02FeatureTests : IDisposable
         Assert.NotNull(map);
         Assert.Contains("Alpha_GetDataQuery", map);
         Assert.Contains("Beta_GetDataQuery", map);
+    }
+
+    [Fact]
+    public void Linking_SameNamedHandlersInTwoNamespaces_StayDistinctInTheDiagram()
+    {
+        WriteFile("Alpha.cs", """
+            namespace Alpha;
+            public sealed record GetDataQuery() : IRequest<int>;
+            public sealed class GetDataQueryHandler : IRequestHandler<GetDataQuery, int> { }
+            """);
+        WriteFile("Beta.cs", """
+            namespace Beta;
+            public sealed record GetDataQuery() : IRequest<string>;
+            public sealed class GetDataQueryHandler : IRequestHandler<GetDataQuery, string> { }
+            """);
+
+        var result = Analyzer.Analyze(_root);
+
+        var alpha = result.Requests.Single(r => r.Namespace == "Alpha");
+        var beta = result.Requests.Single(r => r.Namespace == "Beta");
+        Assert.Equal(new[] { "Alpha.GetDataQueryHandler" }, alpha.Handlers);
+        Assert.Equal(new[] { "Beta.GetDataQueryHandler" }, beta.Handlers);
+
+        var map = DiagramBuilder.CqrsMap(result);
+        Assert.NotNull(map);
+        Assert.Contains("Alpha_GetDataQueryHandler", map);
+        Assert.Contains("Beta_GetDataQueryHandler", map);
     }
 
     [Fact]
@@ -169,7 +223,7 @@ public class V02FeatureTests : IDisposable
         var result = Analyzer.Analyze(_root);
 
         var beta = result.Requests.Single(r => r.Namespace == "Beta");
-        Assert.Equal(new[] { "GetDataHandler" }, beta.Handlers);
+        Assert.Equal(new[] { "Gamma.GetDataHandler" }, beta.Handlers);
         var alpha = result.Requests.Single(r => r.Namespace == "Alpha");
         Assert.Empty(alpha.Handlers);
     }
@@ -328,15 +382,37 @@ public class V02FeatureTests : IDisposable
     // --------------------------------------------------------- report footer (#1)
 
     [Fact]
+    public void Report_SkippedFiles_AreVisible()
+    {
+        var result = SampleResult();
+        result.DiscoveredFileCount = 9;
+        result.FileCount = 7;
+        result.SkippedFiles.Add("Features/Broken.cs");
+        result.SkippedFiles.Add("Legacy/Unreadable.cs");
+
+        var md = ReportGenerator.Generate(result);
+        Assert.Contains("## Scan Diagnostics", md);
+        Assert.Contains("7 of 9 source files scanned. 2 skipped:", md);
+        Assert.Contains("Features/Broken.cs", md);
+        Assert.Contains("7 of 9 files scanned; 2 skipped.", md);
+
+        var html = HtmlReportGenerator.Generate(result);
+        Assert.Contains("Scan Diagnostics", html);
+        Assert.Contains("Legacy/Unreadable.cs", html);
+        Assert.Contains("7 of 9 source files scanned", html);
+        Assert.Contains("2 skipped", html);
+    }
+
+    [Fact]
     public void Report_MarkdownAndHtml_CarryTheTimingFooter()
     {
         var result = SampleResult();
 
         var md = ReportGenerator.Generate(result);
-        Assert.Contains("Generated by CqrsLens 0.2.0 in 42 ms — 7 files scanned.", md);
+        Assert.Contains($"Generated by CqrsLens {ToolInfo.Version} in 42 ms — 7 files scanned.", md);
         Assert.Contains("## Architecture Checks", md);
 
         var html = HtmlReportGenerator.Generate(result);
-        Assert.Contains("Generated by CqrsLens 0.2.0 in 42 ms — 7 files scanned.", html);
+        Assert.Contains($"Generated by CqrsLens {ToolInfo.Version} in 42 ms — 7 files scanned.", html);
     }
 }
