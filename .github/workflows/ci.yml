@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore CqrsLens.sln
+
+      - name: Build
+        run: dotnet build CqrsLens.sln -c Release --no-restore
+
+      - name: Test
+        run: dotnet test CqrsLens.sln -c Release --no-build
+
+      - name: Pack
+        run: dotnet pack src/CqrsLens/CqrsLens.csproj -c Release --no-build -o artifacts
+
+      - name: Smoke test the tool on the sample solution
+        run: |
+          dotnet run --project src/CqrsLens -c Release --no-build -- samples/SampleShop -o /tmp/ARCHITECTURE.md
+          grep -q "CQRS Map" /tmp/ARCHITECTURE.md
