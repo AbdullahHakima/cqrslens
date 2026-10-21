@@ -28,14 +28,23 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         IReadOnlySet<string> markers,
         AnalysisResult result)
     {
-        var parsed = files
-            .Select(file => (
-                File: file,
-                Tree: CSharpSyntaxTree.ParseText(
-                    file.Code,
-                    new CSharpParseOptions(LanguageVersion.Latest),
-                    file.Path)))
-            .ToList();
+        var parsed = new List<(SourceFile File, SyntaxTree Tree)>();
+        foreach (var file in files)
+        {
+            try
+            {
+                parsed.Add((
+                    file,
+                    CSharpSyntaxTree.ParseText(
+                        file.Code,
+                        new CSharpParseOptions(LanguageVersion.Latest),
+                        file.Path)));
+            }
+            catch
+            {
+                result.RecordSkippedFile(file.Path);
+            }
+        }
 
         var compilation = CSharpCompilation.Create(
             "CqrsLens.RoslynScan",

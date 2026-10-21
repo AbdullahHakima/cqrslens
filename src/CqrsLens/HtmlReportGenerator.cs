@@ -117,6 +117,17 @@ public static class HtmlReportGenerator
             html.AppendLine("</table>");
         }
 
+        if (result.SkippedFiles.Count > 0)
+        {
+            html.AppendLine("<h2>Scan Diagnostics</h2>");
+            html.AppendLine($"<p>{result.FileCount} of {result.DiscoveredFileCount} source files scanned. " +
+                            $"{result.SkippedFiles.Count} skipped:</p>");
+            html.AppendLine("<ul>");
+            foreach (var file in result.SkippedFiles)
+                html.AppendLine($"<li><code>{E(file)}</code></li>");
+            html.AppendLine("</ul>");
+        }
+
         // ---- Checks -----------------------------------------------------------------------
         html.AppendLine("<h2>Architecture Checks</h2>");
         if (result.Checks.Count == 0)

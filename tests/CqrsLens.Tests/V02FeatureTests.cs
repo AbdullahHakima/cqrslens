@@ -381,6 +381,28 @@ public class V02FeatureTests : IDisposable
 
     // --------------------------------------------------------- report footer (#1)
 
+
+    [Fact]
+    public void Report_SkippedFiles_AreVisible()
+    {
+        var result = SampleResult();
+        result.DiscoveredFileCount = 9;
+        result.FileCount = 7;
+        result.SkippedFiles.Add("Features/Broken.cs");
+        result.SkippedFiles.Add("Legacy/Unreadable.cs");
+
+        var md = ReportGenerator.Generate(result);
+        Assert.Contains("7 of 9 source files scanned. 2 skipped:", md);
+        Assert.Contains("Features/Broken.cs", md);
+        Assert.Contains("7 of 9 files scanned · 2 skipped.", md);
+
+        var html = HtmlReportGenerator.Generate(result);
+        Assert.Contains("Scan Diagnostics", html);
+        Assert.Contains("Legacy/Unreadable.cs", html);
+        Assert.Contains("7 of 9 files scanned", html);
+        Assert.Contains("2 skipped", html);
+    }
+
     [Fact]
     public void Report_MarkdownAndHtml_CarryTheTimingFooter()
     {

@@ -104,6 +104,8 @@ public static class Program
                           $"{result.Validators.Count} validator(s), {result.Behaviors.Count} behavior(s), " +
                           $"{result.DbContexts.Count} DbContext(s).");
         Console.WriteLine($"Report written to {Path.GetFullPath(outputPath)}");
+        if (result.SkippedFiles.Count > 0)
+            Console.Error.WriteLine($"warning: {result.SkippedFiles.Count} source file(s) skipped — see the report.");
 
         var errors = result.Checks.Count(c => c.Severity == CheckSeverity.Error);
         var warnings = result.Checks.Count - errors;

@@ -107,6 +107,16 @@ public sealed class AnalysisResult
     public List<DbContextInfo> DbContexts { get; } = new();
 
     public List<CheckFinding> Checks { get; } = new();
+    public int DiscoveredFileCount { get; set; }
     public int FileCount { get; set; }
+    public List<string> SkippedFiles { get; } = new();
     public long ElapsedMilliseconds { get; set; }
+
+    internal void RecordSkippedFile(string path)
+    {
+        var relative = Path.GetRelativePath(RootPath, path)
+            .Replace(Path.DirectorySeparatorChar, '/');
+        if (!SkippedFiles.Contains(relative, StringComparer.OrdinalIgnoreCase))
+            SkippedFiles.Add(relative);
+    }
 }
