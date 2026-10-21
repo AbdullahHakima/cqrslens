@@ -18,7 +18,15 @@ public sealed class CqrsRequest
 {
     public required string Name { get; init; }
     public string Namespace { get; set; } = "";
-    public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
+    public List<string> ContainingTypes { get; } = new();
+    public string FullName
+    {
+        get
+        {
+            var typePath = ContainingTypes.Count == 0 ? Name : string.Join(".", ContainingTypes) + "." + Name;
+            return string.IsNullOrEmpty(Namespace) ? typePath : $"{Namespace}.{typePath}";
+        }
+    }
 
     public string? ResponseType { get; set; }
     public string? ProjectName { get; set; }
@@ -50,7 +58,15 @@ public sealed class HandlerInfo
 {
     public required string Name { get; init; }
     public string Namespace { get; set; } = "";
-    public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
+    public List<string> ContainingTypes { get; } = new();
+    public string FullName
+    {
+        get
+        {
+            var typePath = ContainingTypes.Count == 0 ? Name : string.Join(".", ContainingTypes) + "." + Name;
+            return string.IsNullOrEmpty(Namespace) ? typePath : $"{Namespace}.{typePath}";
+        }
+    }
     public required string RequestName { get; init; }
 
     // Set when the request name in IRequestHandler<...> could be resolved to a namespace.
@@ -63,7 +79,15 @@ public sealed class ValidatorInfo
 {
     public required string Name { get; init; }
     public string Namespace { get; set; } = "";
-    public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
+    public List<string> ContainingTypes { get; } = new();
+    public string FullName
+    {
+        get
+        {
+            var typePath = ContainingTypes.Count == 0 ? Name : string.Join(".", ContainingTypes) + "." + Name;
+            return string.IsNullOrEmpty(Namespace) ? typePath : $"{Namespace}.{typePath}";
+        }
+    }
     public required string TargetType { get; init; }
 
     // Set when the validated type name could be resolved to a namespace.
@@ -84,6 +108,7 @@ public sealed class DbContextInfo
 {
     public required string Name { get; init; }
     public string Namespace { get; set; } = "";
+    public List<string> ContainingTypes { get; } = new();
     public string? ProjectName { get; set; }
     public List<DbSetInfo> DbSets { get; } = new();
 }
