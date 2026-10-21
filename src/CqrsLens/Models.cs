@@ -7,21 +7,17 @@ public sealed class ProjectInfo
     public required string DirectoryPath { get; init; }
     public string Layer { get; set; } = "Other";
 
-    /// <summary>Raw ProjectReference Include values from the .csproj.</summary>
+    // Raw Include values as written in the .csproj.
     public List<string> ReferenceIncludes { get; } = new();
 
-    /// <summary>Resolved names of referenced projects (only those found in the scan).</summary>
+    // ReferenceIncludes resolved to project names found in the same scan.
     public List<string> ReferenceNames { get; } = new();
 }
 
 public sealed class CqrsRequest
 {
     public required string Name { get; init; }
-
-    /// <summary>Namespace the request type was declared in ("" when none was found).</summary>
     public string Namespace { get; set; } = "";
-
-    /// <summary>Fully-qualified name used for linking (Namespace.Name, or Name alone).</summary>
     public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
 
     public string? ResponseType { get; set; }
@@ -53,14 +49,10 @@ public sealed class CqrsRequest
 public sealed class HandlerInfo
 {
     public required string Name { get; init; }
-
-    /// <summary>Namespace the handler class was declared in ("" when none was found).</summary>
     public string Namespace { get; set; } = "";
-
-    /// <summary>Request type name as written in IRequestHandler&lt;...&gt; (simple or dotted).</summary>
     public required string RequestName { get; init; }
 
-    /// <summary>Namespace the request name resolves to, when it can be determined.</summary>
+    // Set when the request name in IRequestHandler<...> could be resolved to a namespace.
     public string? RequestNamespace { get; set; }
 
     public string? ProjectName { get; set; }
@@ -69,14 +61,10 @@ public sealed class HandlerInfo
 public sealed class ValidatorInfo
 {
     public required string Name { get; init; }
-
-    /// <summary>Namespace the validator class was declared in ("" when none was found).</summary>
     public string Namespace { get; set; } = "";
-
-    /// <summary>Validated type name as written (simple or dotted).</summary>
     public required string TargetType { get; init; }
 
-    /// <summary>Namespace the target type resolves to, when it can be determined.</summary>
+    // Set when the validated type name could be resolved to a namespace.
     public string? TargetNamespace { get; set; }
 
     public string? ProjectName { get; set; }
@@ -93,10 +81,7 @@ public sealed record DbSetInfo(string Entity, string Property);
 public sealed class DbContextInfo
 {
     public required string Name { get; init; }
-
-    /// <summary>Namespace the context class was declared in ("" when none was found).</summary>
     public string Namespace { get; set; } = "";
-
     public string? ProjectName { get; set; }
     public List<DbSetInfo> DbSets { get; } = new();
 }
@@ -119,12 +104,7 @@ public sealed class AnalysisResult
     public List<BehaviorInfo> Behaviors { get; } = new();
     public List<DbContextInfo> DbContexts { get; } = new();
 
-    /// <summary>Architecture check findings, computed by <see cref="ArchitectureChecker"/>.</summary>
     public List<CheckFinding> Checks { get; } = new();
-
-    /// <summary>Number of .cs files that were scanned.</summary>
     public int FileCount { get; set; }
-
-    /// <summary>Wall-clock time the analysis took, in milliseconds.</summary>
     public long ElapsedMilliseconds { get; set; }
 }
