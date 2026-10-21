@@ -92,13 +92,27 @@ public static class Analyzer
 
         CqrsRequest? Resolve(string simpleName, string? writtenNs, string? fallbackNs)
         {
-            foreach (var ns in new[] { writtenNs, fallbackNs })
+            // A handler may write a type as `Outer.Inner`, `Ns.Outer.Inner`, or just
+            // `Inner`; try the nested-type path and the handler's own namespace.
+            var candidates = new List<string>();
+            if (!string.IsNullOrEmpty(writtenNs))
             {
-                if (!string.IsNullOrEmpty(ns) && byFullName.TryGetValue($"{ns}.{simpleName}", out var hit))
+                candidates.Add($"{writtenNs}.{simpleName}");
+                if (!string.IsNullOrEmpty(fallbackNs))
+                    candidates.Add($"{fallbackNs}.{writtenNs}.{simpleName}");
+            }
+            if (!string.IsNullOrEmpty(fallbackNs))
+                candidates.Add($"{fallbackNs}.{simpleName}");
+            candidates.Add(simpleName);
+
+            foreach (var candidate in candidates)
+            {
+                if (byFullName.TryGetValue(candidate, out var hit))
                     return hit;
             }
-            return bySimpleName.TryGetValue(simpleName, out var candidates) && candidates.Count == 1
-                ? candidates[0]
+
+            return bySimpleName.TryGetValue(simpleName, out var matches) && matches.Count == 1
+                ? matches[0]
                 : null;
         }
 

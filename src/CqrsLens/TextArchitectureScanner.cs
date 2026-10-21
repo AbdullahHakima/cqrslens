@@ -29,12 +29,12 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         var rawInterfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var (_, scan) in ordered)
         {
-            foreach (var (name, bases) in scan.Interfaces)
+            foreach (var decl in scan.InterfaceDecls)
             {
-                var fullName = string.IsNullOrEmpty(scan.Namespace) ? name : $"{scan.Namespace}.{name}";
+                var fullName = decl.FullName;
                 if (!rawInterfaceMap.TryGetValue(fullName, out var list))
                     rawInterfaceMap[fullName] = list = new List<string>();
-                foreach (var b in bases)
+                foreach (var b in CSharpScanner.ExtractBaseTypeNames(decl.BaseList))
                     if (!list.Contains(b)) list.Add(b);
             }
         }
@@ -105,7 +105,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
 
             foreach (var part in CSharpScanner.SplitTopLevel(decl.BaseList))
             {
-                var (name, args) = CSharpScanner.ParseTypeReference(part);
+                var (name, _) = CSharpScanner.ParseTypeReference(part);
                 var simple = CSharpScanner.SimpleName(name);
                 if (simple is "DbContext" or "IdentityDbContext") continue;
 
@@ -117,9 +117,10 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                         !result.Handlers.Any(h =>
                             h.Namespace == decl.Namespace &&
                             h.Name == decl.Name &&
+                            h.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
                             h.RequestName == requestName))
                     {
-                        result.Handlers.Add(new HandlerInfo
+                        var handler = new HandlerInfo
                         {
                             Name = decl.Name,
                             Namespace = decl.Namespace,
@@ -128,7 +129,9 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                                 ? ns
                                 : null,
                             ProjectName = projectName,
-                        });
+                        };
+                        handler.ContainingTypes.AddRange(decl.ContainingTypes);
+                        result.Handlers.Add(handler);
                     }
                 }
 
@@ -140,9 +143,10 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                         !result.Validators.Any(v =>
                             v.Namespace == decl.Namespace &&
                             v.Name == decl.Name &&
+                            v.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
                             v.TargetType == targetName))
                     {
-                        result.Validators.Add(new ValidatorInfo
+                        var validator = new ValidatorInfo
                         {
                             Name = decl.Name,
                             Namespace = decl.Namespace,
@@ -151,7 +155,9 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                                 ? ns
                                 : null,
                             ProjectName = projectName,
-                        });
+                        };
+                        validator.ContainingTypes.AddRange(decl.ContainingTypes);
+                        result.Validators.Add(validator);
                     }
                 }
             }
@@ -189,7 +195,10 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             var via = reached.FirstOrDefault(m => m != "IRequest")
                       ?? decl.BaseRawNames.FirstOrDefault(b => b != "IRequest");
 
-            if (result.Requests.Any(r => r.Name == decl.Name && r.Namespace == decl.Namespace))
+            if (result.Requests.Any(r =>
+                    r.Name == decl.Name &&
+                    r.Namespace == decl.Namespace &&
+                    r.ContainingTypes.SequenceEqual(decl.ContainingTypes)))
                 continue;
 
             var request = new CqrsRequest
@@ -199,6 +208,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                 ProjectName = projectName,
                 ViaMarker = via,
             };
+            request.ContainingTypes.AddRange(decl.ContainingTypes);
             request.ResponseType =
                 MarkerResolver.TryExtractMarkerResponse(decl, reached)
                 ?? decl.BaseRawNames
@@ -218,13 +228,14 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         IReadOnlyDictionary<string, List<string>> interfaceMap,
         IReadOnlyDictionary<string, List<string>> interfacesBySimpleName)
     {
-        if (name.Contains('.')) return name;
+        if (interfaceMap.ContainsKey(name)) return name;
 
         var localName = string.IsNullOrEmpty(currentNamespace) ? name : $"{currentNamespace}.{name}";
         if (interfaceMap.ContainsKey(localName))
             return localName;
 
-        return interfacesBySimpleName.TryGetValue(name, out var candidates) && candidates.Count == 1
+        return interfacesBySimpleName.TryGetValue(CSharpScanner.SimpleName(name), out var candidates) &&
+               candidates.Count == 1
             ? candidates[0]
             : name;
     }

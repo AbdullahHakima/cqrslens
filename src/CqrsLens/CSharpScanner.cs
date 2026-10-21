@@ -41,10 +41,19 @@ public static partial class CSharpScanner
 
         public bool IsAbstract { get; init; }
 
+        public List<string> ContainingTypes { get; } = new();
+
         /// <summary>Span of the class body in the source text (for DbSet attribution).</summary>
         public required (int Start, int End) BodySpan { get; init; }
 
-        public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
+        public string FullName
+        {
+            get
+            {
+                var typePath = ContainingTypes.Count == 0 ? Name : string.Join(".", ContainingTypes) + "." + Name;
+                return string.IsNullOrEmpty(Namespace) ? typePath : $"{Namespace}.{typePath}";
+            }
+        }
     }
 
     /// <summary>An interface declaration, including its raw base list for generic substitution.</summary>
@@ -54,41 +63,34 @@ public static partial class CSharpScanner
         public required string Namespace { get; init; }
         public required string BaseList { get; init; }
         public List<string> TypeParameters { get; init; } = new();
-        public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
+        public List<string> ContainingTypes { get; } = new();
+        public required (int Start, int End) BodySpan { get; init; }
+
+        public string FullName
+        {
+            get
+            {
+                var typePath = ContainingTypes.Count == 0 ? Name : string.Join(".", ContainingTypes) + "." + Name;
+                return string.IsNullOrEmpty(Namespace) ? typePath : $"{Namespace}.{typePath}";
+            }
+        }
     }
 
-    // Matches: class|record|struct Name<...> (primary-ctor) : <base list> { or ;
-    [GeneratedRegex(@"(?:class|record(?:\s+class|\s+struct)?|struct)\s+(\w+)(?:<([^>]*)>)?\s*(?:\([^{};]*\))?\s*:\s*([^{;]+?)(?:\s+where\s+\w+\s*:[^{;]+)?[{;]",
+    // Matches: class|record|struct Name<...> (primary-ctor) [: base list] { or ;
+    [GeneratedRegex(@"(?:class|record(?:\s+class|\s+struct)?|struct)\s+(\w+)(?:<([^>]*)>)?\s*(?:\([^{};]*\))?\s*(?:(?!where\b)\s*:\s*([^{;]+?))?\s*(?:\s*where\s+\w+\s*:[^{;]+)?[{;]",
         RegexOptions.Singleline)]
     private static partial Regex DeclarationRegex();
 
-    // Matches: interface Name<...> : <base list> { or ;
-    [GeneratedRegex(@"\binterface\s+(\w+)(?:<([^>]*)>)?\s*(?::\s*([^{;]+?))?(?:\s+where\s+\w+\s*:[^{;]+)?[{;]",
+    // Matches: interface Name<...> [: base list] { or ;
+    [GeneratedRegex(@"\binterface\s+(\w+)(?:<([^>]*)>)?\s*(?:(?!where\b)\s*:\s*([^{;]+?))?\s*(?:\s*where\s+\w+\s*:[^{;]+)?[{;]",
         RegexOptions.Singleline)]
     private static partial Regex InterfaceDeclarationRegex();
 
-    // File-scoped namespace: "namespace Foo.Bar;"
-    [GeneratedRegex(@"^\s*namespace\s+([\w.]+)\s*;", RegexOptions.Multiline)]
-    private static partial Regex FileScopedNamespaceRegex();
-
-    // Block namespace: "namespace Foo.Bar {"
-    [GeneratedRegex(@"\bnamespace\s+([\w.]+)\s*\{")]
-    private static partial Regex BlockNamespaceRegex();
-
-    [GeneratedRegex(@"\bDbSet\s*<\s*(\w+)\s*>\s+(\w+)")]
+    [GeneratedRegex(@"\bDbSet\s*<\s*([^<>]*(?:<[^<>]*>[^<>]*)*)\s*>\s+(\w+)", RegexOptions.Singleline)]
     private static partial Regex DbSetRegex();
 
-    [GeneratedRegex(@"(?:^|[,\s])(\w*DbContext)\b")]
-    private static partial Regex DbContextBaseRegex();
-
-    /// <summary>Extracts the namespace declared in a source file ("" when none).</summary>
-    public static string ExtractNamespace(string code)
-    {
-        var fs = FileScopedNamespaceRegex().Match(code);
-        if (fs.Success) return fs.Groups[1].Value;
-        var block = BlockNamespaceRegex().Match(code);
-        return block.Success ? block.Groups[1].Value : "";
-    }
+    /// <summary>Extracts the first namespace declared in a source file ("" when none).</summary>
+    public static string ExtractNamespace(string code) => NamespaceMap.Build(code).FirstNamespace;
 
     /// <summary>The final segment of a possibly dotted name.</summary>
     public static string SimpleName(string name)
@@ -217,18 +219,23 @@ public static partial class CSharpScanner
     /// <summary>Scans one file's text into a fragment (pure; safe to run in parallel).</summary>
     public static FileScan ScanText(string code)
     {
-        var scan = new FileScan { Namespace = ExtractNamespace(code) };
+        var mask = SourceMask.Build(code);
+        var namespaces = NamespaceMap.Build(code, mask);
+        var scan = new FileScan { Namespace = namespaces.FirstNamespace };
 
         foreach (Match m in InterfaceDeclarationRegex().Matches(code))
         {
+            if (!mask.IsCode(m.Index)) continue;
             var name = m.Groups[1].Value;
             var baseList = m.Groups[3].Value;
+            var openBrace = m.Value.EndsWith('{') ? m.Index + m.Length - 1 : -1;
             scan.InterfaceDecls.Add(new InterfaceDecl
             {
                 Name = name,
-                Namespace = scan.Namespace,
+                Namespace = namespaces.NamespaceAt(m.Index),
                 BaseList = baseList,
                 TypeParameters = ParseTypeParameters(m.Groups[2].Value),
+                BodySpan = ComputeTypeSpan(code, mask, m.Index, openBrace),
             });
             if (!scan.Interfaces.ContainsKey(name))
                 scan.Interfaces[name] = new List<string>();
@@ -237,16 +244,17 @@ public static partial class CSharpScanner
 
         foreach (Match m in DeclarationRegex().Matches(code))
         {
+            if (!mask.IsCode(m.Index)) continue;
             var typeName = m.Groups[1].Value;
             var baseList = m.Groups[3].Value;
             // The match ends with the declaration's '{' (class with body) or ';'
             // (primary-constructor record/struct without a body).
             var openBrace = m.Value.EndsWith('{') ? m.Index + m.Length - 1 : -1;
-            var span = ComputeClassSpan(code, m.Index, openBrace);
+            var span = ComputeTypeSpan(code, mask, m.Index, openBrace);
             scan.Classes.Add(new ClassDecl
             {
                 Name = typeName,
-                Namespace = scan.Namespace,
+                Namespace = namespaces.NamespaceAt(m.Index),
                 BaseList = baseList,
                 BaseTypeNames = ExtractBaseTypeNames(baseList),
                 BaseRawNames = ExtractBaseRawNames(baseList),
@@ -256,27 +264,41 @@ public static partial class CSharpScanner
             });
         }
 
+        PopulateContainingTypes(scan);
         return scan;
     }
 
+    private static void PopulateContainingTypes(FileScan scan)
+    {
+        var containers = scan.Classes
+            .Select(c => (Name: c.Name, Span: c.BodySpan, Path: c.ContainingTypes))
+            .Concat(scan.InterfaceDecls
+                .Select(i => (Name: i.Name, Span: i.BodySpan, Path: i.ContainingTypes)))
+            .OrderBy(c => c.Span.Start)
+            .ToList();
+
+        foreach (var container in containers)
+        {
+            var parent = containers
+                .Where(p => p.Span.Start < container.Span.Start &&
+                            container.Span.Start < p.Span.End)
+                .OrderByDescending(p => p.Span.Start)
+                .FirstOrDefault();
+            if (parent.Name is null) continue;
+            container.Path.AddRange(parent.Path);
+            container.Path.Add(parent.Name);
+        }
+    }
+
     /// <summary>
-    /// Finds the span covered by a class declaration: from its start to the matching
+    /// Finds the span covered by a type declaration: from its start to the matching
     /// close brace of its body. Falls back to just the declaration when no body exists.
     /// </summary>
-    private static (int Start, int End) ComputeClassSpan(string code, int declStart, int openBrace)
+    private static (int Start, int End) ComputeTypeSpan(string code, SourceMask mask, int declStart, int openBrace)
     {
         if (openBrace < 0) return (declStart, declStart);
-        var depth = 0;
-        for (var i = openBrace; i < code.Length; i++)
-        {
-            if (code[i] == '{') depth++;
-            else if (code[i] == '}')
-            {
-                depth--;
-                if (depth == 0) return (declStart, i + 1);
-            }
-        }
-        return (declStart, code.Length);
+        var close = mask.FindMatchingBrace(openBrace);
+        return (declStart, close < 0 ? code.Length : close + 1);
     }
 
     /// <summary>
@@ -298,13 +320,15 @@ public static partial class CSharpScanner
             if (!decl.IsAbstract && decl.BaseRawNames.Contains("IRequest"))
             {
                 var response = ExtractGenericArguments(decl.BaseList, "IRequest")?.FirstOrDefault();
-                result.Requests.Add(new CqrsRequest
+                var request = new CqrsRequest
                 {
                     Name = decl.Name,
                     Namespace = decl.Namespace,
                     ResponseType = response,
                     ProjectName = projectName,
-                });
+                };
+                request.ContainingTypes.AddRange(decl.ContainingTypes);
+                result.Requests.Add(request);
             }
 
             // IRequestHandler<TRequest, TResponse> -> a handler for every interface.
@@ -316,17 +340,20 @@ public static partial class CSharpScanner
                 if (result.Handlers.Any(h =>
                         h.Namespace == decl.Namespace &&
                         h.Name == decl.Name &&
+                        h.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
                         h.RequestName == UnqualifiedTypeName(requestType)))
                     continue;
 
-                result.Handlers.Add(new HandlerInfo
+                var handler = new HandlerInfo
                 {
                     Name = decl.Name,
                     Namespace = decl.Namespace,
                     RequestName = UnqualifiedTypeName(requestType),
                     RequestNamespace = NamespaceOfType(requestType) is { Length: > 0 } ns ? ns : null,
                     ProjectName = projectName,
-                });
+                };
+                handler.ContainingTypes.AddRange(decl.ContainingTypes);
+                result.Handlers.Add(handler);
             }
 
             // AbstractValidator<T> / IValidator<T> -> a validator for every target.
@@ -341,17 +368,20 @@ public static partial class CSharpScanner
                 if (result.Validators.Any(v =>
                         v.Namespace == decl.Namespace &&
                         v.Name == decl.Name &&
+                        v.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
                         v.TargetType == UnqualifiedTypeName(validatorTarget)))
                     continue;
 
-                result.Validators.Add(new ValidatorInfo
+                var validator = new ValidatorInfo
                 {
                     Name = decl.Name,
                     Namespace = decl.Namespace,
                     TargetType = UnqualifiedTypeName(validatorTarget),
                     TargetNamespace = NamespaceOfType(validatorTarget) is { Length: > 0 } ns ? ns : null,
                     ProjectName = projectName,
-                });
+                };
+                validator.ContainingTypes.AddRange(decl.ContainingTypes);
+                result.Validators.Add(validator);
             }
 
             // IPipelineBehavior<...> -> a pipeline behavior
@@ -361,7 +391,7 @@ public static partial class CSharpScanner
             }
 
             // : DbContext (or *DbContext, e.g. IdentityDbContext) -> a DbContext
-            if (!decl.IsAbstract && DbContextBaseRegex().IsMatch(decl.BaseList))
+            if (!decl.IsAbstract && IsDbContextBase(decl.BaseList))
             {
                 var ctx = new DbContextInfo
                 {
@@ -369,6 +399,7 @@ public static partial class CSharpScanner
                     Namespace = decl.Namespace,
                     ProjectName = projectName,
                 };
+                ctx.ContainingTypes.AddRange(decl.ContainingTypes);
                 contextClasses.Add((decl, ctx));
                 result.DbContexts.Add(ctx);
             }
@@ -376,18 +407,44 @@ public static partial class CSharpScanner
 
         if (contextClasses.Count > 0)
         {
+            var mask = SourceMask.Build(code);
             foreach (Match m in DbSetRegex().Matches(code))
             {
+                if (!mask.IsCode(m.Index)) continue;
                 var owner = contextClasses
                     .Where(c => m.Index >= c.Decl.BodySpan.Start && m.Index < c.Decl.BodySpan.End)
                     .OrderByDescending(c => c.Decl.BodySpan.Start)
                     .FirstOrDefault();
                 if (owner.Info is null) continue;
-                var set = new DbSetInfo(m.Groups[1].Value, m.Groups[2].Value);
+                var set = new DbSetInfo(m.Groups[1].Value.Trim(), m.Groups[2].Value);
                 if (!owner.Info.DbSets.Contains(set))
                     owner.Info.DbSets.Add(set);
             }
         }
+    }
+
+    /// <summary>
+    /// Recognizes DbContext base types by their final type name. Fully-qualified
+    /// <c>Microsoft.EntityFrameworkCore.DbContext</c> and custom <c>*DbContext</c> bases
+    /// count; interface-like <c>IDbContext</c>/<c>IShopDbContext</c> names do not.
+    /// </summary>
+    public static bool IsDbContextBase(string baseList)
+    {
+        foreach (var part in SplitTopLevel(baseList))
+        {
+            var (name, _) = ParseTypeReference(part);
+            var simple = SimpleName(name);
+            if (simple.Length == 0) continue;
+
+            // IShopDbContext / IDbContext are interfaces, not concrete context bases.
+            if (simple.Length > 1 && simple[0] == 'I' && char.IsUpper(simple[1]) &&
+                simple.EndsWith("DbContext", StringComparison.Ordinal))
+                continue;
+
+            if (simple == "DbContext" || simple.EndsWith("DbContext", StringComparison.Ordinal))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
