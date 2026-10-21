@@ -1,0 +1,21 @@
+## .NET
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.user
+*.suo
+*.nupkg
+*.snupkg
+
+## Tool output (when generated at the repo root by accident)
+## (anchored to root only — docs/sample-output/ARCHITECTURE.md is a kept demo asset)
+/ARCHITECTURE.md
+
+## IDE / OS
+.vs/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
