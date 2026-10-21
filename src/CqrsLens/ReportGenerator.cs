@@ -171,7 +171,7 @@ public static class ReportGenerator
         // ---- Architecture checks ----------------------------------------------
         md.AppendLine("## Architecture Checks");
         md.AppendLine();
-        AppendChecksMarkdown(md, result.Checks);
+        AppendChecksMarkdown(md, result.Checks, result.BaselineApplied);
         md.AppendLine();
 
         md.AppendLine("---");
@@ -216,23 +216,69 @@ public static class ReportGenerator
         }
     }
 
-    internal static void AppendChecksMarkdown(StringBuilder md, IReadOnlyList<CheckFinding> checks)
+    internal static void AppendChecksMarkdown(
+        StringBuilder md,
+        IReadOnlyList<CheckFinding> checks,
+        bool baselineApplied = false)
     {
         if (checks.Count == 0)
         {
             md.AppendLine("All checks passed.");
             return;
         }
-        var errors = checks.Count(c => c.Severity == CheckSeverity.Error);
-        var warnings = checks.Count - errors;
-        md.AppendLine($"{errors} error(s), {warnings} warning(s):");
-        md.AppendLine();
-        foreach (var check in checks)
+
+        var newChecks = baselineApplied
+            ? checks.Where(c => !c.IsKnown).ToList()
+            : checks.ToList();
+        var knownChecks = baselineApplied
+            ? checks.Where(c => c.IsKnown).ToList()
+            : new List<CheckFinding>();
+
+        var newErrors = newChecks.Count(c => c.Severity == CheckSeverity.Error);
+        var newWarnings = newChecks.Count - newErrors;
+        if (baselineApplied)
         {
-            var badge = check.Severity == CheckSeverity.Error ? "❌ Error" : "⚠️ Warning";
             md.AppendLine(
-                $"- {badge} **{InlineText(check.Code)}** — {InlineText(check.Message)}");
+                $"{newErrors} new error(s), {newWarnings} new warning(s); " +
+                $"{knownChecks.Count} known finding(s) from the baseline:");
         }
+        else
+        {
+            var errors = newChecks.Count(c => c.Severity == CheckSeverity.Error);
+            var warnings = newChecks.Count - errors;
+            md.AppendLine($"{errors} error(s), {warnings} warning(s):");
+        }
+
+        md.AppendLine();
+        if (baselineApplied && newChecks.Count == 0)
+        {
+            md.AppendLine("No new findings.");
+            md.AppendLine();
+        }
+
+        foreach (var check in newChecks)
+            AppendCheckMarkdown(md, check, known: false);
+
+        if (knownChecks.Count > 0)
+        {
+            md.AppendLine();
+            md.AppendLine("Known (from baseline):");
+            md.AppendLine();
+            foreach (var check in knownChecks)
+                AppendCheckMarkdown(md, check, known: true);
+        }
+    }
+
+    private static void AppendCheckMarkdown(StringBuilder md, CheckFinding check, bool known)
+    {
+        var badge = known
+            ? "ℹ️ Known"
+            : check.Severity == CheckSeverity.Error ? "❌ Error" : "⚠️ Warning";
+        var locality = check.Location is null
+            ? ""
+            : $" {CodeSpan($"{check.Location.File}:{check.Location.Line}:{check.Location.Column}")}";
+        md.AppendLine(
+            $"- {badge} **{InlineText(check.Code)}** — {InlineText(check.Message)}{locality}");
     }
 
     /// <summary>The one-line timing footer used at the end of every report.</summary>

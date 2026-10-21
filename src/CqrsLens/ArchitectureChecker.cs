@@ -30,7 +30,10 @@ public static class ArchitectureChecker
                 findings.Add(new CheckFinding(
                     CheckSeverity.Warning,
                     AmbiguousProjectNameCode,
-                    $"Project name `{name}` is used by {projects.Count} projects; layer checks skip references to it."));
+                    $"Project name `{name}` is used by {projects.Count} projects; layer checks skip references to it.",
+                    Target: name,
+                    Location: SourceLocation.FromLine(projects[0].FilePath, result.RootPath, 1, 1),
+                    ProjectName: name));
             }
         }
 
@@ -42,7 +45,10 @@ public static class ArchitectureChecker
                 findings.Add(new CheckFinding(
                     CheckSeverity.Error,
                     MissingHandlerCode,
-                    $"Request `{request.FullName}` has no handler."));
+                    $"Request `{request.FullName}` has no handler.",
+                    Target: request.FullName,
+                    Location: request.Location,
+                    ProjectName: request.ProjectName));
             }
         }
 
@@ -63,7 +69,10 @@ public static class ArchitectureChecker
                     findings.Add(new CheckFinding(
                         CheckSeverity.Error,
                         LayerViolationCode,
-                        $"Domain project `{project.Name}` references {targets[0].Layer} project `{targets[0].Name}`."));
+                        $"Domain project `{project.Name}` references {targets[0].Layer} project `{targets[0].Name}`.",
+                        Target: $"{project.Name} -> {targets[0].Name}",
+                        Location: SourceLocation.FromLine(project.FilePath, result.RootPath, 1, 1),
+                        ProjectName: project.Name));
                 }
             }
         }
@@ -76,20 +85,49 @@ public static class ArchitectureChecker
                 findings.Add(new CheckFinding(
                     CheckSeverity.Warning,
                     CommandWithoutValidatorCode,
-                    $"Command `{request.FullName}` has no validator."));
+                    $"Command `{request.FullName}` has no validator.",
+                    Target: request.FullName,
+                    Location: request.Location,
+                    ProjectName: request.ProjectName));
             }
         }
 
-        findings.Sort((a, b) =>
+        Sort(findings);
+        return findings;
+    }
+
+    /// <summary>Applies .cqrslens.json rule severities; null means the rule is off.</summary>
+    public static List<CheckFinding> ApplyRuleSeverities(
+        IEnumerable<CheckFinding> findings,
+        IReadOnlyDictionary<string, CheckSeverity?> overrides)
+    {
+        var filtered = new List<CheckFinding>();
+        foreach (var finding in findings)
+        {
+            var severity = finding.Severity;
+            if (overrides.TryGetValue(finding.Code, out var configured))
+            {
+                if (configured is null)
+                    continue;
+                severity = configured.Value;
+            }
+
+            filtered.Add(finding with { Severity = severity });
+        }
+
+        Sort(filtered);
+        return filtered;
+    }
+
+    public static bool HasErrors(IEnumerable<CheckFinding> findings)
+        => findings.Any(f => f.Severity == CheckSeverity.Error);
+
+    private static void Sort(List<CheckFinding> findings)
+        => findings.Sort((a, b) =>
         {
             var bySeverity = b.Severity.CompareTo(a.Severity); // errors first
             if (bySeverity != 0) return bySeverity;
             var byCode = string.Compare(a.Code, b.Code, StringComparison.Ordinal);
             return byCode != 0 ? byCode : string.Compare(a.Message, b.Message, StringComparison.Ordinal);
         });
-        return findings;
-    }
-
-    public static bool HasErrors(IEnumerable<CheckFinding> findings)
-        => findings.Any(f => f.Severity == CheckSeverity.Error);
 }
