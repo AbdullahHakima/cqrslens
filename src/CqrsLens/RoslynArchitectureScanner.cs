@@ -14,6 +14,19 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
     private static readonly Lazy<IReadOnlyList<MetadataReference>> RuntimeReferences =
         new(CreateRuntimeReferences);
 
+    private static readonly HashSet<string> ContractNames = new(StringComparer.Ordinal)
+    {
+        "IRequest",
+        "IRequestHandler",
+        "IPipelineBehavior",
+        "AbstractValidator",
+        "IValidator",
+        "DbContext",
+        "DbContextOptions",
+        "DbSet",
+        "IdentityDbContext",
+    };
+
     private const string GlobalUsings = """
         global using System;
         global using System.Collections.Generic;
@@ -35,7 +48,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             var ownFiles = project.ToList();
             try
             {
-                ScanProject(ownFiles, allFiles, markers, result);
+                ScanProject(ownFiles, allFiles, markers, result, ProjectLabel(project.Key));
             }
             catch (Exception ex)
             {
@@ -53,7 +66,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         IReadOnlyList<SourceFile> ownFiles,
         IReadOnlyList<SourceFile> allFiles,
         IReadOnlySet<string> markers,
-        AnalysisResult result)
+        AnalysisResult result,
+        string projectLabel)
     {
         var parsed = allFiles
             .Select(file => (
@@ -68,6 +82,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         var ownPaths = ownFiles
             .Select(f => f.Path)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        WarnAboutUnresolvedContracts(compilation, parsed, ownPaths, projectLabel, result);
 
         foreach (var (file, tree) in parsed.Where(p => ownPaths.Contains(p.File.Path)))
         {
@@ -84,6 +100,45 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                     $"Roslyn could not scan `{file.Path}`: {ex.Message}"));
             }
         }
+    }
+
+    /// <summary>
+    /// A missing using/package reference should not look like a clean empty scan.
+    /// Contract shims only help when the compiler can see the namespace; if a known
+    /// contract identifier still has no symbol, report it as a warning.
+    /// </summary>
+    private static void WarnAboutUnresolvedContracts(
+        Compilation compilation,
+        IReadOnlyList<(SourceFile File, SyntaxTree Tree)> parsed,
+        IReadOnlySet<string> ownPaths,
+        string projectLabel,
+        AnalysisResult result)
+    {
+        var unresolved = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var (file, tree) in parsed.Where(p => ownPaths.Contains(p.File.Path)))
+        {
+            var model = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
+            foreach (var name in tree.GetRoot().DescendantNodes().OfType<SimpleNameSyntax>())
+            {
+                var text = name.Identifier.ValueText;
+                if (!ContractNames.Contains(text))
+                    continue;
+
+                var info = model.GetSymbolInfo(name);
+                if (info.Symbol is null && info.CandidateSymbols.Length == 0)
+                    unresolved.Add(text);
+            }
+        }
+
+        if (unresolved.Count == 0)
+            return;
+
+        result.Checks.Add(new CheckFinding(
+            CheckSeverity.Warning,
+            "RoslynUnresolvedContracts",
+            $"Roslyn could not bind {string.Join(", ", unresolved)} in project `{projectLabel}`. " +
+            "Add the package/using or use text mode for a fallback scan."));
     }
 
     private static void ProcessTree(

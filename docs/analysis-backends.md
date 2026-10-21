@@ -6,9 +6,8 @@ CqrsLens has two separate jobs during a scan:
    behaviors and DbContexts);
 2. link and report those shapes together with project references and checks.
 
-The current text scanner is intentionally build-free. It is fast, works on
-solutions that do not compile, and should stay available even after Roslyn mode
-lands.
+The text scanner is intentionally build-free. It is fast, works on solutions that
+do not compile, and remains the default even now that Roslyn mode is available.
 
 The backend boundary is `IArchitectureScanner`. `Analyzer` still owns file
 discovery, project ownership, linking, checks and timing; a scanner only turns
@@ -16,15 +15,27 @@ source files into the shared analysis model.
 
 ## Roslyn rollout
 
-I do not want to replace the text scanner in one large change. The planned
-sequence for #1 is:
+The rollout for #1 is incremental:
 
-1. keep text mode as the default and move it behind the scanner boundary;
-2. add a Roslyn backend for requests, handlers and validators first;
-3. move custom marker inheritance/type resolution to symbols;
-4. compare both backends on SampleShop and the El-Hakim report before exposing
-   mode selection in the CLI;
-5. keep text mode as the fallback for incomplete or non-buildable repositories.
+1. text mode stays the default behind the scanner boundary;
+2. Roslyn covers requests, handlers, validators, behaviors and DbContexts;
+3. `--analysis roslyn` exposes that backend as an opt-in mode;
+4. `samples/SampleShop` is compiled by the test suite and must produce identical
+   request, handler, validator, behavior and DbContext signatures in both modes;
+5. text mode remains the fallback for incomplete or non-buildable repositories.
+
+The Roslyn backend builds an in-memory compilation containing all source groups
+from the scan, plus runtime assemblies. This lets handlers in one project bind to
+requests declared in another project. Real applications reference MediatR,
+FluentValidation and EF Core assemblies that are not part of the runtime
+reference set, so the backend injects minimal contract shapes only when the
+source does not already declare them. Those shims are for symbol binding; they do
+not execute package code or claim that the target solution builds.
+
+It does not yet evaluate the target solution through MSBuild, so project/package
+references outside the shimmed contracts can remain unresolved. When a project or
+file cannot be scanned, Roslyn isolation records skipped files and a warning
+instead of silently returning an empty architecture.
 
 The important constraint is that report generation, architecture checks and
 Mermaid output should not care which scanner produced the model. That keeps the
