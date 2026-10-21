@@ -12,12 +12,19 @@ public class RoslynArchitectureScannerTests
             public interface IRequest<TResponse> { }
             public interface IRequestHandler<TRequest> { }
             public interface IRequestHandler<TRequest, TResponse> { }
+            public interface IPipelineBehavior<TRequest, TResponse> { }
         }
 
         namespace FluentValidation
         {
             public abstract class AbstractValidator<T> { }
             public interface IValidator<T> { }
+        }
+
+        namespace Microsoft.EntityFrameworkCore
+        {
+            public class DbContext { }
+            public class DbSet<T> { }
         }
         """;
 
@@ -119,6 +126,47 @@ public class RoslynArchitectureScannerTests
         Assert.Equal("int", requests[0].ResponseType);
         Assert.Equal("Beta", requests[1].Namespace);
         Assert.Equal("string", requests[1].ResponseType);
+    }
+
+
+    [Fact]
+    public void FindsPipelineBehaviorsAndDbSets()
+    {
+        var files = new[]
+        {
+            Source("Contracts.cs", Contracts),
+            Source("Infrastructure.cs", """
+                using MediatR;
+                using Microsoft.EntityFrameworkCore;
+
+                namespace Shop.Infrastructure;
+
+                public sealed class LoggingBehavior<TRequest, TResponse> :
+                    IPipelineBehavior<TRequest, TResponse>
+                {
+                }
+
+                public sealed class Order { }
+
+                public sealed class ShopDbContext : DbContext
+                {
+                    public DbSet<Order> Orders { get; set; } = null!;
+                }
+                """),
+        };
+
+        var result = Scan(files);
+
+        var behavior = Assert.Single(result.Behaviors);
+        Assert.Equal("LoggingBehavior", behavior.Name);
+        Assert.Equal("Shop.Application", behavior.ProjectName);
+
+        var context = Assert.Single(result.DbContexts);
+        Assert.Equal("ShopDbContext", context.Name);
+        Assert.Equal("Shop.Infrastructure", context.Namespace);
+        var set = Assert.Single(context.DbSets);
+        Assert.Equal("Order", set.Entity);
+        Assert.Equal("Orders", set.Property);
     }
 
     private static SourceFile Source(string path, string code)

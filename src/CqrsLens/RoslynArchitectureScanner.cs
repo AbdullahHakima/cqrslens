@@ -59,6 +59,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 AddRequest(symbol, file.ProjectName, markers, result);
                 AddHandlers(symbol, file.ProjectName, result);
                 AddValidators(symbol, file.ProjectName, result);
+                AddBehavior(symbol, file.ProjectName, result);
+                AddDbContext(symbol, file.ProjectName, result);
             }
         }
     }
@@ -187,6 +189,61 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 ProjectName = projectName,
             });
         }
+    }
+
+
+    private static void AddBehavior(
+        INamedTypeSymbol symbol,
+        string? projectName,
+        AnalysisResult result)
+    {
+        if (!ImplementedInterfaces(symbol).Any(i =>
+                i.Name == "IPipelineBehavior" &&
+                i.TypeArguments.Length == 2))
+            return;
+
+        if (result.Behaviors.Any(b => b.Name == symbol.Name && b.ProjectName == projectName))
+            return;
+
+        result.Behaviors.Add(new BehaviorInfo
+        {
+            Name = symbol.Name,
+            ProjectName = projectName,
+        });
+    }
+
+    private static void AddDbContext(
+        INamedTypeSymbol symbol,
+        string? projectName,
+        AnalysisResult result)
+    {
+        if (FindBaseType(symbol, "DbContext") is null)
+            return;
+
+        var ns = NamespaceOf(symbol);
+        if (result.DbContexts.Any(c => c.Name == symbol.Name && c.Namespace == ns))
+            return;
+
+        var context = new DbContextInfo
+        {
+            Name = symbol.Name,
+            Namespace = ns,
+            ProjectName = projectName,
+        };
+
+        foreach (var property in symbol.GetMembers().OfType<IPropertySymbol>())
+        {
+            if (property.Type is not INamedTypeSymbol propertyType ||
+                propertyType.Name != "DbSet" ||
+                propertyType.TypeArguments.Length != 1)
+                continue;
+
+            context.DbSets.Add(new DbSetInfo(
+                DisplayType(propertyType.TypeArguments[0]),
+                property.Name));
+        }
+
+        result.DbContexts.Add(context);
     }
 
     private static IEnumerable<INamedTypeSymbol> ImplementedInterfaces(INamedTypeSymbol symbol)
