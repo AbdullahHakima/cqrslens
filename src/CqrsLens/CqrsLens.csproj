@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CqrsLens</RootNamespace>
+    <AssemblyName>cqrslens</AssemblyName>
+
+    <!-- NuGet / dotnet tool packaging -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>cqrslens</ToolCommandName>
+    <PackageId>CqrsLens</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Abdullah Hakim</Authors>
+    <Description>See your MediatR codebase: CqrsLens statically scans a .NET solution (no build required) and generates an ARCHITECTURE.md report with Mermaid diagrams of your project graph, CQRS map, layers, and DbContexts.</Description>
+    <PackageTags>mediatr;cqrs;clean-architecture;mermaid;dotnet-tool;architecture</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/AbdullahHakima/cqrslens</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>
