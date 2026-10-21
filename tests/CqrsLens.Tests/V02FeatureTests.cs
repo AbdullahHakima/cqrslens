@@ -81,6 +81,33 @@ public class V02FeatureTests : IDisposable
     }
 
     [Fact]
+    public void Marker_SameNameInDifferentNamespaces_DoesNotShareInheritance()
+    {
+        WriteFile("AlphaMarkers.cs", """
+            namespace Alpha;
+            public interface ICommand<T> : IRequest<T> { }
+            """);
+        WriteFile("BetaMarkers.cs", """
+            namespace Beta;
+            public interface ICommand<T> { }
+            """);
+        WriteFile("AlphaFeature.cs", """
+            namespace Alpha;
+            public sealed record PlaceOrder() : ICommand<Guid>;
+            """);
+        WriteFile("BetaFeature.cs", """
+            namespace Beta;
+            public sealed record RebuildIndex() : ICommand<Guid>;
+            """);
+
+        var result = Analyzer.Analyze(_root);
+
+        var request = Assert.Single(result.Requests);
+        Assert.Equal("PlaceOrder", request.Name);
+        Assert.Equal("Alpha", request.Namespace);
+    }
+
+    [Fact]
     public void Marker_Classification_SuffixWinsThenMarkerNameThenCommand()
     {
         // Suffix beats the marker it was reached through.

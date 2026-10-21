@@ -18,7 +18,7 @@ public static partial class CSharpScanner
         public required string Namespace { get; init; }
         public List<ClassDecl> Classes { get; } = new();
 
-        /// <summary>Interface name → its base interface names (raw, generics stripped).</summary>
+        /// <summary>Interface name → its base interface names as written, generics stripped.</summary>
         public Dictionary<string, List<string>> Interfaces { get; } = new(StringComparer.Ordinal);
     }
 
@@ -28,7 +28,10 @@ public static partial class CSharpScanner
         public required string Name { get; init; }
         public required string BaseList { get; init; }
 
-        /// <summary>All base type raw names from the declaration (generics stripped).</summary>
+        /// <summary>All base type names from the declaration, generics stripped.</summary>
+        public required List<string> BaseTypeNames { get; init; }
+
+        /// <summary>Simple names for the same base types.</summary>
         public required List<string> BaseRawNames { get; init; }
 
         /// <summary>Span of the class body in the source text (for DbSet attribution).</summary>
@@ -41,7 +44,7 @@ public static partial class CSharpScanner
     private static partial Regex DeclarationRegex();
 
     // Matches: interface Name<...> : <base list> { or ;
-    [GeneratedRegex(@"\binterface\s+(\w+)(?:<[^>]*>)?\s*:\s*([^{;]+)[{;]",
+    [GeneratedRegex(@"\binterface\s+(\w+)(?:<[^>]*>)?\s*(?::\s*([^{;]+?))?(?:\s+where\s+\w+\s*:[^{;]+)?[{;]",
         RegexOptions.Singleline)]
     private static partial Regex InterfaceDeclarationRegex();
 
@@ -85,8 +88,8 @@ public static partial class CSharpScanner
         return idx >= 0 ? name[..idx] : "";
     }
 
-    /// <summary>Raw base-type names from a base list, generic arguments stripped.</summary>
-    public static List<string> ExtractBaseRawNames(string baseList)
+    /// <summary>Base-type names from a base list, generic arguments stripped.</summary>
+    public static List<string> ExtractBaseTypeNames(string baseList)
     {
         var names = new List<string>();
         foreach (var part in SplitTopLevel(baseList))
@@ -94,13 +97,15 @@ public static partial class CSharpScanner
             var angle = part.IndexOf('<');
             var raw = (angle >= 0 ? part[..angle] : part).Trim();
             if (raw.Length == 0) continue;
-            // Reduce a dotted name (MediatR.IRequest) to its final segment.
             var id = IdentifierRegex().Match(raw);
             if (id.Success)
-                names.Add(SimpleName(id.Value));
+                names.Add(id.Value);
         }
         return names;
     }
+
+    public static List<string> ExtractBaseRawNames(string baseList)
+        => ExtractBaseTypeNames(baseList).Select(SimpleName).ToList();
 
     /// <summary>Scans one file's text into a fragment (pure; safe to run in parallel).</summary>
     public static FileScan ScanText(string code)
@@ -112,7 +117,7 @@ public static partial class CSharpScanner
             var name = m.Groups[1].Value;
             if (!scan.Interfaces.ContainsKey(name))
                 scan.Interfaces[name] = new List<string>();
-            scan.Interfaces[name].AddRange(ExtractBaseRawNames(m.Groups[2].Value));
+            scan.Interfaces[name].AddRange(ExtractBaseTypeNames(m.Groups[2].Value));
         }
 
         foreach (Match m in DeclarationRegex().Matches(code))
@@ -127,6 +132,7 @@ public static partial class CSharpScanner
             {
                 Name = typeName,
                 BaseList = baseList,
+                BaseTypeNames = ExtractBaseTypeNames(baseList),
                 BaseRawNames = ExtractBaseRawNames(baseList),
                 BodySpan = span,
             });
