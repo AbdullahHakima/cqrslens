@@ -1,77 +1,71 @@
 # CqrsLens Roadmap
 
-> This is a living document. It is updated with every release — items move from
-> planned to shipped, and new items are added as the community asks for them.
-> Have an idea? Open a [feature request](../../issues/new/choose) or pick up an
-> item below — see [CONTRIBUTING.md](CONTRIBUTING.md).
+What is planned, in the order I expect to work on it. Issues are linked
+where they exist; the dates are not promises.
 
-## Shipped in 0.2.0
+## Done
 
-The v1.1 "Stronger" analysis items and the first v1.2/v1.3 items landed early,
-together in 0.2.0:
+**0.3.0** (October 2026)
 
-- **Custom marker interfaces** (#2) — requests followed through interface
-  inheritance (chains reaching `IRequest`), plus `--markers` roots for
-  hierarchies that do not derive from `IRequest`
-- **Namespace-aware linking** (#3) — fully-qualified resolution; same-named
-  requests in different namespaces keep their own handlers/validators
-- **Multiple DbContexts per file** (#4) — DbSets attributed per context class
-- **HTML report output** (#5) — `--format md|html`; self-contained HTML with
-  stat cards and in-browser Mermaid rendering (behind a single rendering seam)
-- **Architecture-rule checks** (from v1.3, shipped early) — `MissingHandler`
-  and `LayerViolation` errors, `CommandWithoutValidator` warnings, and a
-  `--strict` flag that exits `4` on errors
-- **GitHub Action** (from v1.3, shipped early) — composite action that scans
-  and uploads the report as a workflow artifact
-- **Parallel scanning + timing footer** — concurrent file scanning with
-  deterministic output; reports end with elapsed time and file count
+- Correctness pass for test-project classification, custom handler/validator
+  contracts, multi-namespace/brace scanning, EF Core shape detection, project
+  discovery and CLI exit codes (#22, #23, #26, #27)
+- Opt-in Roslyn backend with real contract shims and SampleShop parity (#1, #28)
+- Source locations, structured diagnostics, scanner/timestamp metadata and
+  confidence-aware `--strict` (#29)
+- Collision-free Mermaid ids, reproducible reports, escaped output and pinned
+  SRI-checked Mermaid (#13, #16, #31)
+- Version-safe Action, locked restore, Ubuntu/Windows CI and installed-package
+  smoke tests (#24, #30)
 
-## v1.0 — Shipped (as v0.1.0)
+**0.2.1** (October 2026)
 
-The first working lens over a Clean Architecture + CQRS codebase:
+- Correctness pass for namespace-safe handler/validator identities, generic
+  constraints, marker-interface resolution, and reproducible Action installs
+  (#7–#10)
 
-- Static analysis of any .NET solution folder — no build required
-- Project dependency graph (Mermaid flowchart, from `.csproj` ProjectReferences)
-- Clean Architecture layer diagram (projects grouped by naming convention)
-- CQRS map: every `IRequest` / `IRequest<T>` → its handler, with validators
-  linked per request, plus a full request table (type, response, handler,
-  validators, project)
-- Pipeline behavior detection (`IPipelineBehavior<,>` implementations)
-- DbContext overview (DbSet property → entity table)
-- Markdown report (`ARCHITECTURE.md`) with embedded Mermaid diagrams
-- Ships as a `dotnet tool` (`cqrslens`), MIT licensed, with unit tests and CI
+**0.2.0** (October 2026)
 
-## Next milestone — v0.3 / v1.0 "Roslyn semantic analysis"
+- Custom marker interfaces (#2): requests followed through interface
+  inheritance, plus `--markers` roots for hierarchies that do not derive
+  from `IRequest`
+- Namespace-aware linking (#3): fully-qualified resolution, so same-named
+  requests in different namespaces keep their own handlers and validators
+- Multiple DbContexts per file (#4): DbSets attributed per context class
+- HTML report output (#5): `--format md|html`, one portable file with pinned,
+  SRI-checked Mermaid from a CDN
+- Architecture checks: `MissingHandler` and `LayerViolation` errors,
+  `CommandWithoutValidator` warnings, `--strict` to fail CI on errors
+- GitHub Action: scan a repo and upload the report as a workflow artifact
+- Parallel scanning, and a timing footer at the end of every report
 
-The headline work: replace text/regex scanning with real symbol resolution,
-so detection survives formatting, aliases, partial classes and indirection,
-and results become exact rather than best-effort.
+**0.1.0** (October 2026)
 
-- **Roslyn-based semantic analysis** (#1) — full symbol resolution for
-  requests, handlers, validators, behaviors and DbContexts
-- **Pre-rendered SVG diagrams (AOT Mermaid compile, Ondine-style)** —
-  `--render svg` producing zero-JS HTML reports: diagrams compiled ahead of
-  time instead of rendered by Mermaid.js in the browser (the HTML generator
-  already isolates rendering behind one seam method for this)
+- First release: project dependency graph, layer diagram, CQRS map with
+  request table, pipeline behavior detection, DbContext overview,
+  Markdown report. Static analysis only, no build of the target solution.
 
-## v1.2 — "Easier" (developer experience, remaining)
+## Next
 
-- **Colored console output + progress** while scanning large solutions
-- **`--format json`** — JSON output for tooling and dashboards
-- **Config file (`cqrslens.json`)** — include/exclude paths, custom layer
-  names, marker defaults, output defaults per repository
+- **Roslyn hardening**: load evaluated MSBuild/package references and compare
+  broader real codebases before considering Roslyn as the default. Text mode
+  stays as the fast fallback.
+- **EF Core ER diagram** (#6): entity relationships from navigation
+  properties and foreign keys, not just DbSet lists.
+- **Pre-rendered SVG diagrams**: diagrams compiled to SVG ahead of time
+  so the HTML report needs no JavaScript. The HTML generator already
+  isolates rendering behind one method for this.
 
-## v1.3 — "More useful" (new capabilities, remaining)
+## After that
 
-- **EF Core ER diagram** — entity relationships drawn from entity classes
-  (navigations + foreign keys), not just DbSet lists
-- **GitHub Action: PR diff comments** — post the architecture diff on pull
-  requests (the scan-and-upload action itself shipped in 0.2.0)
-- **More mediators** — request detection for Mediator (martinothamar) and
-  Wolverine, not only MediatR
+- `--format json` and a `cqrslens.json` config file (include/exclude
+  paths, layer names, marker defaults)
+- Colored console output and a progress line while scanning
+- More mediators: Mediator (martinothamar) and Wolverine conventions
+- GitHub Action mode that comments the architecture diff on a pull request
 
-## Later / under consideration
+## Ideas, not planned yet
 
-- Interactive HTML explorer (click a request → see handler, validators, file)
-- Blame/history view: how the CQRS surface changed between commits
-- Support for F# projects
+- Interactive HTML explorer (click a request, see its handler and files)
+- Comparing two scans: what changed in the CQRS surface between commits
+- F# project support
