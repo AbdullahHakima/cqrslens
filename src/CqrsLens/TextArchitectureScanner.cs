@@ -10,6 +10,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         AnalysisResult result)
     {
         var fragments = new ConcurrentBag<(SourceFile File, CSharpScanner.FileScan Scan)>();
+        var failed = new ConcurrentBag<string>();
         Parallel.ForEach(files, file =>
         {
             try
@@ -18,9 +19,13 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             }
             catch
             {
-                // Keep text mode best-effort: one source file should not abort the scan.
+                // Keep text mode best-effort, but don't silently claim the file was scanned.
+                failed.Add(file.Path);
             }
         });
+
+        foreach (var path in failed.OrderBy(p => p, StringComparer.OrdinalIgnoreCase))
+            result.RecordSkippedFile(path);
 
         var ordered = fragments
             .OrderBy(f => f.File.Path, StringComparer.OrdinalIgnoreCase)
