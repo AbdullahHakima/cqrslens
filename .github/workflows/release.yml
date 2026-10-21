@@ -15,6 +15,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify release tag matches package version
+        if: github.event_name == 'release'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n1)
+          tag="${GITHUB_REF_NAME#v}"
+          if [ -z "$version" ]; then
+            echo "::error::Could not read <Version> from Directory.Build.props"
+            exit 1
+          fi
+          if [ "$version" != "$tag" ]; then
+            echo "::error::Release tag '$GITHUB_REF_NAME' does not match package version '$version'."
+            exit 1
+          fi
+          echo "Publishing CqrsLens $version for tag $GITHUB_REF_NAME"
+
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -33,4 +50,4 @@ jobs:
           user: Abdullahhakimam
 
       - name: Push to NuGet
-        run: dotnet nuget push artifacts/*.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json
+        run: dotnet nuget push artifacts/*.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -1,0 +1,13 @@
+<Project>
+
+  <!--
+    Single source of truth for the package/tool version.
+    The release workflow verifies that the Git tag matches this value.
+  -->
+  <PropertyGroup>
+    <Version>0.3.0</Version>
+    <LangVersion>latest</LangVersion>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+
+</Project>
