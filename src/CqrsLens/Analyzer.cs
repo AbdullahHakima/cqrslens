@@ -7,9 +7,19 @@ namespace CqrsLens;
 public static class Analyzer
 {
     private static readonly IArchitectureScanner DefaultScanner = new TextArchitectureScanner();
+    private static readonly IArchitectureScanner RoslynScanner = new RoslynArchitectureScanner();
 
     public static AnalysisResult Analyze(string rootPath, IReadOnlySet<string>? markers = null)
         => Analyze(rootPath, DefaultScanner, markers);
+
+    public static AnalysisResult Analyze(
+        string rootPath,
+        AnalysisMode mode,
+        IReadOnlySet<string>? markers = null)
+        => Analyze(
+            rootPath,
+            mode == AnalysisMode.Roslyn ? RoslynScanner : DefaultScanner,
+            markers);
 
     internal static AnalysisResult Analyze(
         string rootPath,

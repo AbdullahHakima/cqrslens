@@ -16,15 +16,19 @@ source files into the shared analysis model.
 
 ## Roslyn rollout
 
-I do not want to replace the text scanner in one large change. The planned
-sequence for #1 is:
+The rollout for #1 is incremental:
 
-1. keep text mode as the default and move it behind the scanner boundary;
-2. add a Roslyn backend for requests, handlers and validators first;
-3. move custom marker inheritance/type resolution to symbols;
-4. compare both backends on SampleShop and the El-Hakim report before exposing
-   mode selection in the CLI;
-5. keep text mode as the fallback for incomplete or non-buildable repositories.
+1. text mode stays the default behind the scanner boundary;
+2. Roslyn covers requests, handlers, validators, behaviors and DbContexts;
+3. `--analysis roslyn` exposes that backend for explicit testing;
+4. the next step is evaluated project/package references plus parity checks on
+   SampleShop and the El-Hakim report;
+5. text mode remains the fallback for incomplete or non-buildable repositories.
+
+The current Roslyn backend builds in-memory compilations from source files and
+runtime assemblies. It does not yet evaluate the target solution through MSBuild,
+so external package/project symbols can remain unresolved. The mode is therefore
+experimental rather than the default.
 
 The important constraint is that report generation, architecture checks and
 Mermaid output should not care which scanner produced the model. That keeps the

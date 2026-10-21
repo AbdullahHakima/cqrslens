@@ -19,7 +19,7 @@ dotnet tool install -g CqrsLens
 ## Usage
 
 ```bash
-cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--markers ICommand,IQuery] [--strict]
+cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--analysis text|roslyn] [--markers ICommand,IQuery] [--strict]
 ```
 
 - The folder is searched recursively for `.csproj` and `.cs` files (`bin`, `obj`, `.git` are skipped).
@@ -45,6 +45,27 @@ cqrslens <path> --format html
 A single self-contained `ARCHITECTURE.html`: summary stat cards, the same diagrams
 and tables as the Markdown report, rendered in the browser (Mermaid via CDN) —
 no Markdown viewer or plugin needed. (A `.html` path passed to `-o` also implies HTML.)
+
+### Analysis modes
+
+Text analysis remains the default:
+
+```bash
+cqrslens <path> --analysis text
+```
+
+It is build-free and tolerant of incomplete solutions. The experimental Roslyn
+backend can be selected with:
+
+```bash
+cqrslens <path> --analysis roslyn
+```
+
+Roslyn mode resolves source-defined symbols, aliases and declaration namespaces
+instead of matching declaration text. It still does not build or restore the
+target solution, and it does not yet evaluate the target project's full
+MSBuild/package reference graph. Text mode remains the fallback while that work
+continues.
 
 ### Custom marker interfaces
 
@@ -231,9 +252,10 @@ The whole scan took 145 ms.
 
 ## How it works / limitations
 
-CqrsLens reads source text with targeted pattern matching — no Roslyn, no build,
-no restoring the target's packages. That makes it fast and able to map solutions
-that don't even compile, at the cost of some precision:
+CqrsLens defaults to targeted source-text matching with no build or package
+restore. That makes text mode fast and able to map solutions that do not compile,
+at the cost of some precision. Experimental `--analysis roslyn` uses Roslyn
+symbols for source-shape discovery while keeping the same no-build workflow:
 
 - Requests are followed through custom marker interfaces (anything deriving from
   `IRequest`, plus `--markers` roots), but not through base *classes*.
@@ -247,7 +269,7 @@ that don't even compile, at the cost of some precision:
 
 Short version (full list in [ROADMAP.md](ROADMAP.md)):
 
-- Roslyn-based analysis mode for exact results (next)
+- Finish Roslyn project/reference resolution and parity work (#1)
 - EF Core ER diagrams (relationships, keys)
 - Pre-rendered SVG diagrams, so HTML reports need no JavaScript
 - `--format json` and a `cqrslens.json` config file
