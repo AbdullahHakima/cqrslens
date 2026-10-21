@@ -50,6 +50,7 @@ public sealed class HandlerInfo
 {
     public required string Name { get; init; }
     public string Namespace { get; set; } = "";
+    public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
     public required string RequestName { get; init; }
 
     // Set when the request name in IRequestHandler<...> could be resolved to a namespace.
@@ -62,6 +63,7 @@ public sealed class ValidatorInfo
 {
     public required string Name { get; init; }
     public string Namespace { get; set; } = "";
+    public string FullName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
     public required string TargetType { get; init; }
 
     // Set when the validated type name could be resolved to a namespace.

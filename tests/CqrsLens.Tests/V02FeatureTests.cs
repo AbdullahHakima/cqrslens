@@ -118,9 +118,9 @@ public class V02FeatureTests : IDisposable
         Assert.Equal(2, result.Requests.Count);
         var alpha = result.Requests.Single(r => r.Namespace == "Alpha");
         var beta = result.Requests.Single(r => r.Namespace == "Beta");
-        Assert.Equal(new[] { "AlphaGetDataHandler" }, alpha.Handlers);
-        Assert.Equal(new[] { "GetDataQueryValidator" }, alpha.Validators);
-        Assert.Equal(new[] { "BetaGetDataHandler" }, beta.Handlers);
+        Assert.Equal(new[] { "Alpha.AlphaGetDataHandler" }, alpha.Handlers);
+        Assert.Equal(new[] { "Alpha.GetDataQueryValidator" }, alpha.Validators);
+        Assert.Equal(new[] { "Beta.BetaGetDataHandler" }, beta.Handlers);
         Assert.Empty(beta.Validators);
 
         // The diagram keeps the two requests distinct.
@@ -128,6 +128,33 @@ public class V02FeatureTests : IDisposable
         Assert.NotNull(map);
         Assert.Contains("Alpha_GetDataQuery", map);
         Assert.Contains("Beta_GetDataQuery", map);
+    }
+
+    [Fact]
+    public void Linking_SameNamedHandlersInTwoNamespaces_StayDistinctInTheDiagram()
+    {
+        WriteFile("Alpha.cs", """
+            namespace Alpha;
+            public sealed record GetDataQuery() : IRequest<int>;
+            public sealed class GetDataQueryHandler : IRequestHandler<GetDataQuery, int> { }
+            """);
+        WriteFile("Beta.cs", """
+            namespace Beta;
+            public sealed record GetDataQuery() : IRequest<string>;
+            public sealed class GetDataQueryHandler : IRequestHandler<GetDataQuery, string> { }
+            """);
+
+        var result = Analyzer.Analyze(_root);
+
+        var alpha = result.Requests.Single(r => r.Namespace == "Alpha");
+        var beta = result.Requests.Single(r => r.Namespace == "Beta");
+        Assert.Equal(new[] { "Alpha.GetDataQueryHandler" }, alpha.Handlers);
+        Assert.Equal(new[] { "Beta.GetDataQueryHandler" }, beta.Handlers);
+
+        var map = DiagramBuilder.CqrsMap(result);
+        Assert.NotNull(map);
+        Assert.Contains("Alpha_GetDataQueryHandler", map);
+        Assert.Contains("Beta_GetDataQueryHandler", map);
     }
 
     [Fact]
@@ -169,7 +196,7 @@ public class V02FeatureTests : IDisposable
         var result = Analyzer.Analyze(_root);
 
         var beta = result.Requests.Single(r => r.Namespace == "Beta");
-        Assert.Equal(new[] { "GetDataHandler" }, beta.Handlers);
+        Assert.Equal(new[] { "Gamma.GetDataHandler" }, beta.Handlers);
         var alpha = result.Requests.Single(r => r.Namespace == "Alpha");
         Assert.Empty(alpha.Handlers);
     }
