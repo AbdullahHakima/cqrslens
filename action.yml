@@ -1,0 +1,67 @@
+name: CqrsLens
+description: >-
+  Statically scan a .NET solution (no build required) and generate an
+  architecture report — project graph, Clean Architecture layers, CQRS map
+  (requests, handlers, validators), pipeline behaviors, DbContexts, and
+  architecture checks — as Markdown or HTML with Mermaid diagrams.
+author: Abdullah Hakim
+branding:
+  icon: search
+  color: purple
+
+inputs:
+  path:
+    description: Folder of the .NET solution to scan.
+    required: false
+    default: '.'
+  output:
+    description: Report file to write.
+    required: false
+    default: 'ARCHITECTURE.md'
+  format:
+    description: 'Report format: md or html.'
+    required: false
+    default: 'md'
+  strict:
+    description: Fail the step when architecture checks report any error.
+    required: false
+    default: 'false'
+
+outputs:
+  report-path:
+    description: Path of the generated report file.
+    value: ${{ steps.scan.outputs.report-path }}
+
+runs:
+  using: composite
+  steps:
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Install CqrsLens
+      shell: bash
+      run: dotnet tool install --global CqrsLens
+
+    - name: Scan
+      id: scan
+      shell: bash
+      env:
+        CQRSLENS_PATH: ${{ inputs.path }}
+        CQRSLENS_OUTPUT: ${{ inputs.output }}
+        CQRSLENS_FORMAT: ${{ inputs.format }}
+        CQRSLENS_STRICT: ${{ inputs.strict }}
+      run: |
+        args=("$CQRSLENS_PATH" -o "$CQRSLENS_OUTPUT" --format "$CQRSLENS_FORMAT")
+        if [ "$CQRSLENS_STRICT" = "true" ]; then
+          args+=(--strict)
+        fi
+        cqrslens "${args[@]}"
+        echo "report-path=$CQRSLENS_OUTPUT" >> "$GITHUB_OUTPUT"
+
+    - name: Upload report
+      uses: actions/upload-artifact@v4
+      with:
+        name: cqrslens-architecture-report
+        path: ${{ inputs.output }}
