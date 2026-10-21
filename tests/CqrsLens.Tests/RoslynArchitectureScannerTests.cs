@@ -70,6 +70,69 @@ public class RoslynArchitectureScannerTests
     }
 
     [Fact]
+    public void FindsShapesInRealPackageStyleSourceWithoutInjectedContracts()
+    {
+        var files = new[]
+        {
+            Source("Feature.cs", """
+                using System;
+                using MediatR;
+                using FluentValidation;
+
+                namespace Shop.Application;
+
+                public sealed record PlaceOrder(Guid Id) : IRequest<Guid>;
+
+                public sealed class PlaceOrderHandler : IRequestHandler<PlaceOrder, Guid>
+                {
+                }
+
+                public sealed class PlaceOrderValidator : AbstractValidator<PlaceOrder>
+                {
+                }
+                """),
+        };
+
+        var result = Scan(files);
+
+        var request = Assert.Single(result.Requests);
+        Assert.Equal("PlaceOrder", request.Name);
+        Assert.Equal("Shop.Application", request.Namespace);
+        Assert.Equal("Guid", request.ResponseType);
+        Assert.Single(result.Handlers);
+        Assert.Single(result.Validators);
+        Assert.Empty(result.Checks);
+    }
+
+    [Fact]
+    public void ResolvesShapesAcrossProjectGroups()
+    {
+        var files = new[]
+        {
+            new SourceFile("Domain.cs", """
+                using MediatR;
+                namespace Shop.Domain;
+                public sealed record GetOrder(int Id) : IRequest<string>;
+                """, "Shop.Domain"),
+            new SourceFile("Application.cs", """
+                using MediatR;
+                namespace Shop.Application;
+                public sealed class GetOrderHandler : IRequestHandler<Shop.Domain.GetOrder, string>
+                {
+                }
+                """, "Shop.Application"),
+        };
+
+        var result = Scan(files);
+
+        var request = Assert.Single(result.Requests);
+        var handler = Assert.Single(result.Handlers);
+        Assert.Equal("Shop.Domain.GetOrder", request.FullName);
+        Assert.Equal("GetOrder", handler.RequestName);
+        Assert.Equal("Shop.Domain", handler.RequestNamespace);
+    }
+
+    [Fact]
     public void ResolvesATypeAliasToTheUnderlyingRequestSymbol()
     {
         var files = new[]
