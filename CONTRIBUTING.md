@@ -1,7 +1,6 @@
 # Contributing to CqrsLens
 
-Thanks for helping make CqrsLens stronger, easier and more useful. This guide
-gets you from clone to a mergeable pull request.
+This guide gets you from clone to a mergeable pull request.
 
 ## Prerequisites
 
@@ -55,14 +54,10 @@ and mention it in the description.
 
 ## Looking for a first issue?
 
-Start with the [ROADMAP.md](ROADMAP.md) — the v1.1 items are scoped to be
-approachable:
-
-- Multiple DbContexts per file (parser work, well-tested area)
-- Custom marker interface support (extends the request detector)
-- Namespace-aware linking (touches the scanner + report generator)
-
-Comment on the issue before starting so work isn't duplicated.
+The open items in [ROADMAP.md](ROADMAP.md) are the best starting points.
+The ER diagram is self-contained parser work, and the JSON output mode
+touches mostly the report layer. Comment on the issue before starting so
+work isn't duplicated.
 
 ## Code style
 
