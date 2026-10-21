@@ -2,7 +2,7 @@
 
 **See your MediatR codebase: every command, its handler, and its validators — drawn.**
 
-CqrsLens is a .NET CLI tool that statically scans a solution — **without building it** —
+CqrsLens is a .NET CLI tool that statically scans a solution, **without building it**,
 and generates an `ARCHITECTURE.md` report with Mermaid diagrams: your project dependency
 graph, your Clean Architecture layers, a full CQRS map (requests → handlers, validators),
 your pipeline behaviors, and your EF Core DbContexts.
@@ -182,6 +182,40 @@ flowchart LR
 - **Architecture checks** — missing handlers, layer violations, and commands without
   validators (see below), plus a timing footer with the scan duration and file count.
 
+## On a real codebase
+
+Sample projects are tidy. Real ones are not, so I run CqrsLens on my own
+production backend (the API behind my blog, El-Hakim: 5 projects, 278 files).
+Full report: [`docs/elhakim-output/ARCHITECTURE.md`](docs/elhakim-output/ARCHITECTURE.md).
+
+| Metric | Count |
+| --- | ---: |
+| Projects | 5 |
+| Requests (commands + queries) | 62 |
+| Handlers | 63 |
+| Validators | 9 |
+| Pipeline behaviors | 1 |
+| DbContexts | 1 (21 DbSets) |
+
+The scan caught a case I cared about: two different features each define a
+`TogglePostLikeCommand` (Likes and Posts). They are separate requests with
+separate handlers, and the report keeps them separate:
+
+| Request | Type | Response | Handler | Project |
+| --- | --- | --- | --- | --- |
+| TogglePostLikeCommand | Command | LikeStatusDto | TogglePostLikeCommandHandler | ElHakim.Application |
+| TogglePostLikeCommand | Command | bool | TogglePostLikeCommandHandler | ElHakim.Application |
+
+And the checks section told me the truth about my own code: **0 errors,
+32 warnings**, all of them commands without a validator:
+
+```text
+- ⚠️ Warning **CommandWithoutValidator** — Command `ElHakim.Application.Features.Likes.Commands.TogglePostLike.TogglePostLikeCommand` has no validator.
+- ⚠️ Warning **CommandWithoutValidator** — Command `ElHakim.Application.Features.Auth.Commands.RefreshToken.RefreshTokenCommand` has no validator.
+```
+
+The whole scan took 145 ms.
+
 ## What it detects
 
 | Shape | How |
@@ -209,11 +243,13 @@ that don't even compile, at the cost of some precision:
 
 ## Roadmap
 
-- Roslyn-based analysis mode for exact results (next milestone)
-- Pre-rendered SVG diagrams (AOT Mermaid compile) for zero-JS HTML reports
-- ER diagrams generated from the EF Core model (relationships, keys)
-- A GitHub Action that comments the architecture diff on pull requests
+Short version (full list in [ROADMAP.md](ROADMAP.md)):
+
+- Roslyn-based analysis mode for exact results (next)
+- EF Core ER diagrams (relationships, keys)
+- Pre-rendered SVG diagrams, so HTML reports need no JavaScript
 - `--format json` and a `cqrslens.json` config file
+- A GitHub Action that comments the architecture diff on pull requests
 
 ## Development
 
