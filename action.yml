@@ -42,7 +42,7 @@ runs:
 
     - name: Install CqrsLens
       shell: bash
-      run: dotnet tool install --global CqrsLens --version 0.2.0
+      run: dotnet tool install --global CqrsLens --version 0.2.1
 
     - name: Scan
       id: scan

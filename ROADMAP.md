@@ -5,6 +5,12 @@ where they exist; the dates are not promises.
 
 ## Done
 
+**0.2.1** (October 2026)
+
+- Correctness pass for namespace-safe handler/validator identities, generic
+  constraints, marker-interface resolution, and reproducible Action installs
+  (#7–#10)
+
 **0.2.0** (October 2026)
 
 - Custom marker interfaces (#2): requests followed through interface
