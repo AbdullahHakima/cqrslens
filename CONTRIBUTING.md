@@ -10,7 +10,16 @@ This guide gets you from clone to a mergeable pull request.
 ## Build
 
 ```bash
-dotnet build CqrsLens.sln
+dotnet restore CqrsLens.sln --locked-mode
+dotnet build CqrsLens.sln --no-restore
+```
+
+NuGet dependencies are pinned by the committed `packages.lock.json` files. If you
+change a `PackageReference`, refresh the lock files and commit them with the
+change:
+
+```bash
+dotnet restore CqrsLens.sln --use-lock-file --force-evaluate
 ```
 
 ## Run the tests

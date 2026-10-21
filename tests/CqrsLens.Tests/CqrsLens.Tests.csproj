@@ -17,4 +17,10 @@
     <ProjectReference Include="..\..\src\CqrsLens\CqrsLens.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- These are inputs for the scanner, not test-project compilation units. -->
+    <Compile Remove="fixtures\**\*.cs" />
+    <None Include="fixtures\**\*" />
+  </ItemGroup>
+
 </Project>

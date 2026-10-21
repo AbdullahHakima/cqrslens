@@ -1,0 +1,11 @@
+﻿flowchart LR
+    ArchiveWidgetCommand["ArchiveWidgetCommand"]
+    Foo_Bar_Custom_ArchiveWidgetCommandHandler(["ArchiveWidgetCommandHandler"])
+    Foo_Bar_Custom_ArchiveWidgetCommandValidator{"ArchiveWidgetCommandValidator"}
+    CreateWidgetCommand["CreateWidgetCommand"]
+    Foo_Bar_Orders_CreateWidgetCommandHandler(["CreateWidgetCommandHandler"])
+    Foo_Bar_Orders_CreateWidgetCommandValidator{"CreateWidgetCommandValidator"}
+    ArchiveWidgetCommand --> Foo_Bar_Custom_ArchiveWidgetCommandHandler
+    Foo_Bar_Custom_ArchiveWidgetCommandValidator -.-> ArchiveWidgetCommand
+    CreateWidgetCommand --> Foo_Bar_Orders_CreateWidgetCommandHandler
+    Foo_Bar_Orders_CreateWidgetCommandValidator -.-> CreateWidgetCommand
