@@ -36,12 +36,6 @@ All notable changes to CqrsLens are documented here.
   installs CqrsLens, scans, and uploads the report as a workflow artifact
   (inputs: `path`, `output`, `format`, `strict`).
 
-### Notes
-
-- On the roadmap for the next milestone (not in this release): Roslyn-based
-  semantic analysis, and pre-rendered SVG diagrams via an AOT Mermaid compile
-  (Ondine-style) — a `--render svg` mode producing zero-JS HTML reports.
-
 ## [0.1.0] - 2026-10-21
 
 ### Added
