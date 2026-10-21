@@ -1,3 +1,4 @@
+using System.Security;
 using System.Xml.Linq;
 
 namespace CqrsLens;
@@ -7,28 +8,56 @@ public static class CsprojParser
 {
     private static readonly string[] SkippedFolders = { "bin", "obj", ".git" };
 
-    public static bool IsSkippedPath(string path)
+    private static readonly EnumerationOptions DiscoveryOptions = new()
     {
-        var segments = path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
-        return segments.Any(s => SkippedFolders.Contains(s, StringComparer.OrdinalIgnoreCase));
+        RecurseSubdirectories = true,
+        IgnoreInaccessible = true,
+        // Do not follow symlinks/junctions; this also prevents reparse-point loops.
+        AttributesToSkip = FileAttributes.ReparsePoint,
+        ReturnSpecialDirectories = false,
+    };
+
+    /// <summary>
+    /// True when any path segment is a build/tooling folder. Callers scanning a
+    /// specific root should use the root-relative overload so that a root located
+    /// beneath a folder named bin/obj is still scanned.
+    /// </summary>
+    public static bool IsSkippedPath(string path)
+        => SplitSegments(path).Any(s => SkippedFolders.Contains(s, StringComparer.OrdinalIgnoreCase));
+
+    /// <summary>True when a path is skipped relative to <paramref name="root"/>.</summary>
+    public static bool IsSkippedPath(string path, string root)
+    {
+        var relative = Path.GetRelativePath(Path.GetFullPath(root), Path.GetFullPath(path));
+        return IsSkippedPath(relative);
     }
 
     public static List<string> FindProjectFiles(string root)
-    {
-        return Directory
-            .EnumerateFiles(root, "*.csproj", SearchOption.AllDirectories)
-            .Where(p => !IsSkippedPath(p))
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-    }
+        => FindFiles(root, "*.csproj");
 
     public static List<string> FindSourceFiles(string root)
+        => FindFiles(root, "*.cs");
+
+    private static List<string> FindFiles(string root, string pattern)
     {
-        return Directory
-            .EnumerateFiles(root, "*.cs", SearchOption.AllDirectories)
-            .Where(p => !IsSkippedPath(p))
-            .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        if (!Directory.Exists(root)) return new List<string>();
+        var fullRoot = Path.GetFullPath(root);
+
+        try
+        {
+            return Directory
+                .EnumerateFiles(fullRoot, pattern, DiscoveryOptions)
+                .Where(path => !IsSkippedPath(Path.GetRelativePath(fullRoot, path)))
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or SecurityException)
+        {
+            // A partially inaccessible tree should yield what can be discovered, not
+            // abort the whole scan. EnumerationOptions.IgnoreInaccessible handles the
+            // common case; this is the final fallback for the root itself.
+            return new List<string>();
+        }
     }
 
     /// <summary>Reads the raw ProjectReference Include/Update values from a .csproj file.</summary>
@@ -77,9 +106,18 @@ public static class CsprojParser
         {
             foreach (var include in info.ReferenceIncludes)
             {
-                var normalized = include.Replace('\\', Path.DirectorySeparatorChar)
-                                         .Replace('/', Path.DirectorySeparatorChar);
-                var targetPath = Path.GetFullPath(Path.Combine(info.DirectoryPath, normalized));
+                string targetPath;
+                try
+                {
+                    var normalized = include.Replace('\\', Path.DirectorySeparatorChar)
+                                             .Replace('/', Path.DirectorySeparatorChar);
+                    targetPath = Path.GetFullPath(Path.Combine(info.DirectoryPath, normalized));
+                }
+                catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+                {
+                    continue;
+                }
+
                 if (byFullPath.TryGetValue(targetPath, out var target))
                 {
                     if (!info.ReferenceNames.Contains(target.Name))
@@ -93,4 +131,7 @@ public static class CsprojParser
             .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
     }
+
+    private static IEnumerable<string> SplitSegments(string path)
+        => path.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
 }

@@ -10,6 +10,7 @@ public static class ArchitectureChecker
     public const string MissingHandlerCode = "MissingHandler";
     public const string LayerViolationCode = "LayerViolation";
     public const string CommandWithoutValidatorCode = "CommandWithoutValidator";
+    public const string AmbiguousProjectNameCode = "AmbiguousProjectName";
 
     /// <summary>Layers a Domain project must never depend on.</summary>
     private static readonly string[] ForbiddenForDomain = { "Infrastructure", "Api", "Web" };
@@ -18,9 +19,20 @@ public static class ArchitectureChecker
     {
         var findings = new List<CheckFinding>();
 
-        var projectByName = result.Projects
+        var projectsByName = result.Projects
             .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (name, projects) in projectsByName.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            if (projects.Count > 1)
+            {
+                findings.Add(new CheckFinding(
+                    CheckSeverity.Warning,
+                    AmbiguousProjectNameCode,
+                    $"Project name `{name}` is used by {projects.Count} projects; layer checks skip references to it."));
+            }
+        }
 
         // (a) Requests with no handler -> error
         foreach (var request in result.Requests)
@@ -34,20 +46,24 @@ public static class ArchitectureChecker
             }
         }
 
-        // (b) Domain project referencing Infrastructure/Api/Web -> error
+        // (b) Domain project referencing Infrastructure/Api/Web -> error.
+        // Tests are not production layers and may legitimately reference anything.
         foreach (var project in result.Projects)
         {
             if (!string.Equals(project.Layer, "Domain", StringComparison.OrdinalIgnoreCase))
                 continue;
             foreach (var reference in project.ReferenceNames)
             {
-                if (projectByName.TryGetValue(reference, out var target) &&
-                    ForbiddenForDomain.Contains(target.Layer, StringComparer.OrdinalIgnoreCase))
+                // A duplicate project name makes the reference target ambiguous; do not
+                // guess and report a false layer violation.
+                if (projectsByName.TryGetValue(reference, out var targets) &&
+                    targets.Count == 1 &&
+                    ForbiddenForDomain.Contains(targets[0].Layer, StringComparer.OrdinalIgnoreCase))
                 {
                     findings.Add(new CheckFinding(
                         CheckSeverity.Error,
                         LayerViolationCode,
-                        $"Domain project `{project.Name}` references {target.Layer} project `{target.Name}`."));
+                        $"Domain project `{project.Name}` references {targets[0].Layer} project `{targets[0].Name}`."));
                 }
             }
         }

@@ -6,129 +6,102 @@ namespace CqrsLens;
 /// <summary>Runs the full static analysis over a directory tree.</summary>
 public static class Analyzer
 {
-    public static AnalysisResult Analyze(string rootPath, IReadOnlySet<string>? markers = null)
+    private static readonly IArchitectureScanner DefaultScanner = new TextArchitectureScanner();
+    private static readonly IArchitectureScanner RoslynScanner = new RoslynArchitectureScanner();
+
+    public static AnalysisResult Analyze(
+        string rootPath,
+        IReadOnlySet<string>? markers = null,
+        DateTimeOffset? generatedAt = null)
+        => Analyze(rootPath, DefaultScanner, markers, generatedAt);
+
+    public static AnalysisResult Analyze(
+        string rootPath,
+        AnalysisMode mode,
+        IReadOnlySet<string>? markers = null,
+        DateTimeOffset? generatedAt = null)
+        => Analyze(
+            rootPath,
+            mode == AnalysisMode.Roslyn ? RoslynScanner : DefaultScanner,
+            markers,
+            generatedAt);
+
+    internal static AnalysisResult Analyze(
+        string rootPath,
+        IArchitectureScanner scanner,
+        IReadOnlySet<string>? markers = null,
+        DateTimeOffset? generatedAt = null)
     {
         var stopwatch = Stopwatch.StartNew();
         var root = Path.GetFullPath(rootPath);
         var markerSet = markers ?? new HashSet<string>(StringComparer.Ordinal);
-        var result = new AnalysisResult { RootPath = root };
+        var result = new AnalysisResult
+        {
+            RootPath = root,
+            ScannerName = scanner.GetType().Name switch
+            {
+                nameof(TextArchitectureScanner) => "text",
+                nameof(RoslynArchitectureScanner) => "roslyn",
+                var name => name,
+            },
+            GeneratedAt = generatedAt ?? DateTimeOffset.UtcNow,
+        };
 
         result.Projects.AddRange(CsprojParser.LoadProjects(root));
         foreach (var project in result.Projects)
             project.Layer = LayerClassifier.Classify(project.Name, project.DirectoryPath, root);
 
         var files = CsprojParser.FindSourceFiles(root);
-        result.FileCount = files.Count;
+        result.DiscoveredFileCount = files.Count;
 
-        // Scan files in parallel into per-file fragments; merging happens afterwards
-        // in deterministic (sorted path) order, so output ordering is stable.
-        var fragments = new ConcurrentBag<(string File, string Code, CSharpScanner.FileScan Scan)>();
+        var sources = new ConcurrentBag<(string File, string Code)>();
+        var unreadable = new ConcurrentBag<string>();
         Parallel.ForEach(files, file =>
         {
             try
             {
-                var code = File.ReadAllText(file);
-                fragments.Add((file, code, CSharpScanner.ScanText(code)));
+                sources.Add((file, File.ReadAllText(file)));
             }
             catch
             {
-                // An unreadable file should not abort the whole scan.
+                // Keep scanning best-effort, but make the omission visible in the report.
+                unreadable.Add(file);
             }
         });
 
-        var ordered = fragments
+        foreach (var file in unreadable.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            result.RecordSkippedFile(file);
+
+        var sourceFiles = sources
             .OrderBy(f => f.File, StringComparer.OrdinalIgnoreCase)
+            .Select(f => new SourceFile(
+                f.File,
+                f.Code,
+                FindOwningProject(result.Projects, f.File)?.Name))
             .ToList();
 
-        // Global interface-inheritance map: interface name -> base interface names.
-        var interfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var (_, _, scan) in ordered)
-        {
-            foreach (var (name, bases) in scan.Interfaces)
-            {
-                if (!interfaceMap.TryGetValue(name, out var list))
-                    interfaceMap[name] = list = new List<string>();
-                foreach (var b in bases)
-                    if (!list.Contains(b)) list.Add(b);
-            }
-        }
+        scanner.Scan(sourceFiles, markerSet, result);
+        result.SkippedFiles.Sort(StringComparer.OrdinalIgnoreCase);
+        result.FileCount = Math.Max(0, result.DiscoveredFileCount - result.SkippedFiles.Count);
 
-        var projectByFile = ordered.ToDictionary(
-            f => f.File,
-            f => FindOwningProject(result.Projects, f.File)?.Name,
-            StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (file, code, scan) in ordered)
+        foreach (var skipped in result.SkippedFiles)
         {
-            CSharpScanner.ApplyScan(scan, code, projectByFile[file], result);
-            DiscoverMarkerRequests(scan, projectByFile[file], interfaceMap, markerSet, result);
+            var fullPath = Path.Combine(root, skipped.Replace('/', Path.DirectorySeparatorChar));
+            var project = FindOwningProject(result.Projects, fullPath);
+            result.RecordDiagnostic(new AnalysisDiagnostic(
+                AnalysisResult.SourceFileSkippedCode,
+                AnalysisDiagnosticSeverity.Warning,
+                $"Source file `{skipped}` could not be read or scanned; shapes in this file are missing.",
+                SourceLocation.FromLine(fullPath, root, 1, 1),
+                project?.Name));
         }
 
         Link(result);
         result.Checks.AddRange(ArchitectureChecker.RunChecks(result));
 
         stopwatch.Stop();
-        result.ElapsedMilliseconds = stopwatch.ElapsedMilliseconds;
+        result.ElapsedMilliseconds = generatedAt is null ? stopwatch.ElapsedMilliseconds : 0;
         return result;
-    }
-
-    /// <summary>
-    /// Finds request classes hidden behind marker/custom interfaces (issue #2):
-    /// classes whose interface closure reaches IRequest (through custom
-    /// abstractions) or any configured --markers root.
-    /// </summary>
-    private static void DiscoverMarkerRequests(
-        CSharpScanner.FileScan scan,
-        string? projectName,
-        Dictionary<string, List<string>> interfaceMap,
-        IReadOnlySet<string> markers,
-        AnalysisResult result)
-    {
-        foreach (var decl in scan.Classes)
-        {
-            if (decl.BaseRawNames.Contains("IRequest")) continue; // direct hit already recorded
-            if (decl.BaseRawNames.Contains("IRequestHandler")) continue;
-            if (decl.BaseRawNames.Count == 0) continue;
-
-            // Skip types that are other known shapes.
-            if (decl.BaseRawNames.Any(b => b is "DbContext" or "IdentityDbContext" or
-                                                "AbstractValidator" or "IValidator" or
-                                                "IPipelineBehavior"))
-                continue;
-
-            var reached = MarkerResolver.ReachableMarkers(decl.BaseRawNames, interfaceMap, markers);
-            if (reached.Count == 0) continue;
-
-            // A class is only a request when the closure reaches IRequest or a
-            // configured marker — ReachableMarkers only returns such roots.
-            if (!reached.Contains("IRequest") && !reached.Any(markers.Contains))
-                continue;
-
-            var via = reached.FirstOrDefault(m => m != "IRequest")
-                      ?? decl.BaseRawNames.FirstOrDefault(b => b != "IRequest");
-
-            // Avoid double-reporting the same type name + namespace (e.g. partials).
-            if (result.Requests.Any(r => r.Name == decl.Name && r.Namespace == scan.Namespace))
-                continue;
-
-            var request = new CqrsRequest
-            {
-                Name = decl.Name,
-                Namespace = scan.Namespace,
-                ProjectName = projectName,
-                ViaMarker = via,
-            };
-            request.ResponseType =
-                MarkerResolver.TryExtractMarkerResponse(decl, reached)
-                ?? decl.BaseRawNames
-                    .Select(b => CSharpScanner.ExtractGenericArguments(decl.BaseList, b)?.FirstOrDefault())
-                    .FirstOrDefault(a => a is not null);
-            if (!request.Name.EndsWith("Command", StringComparison.Ordinal) &&
-                !request.Name.EndsWith("Query", StringComparison.Ordinal))
-                request.Kind = MarkerResolver.ClassifyMarkerRequest(
-                    request.Name, decl.BaseRawNames.Concat(reached));
-            result.Requests.Add(request);
-        }
     }
 
     private static ProjectInfo? FindOwningProject(List<ProjectInfo> projects, string file)
@@ -164,28 +137,90 @@ public static class Analyzer
 
         CqrsRequest? Resolve(string simpleName, string? writtenNs, string? fallbackNs)
         {
-            foreach (var ns in new[] { writtenNs, fallbackNs })
+            // A handler may write a type as `Outer.Inner`, `Ns.Outer.Inner`, or just
+            // `Inner`; try the nested-type path and the handler's own namespace.
+            var candidates = new List<string>();
+            if (!string.IsNullOrEmpty(writtenNs))
             {
-                if (!string.IsNullOrEmpty(ns) && byFullName.TryGetValue($"{ns}.{simpleName}", out var hit))
+                candidates.Add($"{writtenNs}.{simpleName}");
+                if (!string.IsNullOrEmpty(fallbackNs))
+                    candidates.Add($"{fallbackNs}.{writtenNs}.{simpleName}");
+            }
+            if (!string.IsNullOrEmpty(fallbackNs))
+                candidates.Add($"{fallbackNs}.{simpleName}");
+            candidates.Add(simpleName);
+
+            foreach (var candidate in candidates)
+            {
+                if (byFullName.TryGetValue(candidate, out var hit))
                     return hit;
             }
-            return bySimpleName.TryGetValue(simpleName, out var candidates) && candidates.Count == 1
-                ? candidates[0]
+
+            return bySimpleName.TryGetValue(simpleName, out var matches) && matches.Count == 1
+                ? matches[0]
                 : null;
+        }
+
+        void RecordAmbiguousLink(
+            string ownerKind,
+            string owner,
+            string target,
+            SourceLocation? location,
+            string? project)
+        {
+            if (!bySimpleName.TryGetValue(target, out var matches) || matches.Count < 2)
+                return;
+
+            var names = string.Join(
+                ", ",
+                matches.Select(m => m.FullName).OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+            result.RecordDiagnostic(new AnalysisDiagnostic(
+                AnalysisResult.AmbiguousLinkCode,
+                AnalysisDiagnosticSeverity.Warning,
+                $"{ownerKind} `{owner}` targets `{target}`, which matches {matches.Count} requests ({names}); the link was omitted.",
+                location,
+                project));
         }
 
         foreach (var handler in result.Handlers.OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase))
         {
             var request = Resolve(handler.RequestName, handler.RequestNamespace, handler.Namespace);
-            if (request is not null && !request.Handlers.Contains(handler.Name))
-                request.Handlers.Add(handler.Name);
+            if (request is null)
+            {
+                RecordAmbiguousLink(
+                    "Handler",
+                    handler.FullName,
+                    handler.RequestName,
+                    handler.Location,
+                    handler.ProjectName);
+                continue;
+            }
+
+            // Text mode only knows a written namespace when the generic argument was
+            // qualified. Once linking has identified the real request, retain that
+            // identity so text and Roslyn results describe the same shape.
+            handler.RequestNamespace ??= request.Namespace;
+            if (!request.Handlers.Contains(handler.FullName))
+                request.Handlers.Add(handler.FullName);
         }
 
         foreach (var validator in result.Validators.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase))
         {
             var request = Resolve(validator.TargetType, validator.TargetNamespace, validator.Namespace);
-            if (request is not null && !request.Validators.Contains(validator.Name))
-                request.Validators.Add(validator.Name);
+            if (request is null)
+            {
+                RecordAmbiguousLink(
+                    "Validator",
+                    validator.FullName,
+                    validator.TargetType,
+                    validator.Location,
+                    validator.ProjectName);
+                continue;
+            }
+
+            validator.TargetNamespace ??= request.Namespace;
+            if (!request.Validators.Contains(validator.FullName))
+                request.Validators.Add(validator.FullName);
         }
 
         foreach (var request in result.Requests)

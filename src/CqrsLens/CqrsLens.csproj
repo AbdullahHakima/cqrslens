@@ -12,7 +12,6 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>cqrslens</ToolCommandName>
     <PackageId>CqrsLens</PackageId>
-    <Version>0.2.0</Version>
     <Authors>Abdullah Hakim</Authors>
     <Description>See your MediatR codebase: CqrsLens statically scans a .NET solution (no build required) and generates an ARCHITECTURE.md report with Mermaid diagrams of your project graph, CQRS map, layers, and DbContexts.</Description>
     <PackageTags>mediatr;cqrs;clean-architecture;mermaid;dotnet-tool;architecture</PackageTags>
@@ -24,6 +23,10 @@
 
   <ItemGroup>
     <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
   </ItemGroup>
 
 </Project>
