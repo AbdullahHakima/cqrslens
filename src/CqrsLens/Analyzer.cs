@@ -26,9 +26,10 @@ public static class Analyzer
             project.Layer = LayerClassifier.Classify(project.Name, project.DirectoryPath, root);
 
         var files = CsprojParser.FindSourceFiles(root);
-        result.FileCount = files.Count;
+        result.DiscoveredFileCount = files.Count;
 
         var sources = new ConcurrentBag<(string File, string Code)>();
+        var unreadable = new ConcurrentBag<string>();
         Parallel.ForEach(files, file =>
         {
             try
@@ -37,9 +38,13 @@ public static class Analyzer
             }
             catch
             {
-                // An unreadable file should not abort the whole scan.
+                // Keep scanning best-effort, but make the omission visible in the report.
+                unreadable.Add(file);
             }
         });
+
+        foreach (var file in unreadable.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            result.RecordSkippedFile(file);
 
         var sourceFiles = sources
             .OrderBy(f => f.File, StringComparer.OrdinalIgnoreCase)
@@ -50,6 +55,8 @@ public static class Analyzer
             .ToList();
 
         scanner.Scan(sourceFiles, markerSet, result);
+        result.SkippedFiles.Sort(StringComparer.OrdinalIgnoreCase);
+        result.FileCount = Math.Max(0, result.DiscoveredFileCount - result.SkippedFiles.Count);
 
         Link(result);
         result.Checks.AddRange(ArchitectureChecker.RunChecks(result));
