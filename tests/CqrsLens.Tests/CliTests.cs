@@ -77,6 +77,38 @@ public class CliTests : IDisposable
     }
 
     [Fact]
+    public void GeneratedAtOption_WritesPinnedTimestamp()
+    {
+        WriteValidFixture();
+        var output = Path.Combine(_root, "ARCHITECTURE.md");
+
+        var result = Run(new[]
+        {
+            _root, "-o", output, "--generated-at", "2026-02-03T04:05:06Z",
+        });
+
+        Assert.Equal(ExitCodes.Success, result.Code);
+        Assert.Contains("2026-02-03 04:05:06 UTC", File.ReadAllText(output));
+
+        var secondOutput = Path.Combine(_root, "ARCHITECTURE-second.md");
+        var second = Run(new[]
+        {
+            _root, "-o", secondOutput, "--generated-at", "2026-02-03T04:05:06Z",
+        });
+        Assert.Equal(ExitCodes.Success, second.Code);
+        Assert.Equal(File.ReadAllText(output), File.ReadAllText(secondOutput));
+    }
+
+    [Fact]
+    public void InvalidGeneratedAt_IsUsageError()
+    {
+        var command = CliParser.Parse(new[] { ".", "--generated-at", "not-a-date" });
+
+        Assert.Equal(CliCommandKind.Error, command.Kind);
+        Assert.Contains("invalid --generated-at", command.Error);
+    }
+
+    [Fact]
     public void MissingPath_IsUsageError()
     {
         var result = Run(Array.Empty<string>());
