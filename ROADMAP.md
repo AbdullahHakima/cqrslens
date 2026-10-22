@@ -5,6 +5,19 @@ where they exist; the dates are not promises.
 
 ## Done
 
+**0.3.0** (October 2026)
+
+- Correctness pass for test-project classification, custom handler/validator
+  contracts, multi-namespace/brace scanning, EF Core shape detection, project
+  discovery and CLI exit codes (#22, #23, #26, #27)
+- Opt-in Roslyn backend with real contract shims and SampleShop parity (#1, #28)
+- Source locations, structured diagnostics, scanner/timestamp metadata and
+  confidence-aware `--strict` (#29)
+- Collision-free Mermaid ids, reproducible reports, escaped output and pinned
+  SRI-checked Mermaid (#13, #16, #31)
+- Version-safe Action, locked restore, Ubuntu/Windows CI and installed-package
+  smoke tests (#24, #30)
+
 **0.2.1** (October 2026)
 
 - Correctness pass for namespace-safe handler/validator identities, generic
@@ -34,13 +47,9 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- **Roslyn-based analysis** (#1): the opt-in source-symbol backend covers
-  requests, handlers, validators, behaviors and DbContexts behind
-  `--analysis roslyn`. It compiles source groups together and safely shims
-  missing MediatR/FluentValidation/EF Core contracts; `samples/SampleShop` parity
-  with text mode is enforced by tests. Next: load evaluated MSBuild/package
-  references and compare broader real codebases before considering it as the
-  default. Text mode stays as the fast fallback.
+- **Roslyn hardening**: load evaluated MSBuild/package references and compare
+  broader real codebases before considering Roslyn as the default. Text mode
+  stays as the fast fallback.
 - **EF Core ER diagram** (#6): entity relationships from navigation
   properties and foreign keys, not just DbSet lists.
 - **Pre-rendered SVG diagrams**: diagrams compiled to SVG ahead of time

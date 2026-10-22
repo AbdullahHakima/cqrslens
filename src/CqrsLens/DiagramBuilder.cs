@@ -123,22 +123,40 @@ public static class DiagramBuilder
                     nameCounts[g.First().Name] > 1 ? g.Key : g.First().Name),
                 StringComparer.Ordinal);
 
-        var handlerIds = result.Requests
+        var handlerNames = result.Requests
             .SelectMany(r => r.Handlers)
             .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var handlerCounts = handlerNames
+            .GroupBy(CSharpScanner.SimpleName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+        var handlerIds = handlerNames
             .OrderBy(h => h, StringComparer.Ordinal)
             .ToDictionary(
                 h => h,
-                h => ids.Allocate("handler:" + h, h),
+                h => ids.Allocate(
+                    "handler:" + h,
+                    handlerCounts[CSharpScanner.SimpleName(h)] > 1
+                        ? h
+                        : CSharpScanner.SimpleName(h)),
                 StringComparer.Ordinal);
 
-        var validatorIds = result.Requests
+        var validatorNames = result.Requests
             .SelectMany(r => r.Validators)
             .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var validatorCounts = validatorNames
+            .GroupBy(CSharpScanner.SimpleName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+        var validatorIds = validatorNames
             .OrderBy(v => v, StringComparer.Ordinal)
             .ToDictionary(
                 v => v,
-                v => ids.Allocate("validator:" + v, v),
+                v => ids.Allocate(
+                    "validator:" + v,
+                    validatorCounts[CSharpScanner.SimpleName(v)] > 1
+                        ? v
+                        : CSharpScanner.SimpleName(v)),
                 StringComparer.Ordinal);
 
         var emittedHandlers = new HashSet<string>(StringComparer.Ordinal);

@@ -104,22 +104,25 @@ Every report ends with an **Architecture Checks** section:
 | `LayerViolation` | error | A Domain project references an Infrastructure / Api / Web project |
 | `CommandWithoutValidator` | warning | A command has no FluentValidation validator |
 
-Add `--strict` to fail (exit code `4`) when any **error** is found — built for CI gates.
-The report is still written.
+Add `--strict` to fail (exit code `4`) when any **error** is found and the scan
+is complete enough to trust its architecture errors — built for CI gates. An
+incomplete or ambiguous scan reports diagnostics instead of failing on
+low-confidence data. The report is still written.
 
 ## Use in CI
 
 CqrsLens ships as a GitHub Action (this repo's `action.yml`):
 
 ```yaml
-- uses: AbdullahHakima/cqrslens@v0.2.0
+- uses: AbdullahHakima/cqrslens@v0.3.0
   with:
     path: src            # folder to scan (default: .)
     output: ARCHITECTURE.md
     format: md           # or html
     strict: 'true'       # fail the job on architecture-check errors
     markers: ''          # optional: ICommand,IQuery,IMessage
-    version: '0.2.0'     # tool version installed by the action
+    analysis: text       # or roslyn
+    version: '0.3.0'     # tool version installed by the action
 ```
 
 The generated report is uploaded as a workflow artifact
