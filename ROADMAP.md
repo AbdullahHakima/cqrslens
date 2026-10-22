@@ -5,6 +5,15 @@ where they exist; the dates are not promises.
 
 ## Done
 
+**0.5.0** (October 2026)
+
+- FastEndpoints `Validator<T>` discovery in text and Roslyn modes (#51)
+- Same-named contract resolution through namespace and `using` directives,
+  with informational ambiguity diagnostics (#52)
+- Source-declared request base classes with generic response substitution (#53)
+- Explicit external handler wrappers via `--handler-markers` / `handlerMarkers`
+  and the Action `handler-markers` input (#54)
+
 **0.4.0** (October 2026)
 
 - `.cqrslens.json` configuration with schema, source filters, layer overrides
@@ -59,9 +68,6 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- **Scanner hardening from real-world validation**: external/custom handler
-  wrappers (#54), request base classes (#53), same-named interfaces and `using`
-  resolution (#52), and FastEndpoints validators (#51)
 - **Roslyn hardening**: load evaluated MSBuild/package references and compare
   broader real codebases before considering Roslyn as the default. Text mode
   stays as the fast fallback.
