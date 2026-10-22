@@ -2,6 +2,39 @@
 
 All notable changes to CqrsLens are documented here.
 
+## [0.4.0] - 2026-10-22
+
+### Added
+
+- **Project configuration**: `.cqrslens.json` (with a published JSON schema) for
+  `analysis`, custom `markers`, source `include`/`exclude` globs, project `layers`,
+  and per-rule severities. Unknown keys and invalid values are usage errors;
+  CLI flags override config values (#43).
+- **Baselines and new-only strict checks**: `--write-baseline` captures current
+  findings, `--baseline` matches them by rule, target identity and root-relative
+  file (not line number), and `--strict` fails only on new errors. Known findings
+  stay quiet across unrelated edits and moved lines (#44).
+- **CI-native outputs**: SARIF 2.1.0 with rule metadata, locations, stable
+  fingerprints and baseline state; `--summary` Markdown; and
+  `--github-annotations` for new findings. `--ci-root` rebases paths so a scan of
+  `src/` still produces repository-relative annotations and SARIF URIs (#45).
+- **Runtime compatibility**: the packed global tool rolls forward to .NET 9/10
+  while still building on .NET 8. CI verifies the installed package on .NET
+  8, 9 and 10; the composite Action sets up .NET 10 (#46).
+- **Real-world validation**: a pinned public MediatR/Clean Architecture corpus,
+  a local runner, and a nightly/manual non-blocking workflow that publishes
+  counts, diagnostics, reports and SARIF. Known limitations and false
+  positives are documented before they become 1.0 contracts (#47).
+
+### Changed
+
+- The GitHub Action exposes `config`, `baseline`, `sarif-output`, `upload-sarif`
+  and `annotations` inputs, uploads both report and SARIF artifacts, writes a job
+  summary, and passes `--ci-root "$GITHUB_WORKSPACE"` so subfolder scans stay
+  repository-relative.
+- Text analysis remains the default; `--analysis roslyn` remains an explicit
+  opt-in.
+
 ## [0.3.0] - 2026-10-22
 
 ### Added

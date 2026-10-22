@@ -8,13 +8,13 @@ so an external repository changing or disappearing cannot block a release.
 
 ## Latest snapshot
 
-Source build `0.3.0` (pre-0.4.0 version bump), text analysis, 2026-10-22:
+CqrsLens `0.4.0`, text analysis, 2026-10-22:
 
 | Repository | Commit | Path | Markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 379 ms |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | 22 | 23 | 0 | 0 | 23/13 | 0/0/0 | 345 ms |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | 46 | 2 | 0 | 5 | 2/0 | 0/0/0 | 452 ms |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 938 ms |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | 22 | 23 | 0 | 0 | 23/13 | 0/0/0 | 1192 ms |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | 46 | 2 | 0 | 5 | 2/0 | 0/0/0 | 2299 ms |
 
 Timings are machine-dependent; counts and commits are the reproducible part.
 Full Markdown reports, SARIF, logs and `results.tsv` come from the workflow
