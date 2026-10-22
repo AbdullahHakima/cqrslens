@@ -135,6 +135,11 @@ public class CliTests : IDisposable
     [InlineData("--config")]
     [InlineData("--analysis")]
     [InlineData("--markers")]
+    [InlineData("--baseline")]
+    [InlineData("--write-baseline")]
+    [InlineData("--sarif")]
+    [InlineData("--summary")]
+    [InlineData("--ci-root")]
     public void OptionWithoutValue_IsUsageError(string option)
     {
         var result = Run(new[] { option });

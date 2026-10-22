@@ -23,7 +23,7 @@ inputs:
     required: false
     default: 'md'
   strict:
-    description: Fail the step when architecture checks report any error.
+    description: Fail the step when architecture checks report any new error.
     required: false
     default: 'false'
   markers:
@@ -31,9 +31,29 @@ inputs:
     required: false
     default: ''
   analysis:
-    description: 'Analysis backend: text (default) or roslyn.'
+    description: 'Analysis backend override: empty (config/default), text, or roslyn.'
     required: false
-    default: 'text'
+    default: ''
+  config:
+    description: Path to a .cqrslens.json file; empty auto-discovers at the scan root.
+    required: false
+    default: ''
+  baseline:
+    description: Baseline file for new-only strict checks.
+    required: false
+    default: ''
+  sarif-output:
+    description: SARIF 2.1.0 file to write; set to empty to disable.
+    required: false
+    default: 'cqrslens-results.sarif'
+  upload-sarif:
+    description: Upload the generated SARIF to GitHub code scanning.
+    required: false
+    default: 'false'
+  annotations:
+    description: Emit file/line GitHub Actions annotations for new findings.
+    required: false
+    default: 'true'
   version:
     description: CqrsLens NuGet tool version to install.
     required: false
@@ -43,6 +63,9 @@ outputs:
   report-path:
     description: Path of the generated report file.
     value: ${{ steps.scan.outputs.report-path }}
+  sarif-path:
+    description: Path of the generated SARIF file (empty when disabled).
+    value: ${{ steps.scan.outputs.sarif-path }}
 
 runs:
   using: composite
@@ -50,7 +73,7 @@ runs:
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '10.0.x'
 
     - name: Install CqrsLens
       shell: bash
@@ -71,17 +94,48 @@ runs:
         CQRSLENS_STRICT: ${{ inputs.strict }}
         CQRSLENS_MARKERS: ${{ inputs.markers }}
         CQRSLENS_ANALYSIS: ${{ inputs.analysis }}
+        CQRSLENS_CONFIG: ${{ inputs.config }}
+        CQRSLENS_BASELINE: ${{ inputs.baseline }}
+        CQRSLENS_SARIF: ${{ inputs.sarif-output }}
+        CQRSLENS_ANNOTATIONS: ${{ inputs.annotations }}
+        CQRSLENS_SUMMARY: ${{ runner.temp }}/cqrslens-summary.md
       run: |
         args=("$CQRSLENS_PATH" -o "$CQRSLENS_OUTPUT" --format "$CQRSLENS_FORMAT" \
-          --analysis "$CQRSLENS_ANALYSIS")
+          --ci-root "$GITHUB_WORKSPACE" \
+          --summary "$CQRSLENS_SUMMARY")
         if [ "$CQRSLENS_STRICT" = "true" ]; then
           args+=(--strict)
         fi
         if [ -n "$CQRSLENS_MARKERS" ]; then
           args+=(--markers "$CQRSLENS_MARKERS")
         fi
+        if [ -n "$CQRSLENS_ANALYSIS" ]; then
+          args+=(--analysis "$CQRSLENS_ANALYSIS")
+        fi
+        if [ -n "$CQRSLENS_CONFIG" ]; then
+          args+=(--config "$CQRSLENS_CONFIG")
+        fi
+        if [ -n "$CQRSLENS_BASELINE" ]; then
+          args+=(--baseline "$CQRSLENS_BASELINE")
+        fi
+        if [ -n "$CQRSLENS_SARIF" ]; then
+          args+=(--sarif "$CQRSLENS_SARIF")
+        fi
+        if [ "$CQRSLENS_ANNOTATIONS" = "true" ]; then
+          args+=(--github-annotations)
+        fi
+
+        set +e
         cqrslens "${args[@]}"
+        status=$?
+        set -e
+
         echo "report-path=$CQRSLENS_OUTPUT" >> "$GITHUB_OUTPUT"
+        echo "sarif-path=$CQRSLENS_SARIF" >> "$GITHUB_OUTPUT"
+        if [ -f "$CQRSLENS_SUMMARY" ]; then
+          cat "$CQRSLENS_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$status"
 
     - name: Upload report
       if: always()
@@ -90,3 +144,18 @@ runs:
         name: cqrslens-architecture-report
         path: ${{ inputs.output }}
         if-no-files-found: warn
+
+    - name: Upload SARIF artifact
+      if: always() && inputs.sarif-output != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: cqrslens-sarif
+        path: ${{ inputs.sarif-output }}
+        if-no-files-found: warn
+
+    - name: Upload SARIF to code scanning
+      if: always() && inputs.upload-sarif == 'true' && inputs.sarif-output != ''
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-output }}
+        category: cqrslens
