@@ -1,0 +1,6 @@
+# Keep shell scripts LF even on Windows so they run unchanged in Git Bash and CI.
+*.sh text eol=lf
+
+# Workflow/config files are easier to review and diff with LF.
+*.yml text eol=lf
+*.yaml text eol=lf

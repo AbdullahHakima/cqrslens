@@ -1,0 +1,56 @@
+name: Real-world validation
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Nightly, informational only. This workflow is intentionally not part of
+    # the PR or release gates: pinned public repositories are external input.
+    - cron: '0 5 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-world-validation
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Scan pinned MediatR / Clean Architecture corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore (locked)
+        run: dotnet restore CqrsLens.sln --locked-mode
+
+      - name: Build
+        run: dotnet build CqrsLens.sln -c Release --no-restore --nologo
+
+      - name: Validate real-world corpus
+        shell: bash
+        run: bash scripts/validate-real-world.sh
+
+      - name: Publish validation summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f artifacts/validation/validation.md ]; then
+            cat artifacts/validation/validation.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload validation results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: real-world-validation
+          path: artifacts/validation
+          if-no-files-found: warn
+          retention-days: 30
