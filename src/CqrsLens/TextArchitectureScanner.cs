@@ -31,54 +31,77 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             .OrderBy(f => f.File.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        var rawInterfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var (_, scan) in ordered)
-        {
-            foreach (var decl in scan.InterfaceDecls)
-            {
-                var fullName = decl.FullName;
-                if (!rawInterfaceMap.TryGetValue(fullName, out var list))
-                    rawInterfaceMap[fullName] = list = new List<string>();
-                foreach (var b in CSharpScanner.ExtractBaseTypeNames(decl.BaseList))
-                    if (!list.Contains(b)) list.Add(b);
-            }
-        }
+        ApplyProjectGlobalUsings(ordered);
 
-        var interfacesBySimpleName = rawInterfaceMap.Keys
-            .GroupBy(CSharpScanner.SimpleName, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+        var hierarchy = new TypeHierarchy(
+            ordered.SelectMany(o => o.Scan.Classes),
+            ordered.SelectMany(o => o.Scan.InterfaceDecls));
 
+        // Build the interface closure using each declaration's own using
+        // directives. This is what makes module-local ICommand/IQuery contracts
+        // resolve to the contract imported by the file rather than to a
+        // same-named interface from another module.
         var interfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var (_, scan) in ordered)
+        foreach (var (file, scan) in ordered)
         {
             foreach (var decl in scan.InterfaceDecls)
             {
                 var fullName = decl.FullName;
                 if (!interfaceMap.TryGetValue(fullName, out var list))
                     interfaceMap[fullName] = list = new List<string>();
-                foreach (var b in CSharpScanner.ExtractBaseTypeNames(decl.BaseList))
+
+                foreach (var baseName in CSharpScanner.ExtractBaseTypeNames(decl.BaseList))
                 {
-                    var resolved = ResolveInterfaceName(b, decl.Namespace, rawInterfaceMap, interfacesBySimpleName);
-                    if (!list.Contains(resolved)) list.Add(resolved);
+                    var resolved = hierarchy.ResolveInterfaceReference(
+                        baseName,
+                        decl.Namespace,
+                        decl.Usings,
+                        decl.ContainingTypes,
+                        out var ambiguous);
+                    if (resolved is null)
+                    {
+                        RecordAmbiguousContract(
+                            result, file, decl.BodySpan.Start, decl.Name, baseName, ambiguous, "interface");
+                        continue;
+                    }
+
+                    if (!list.Contains(resolved))
+                        list.Add(resolved);
                 }
             }
         }
 
-        var hierarchy = new TypeHierarchy(
-            ordered.SelectMany(o => o.Scan.Classes),
-            ordered.SelectMany(o => o.Scan.InterfaceDecls));
-
         foreach (var (file, scan) in ordered)
         {
             CSharpScanner.ApplyScan(scan, file.Code, file.ProjectName, result, file.Path);
-            DiscoverMarkerRequests(
-                scan,
-                file,
-                interfaceMap,
-                interfacesBySimpleName,
-                markers,
-                result);
+            DiscoverMarkerRequests(scan, file, hierarchy, interfaceMap, markers, result);
             DiscoverIndirectShapes(scan, file, hierarchy, result);
+        }
+    }
+
+    private static void ApplyProjectGlobalUsings(
+        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan)> ordered)
+    {
+        var globalsByProject = ordered
+            .SelectMany(o => o.Scan.Usings
+                .Where(u => u.IsGlobal)
+                .Select(u => (Project: o.File.ProjectName ?? "", Using: u)))
+            .GroupBy(x => x.Project, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(x => x.Using).Distinct().ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (file, scan) in ordered)
+        {
+            if (!globalsByProject.TryGetValue(file.ProjectName ?? "", out var globals))
+                continue;
+
+            foreach (var global in globals)
+            {
+                if (!scan.Usings.Contains(global))
+                    scan.Usings.Add(global);
+            }
         }
     }
 
@@ -116,57 +139,91 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                 var simple = CSharpScanner.SimpleName(name);
                 if (simple is "DbContext" or "IdentityDbContext") continue;
 
-                if (simple != "IRequestHandler" &&
-                    hierarchy.TryResolveShapeTarget(decl.Namespace, part, HandlerRoots, out var requestType))
+                if (simple != "IRequestHandler")
                 {
-                    var requestName = CSharpScanner.UnqualifiedTypeName(requestType);
-                    if (requestName.Length > 0 && !typeParameters.Contains(requestName) &&
-                        !result.Handlers.Any(h =>
-                            h.Namespace == decl.Namespace &&
-                            h.Name == decl.Name &&
-                            h.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
-                            h.RequestName == requestName))
+                    var resolvedHandler = hierarchy.TryResolveShapeTarget(
+                        decl.Namespace,
+                        part,
+                        HandlerRoots,
+                        decl.Usings,
+                        decl.ContainingTypes,
+                        out var requestType,
+                        out var handlerAmbiguity);
+                    if (resolvedHandler)
                     {
-                        var handler = new HandlerInfo
+                        var requestName = CSharpScanner.UnqualifiedTypeName(requestType);
+                        if (requestName.Length > 0 && !typeParameters.Contains(requestName) &&
+                            !result.Handlers.Any(h =>
+                                h.Namespace == decl.Namespace &&
+                                h.Name == decl.Name &&
+                                h.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
+                                h.RequestName == requestName))
                         {
-                            Name = decl.Name,
-                            Namespace = decl.Namespace,
-                            RequestName = requestName,
-                            RequestNamespace = CSharpScanner.NamespaceOfType(requestType) is { Length: > 0 } ns
-                                ? ns
-                                : null,
-                            ProjectName = file.ProjectName,
-                            Location = location,
-                        };
-                        handler.ContainingTypes.AddRange(decl.ContainingTypes);
-                        result.Handlers.Add(handler);
+                            var handler = new HandlerInfo
+                            {
+                                Name = decl.Name,
+                                Namespace = decl.Namespace,
+                                RequestName = requestName,
+                                RequestNamespace = CSharpScanner.NamespaceOfType(requestType) is { Length: > 0 } ns
+                                    ? ns
+                                    : null,
+                                ProjectName = file.ProjectName,
+                                Location = location,
+                            };
+                            handler.ContainingTypes.AddRange(decl.ContainingTypes);
+                            CSharpScanner.AddImportedNamespaces(decl.Usings, handler.ImportedNamespaces);
+                            result.Handlers.Add(handler);
+                        }
+                    }
+                    else if (LooksLikeHandlerContract(simple))
+                    {
+                        RecordShapeResolutionGap(
+                            result, file, decl.BodySpan.Start, decl.Name, simple,
+                            hierarchy, handlerAmbiguity, "handler");
                     }
                 }
 
-                if (simple is not ("AbstractValidator" or "IValidator") &&
-                    hierarchy.TryResolveShapeTarget(decl.Namespace, part, ValidatorRoots, out var validatorTarget))
+                if (simple is not ("AbstractValidator" or "IValidator"))
                 {
-                    var targetName = CSharpScanner.UnqualifiedTypeName(validatorTarget);
-                    if (targetName.Length > 0 && !typeParameters.Contains(targetName) &&
-                        !result.Validators.Any(v =>
-                            v.Namespace == decl.Namespace &&
-                            v.Name == decl.Name &&
-                            v.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
-                            v.TargetType == targetName))
+                    var resolvedValidator = hierarchy.TryResolveShapeTarget(
+                        decl.Namespace,
+                        part,
+                        ValidatorRoots,
+                        decl.Usings,
+                        decl.ContainingTypes,
+                        out var validatorTarget,
+                        out var validatorAmbiguity);
+                    if (resolvedValidator)
                     {
-                        var validator = new ValidatorInfo
+                        var targetName = CSharpScanner.UnqualifiedTypeName(validatorTarget);
+                        if (targetName.Length > 0 && !typeParameters.Contains(targetName) &&
+                            !result.Validators.Any(v =>
+                                v.Namespace == decl.Namespace &&
+                                v.Name == decl.Name &&
+                                v.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
+                                v.TargetType == targetName))
                         {
-                            Name = decl.Name,
-                            Namespace = decl.Namespace,
-                            TargetType = targetName,
-                            TargetNamespace = CSharpScanner.NamespaceOfType(validatorTarget) is { Length: > 0 } ns
-                                ? ns
-                                : null,
-                            ProjectName = file.ProjectName,
-                            Location = location,
-                        };
-                        validator.ContainingTypes.AddRange(decl.ContainingTypes);
-                        result.Validators.Add(validator);
+                            var validator = new ValidatorInfo
+                            {
+                                Name = decl.Name,
+                                Namespace = decl.Namespace,
+                                TargetType = targetName,
+                                TargetNamespace = CSharpScanner.NamespaceOfType(validatorTarget) is { Length: > 0 } ns
+                                    ? ns
+                                    : null,
+                                ProjectName = file.ProjectName,
+                                Location = location,
+                            };
+                            validator.ContainingTypes.AddRange(decl.ContainingTypes);
+                            CSharpScanner.AddImportedNamespaces(decl.Usings, validator.ImportedNamespaces);
+                            result.Validators.Add(validator);
+                        }
+                    }
+                    else if (LooksLikeValidatorContract(simple))
+                    {
+                        RecordShapeResolutionGap(
+                            result, file, decl.BodySpan.Start, decl.Name, simple,
+                            hierarchy, validatorAmbiguity, "validator");
                     }
                 }
             }
@@ -176,8 +233,8 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
     private static void DiscoverMarkerRequests(
         CSharpScanner.FileScan scan,
         SourceFile file,
-        Dictionary<string, List<string>> interfaceMap,
-        Dictionary<string, List<string>> interfacesBySimpleName,
+        TypeHierarchy hierarchy,
+        IReadOnlyDictionary<string, List<string>> interfaceMap,
         IReadOnlySet<string> markers,
         AnalysisResult result)
     {
@@ -195,8 +252,29 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
 
             var location = SourceLocation.Create(
                 file.Path, result.RootPath, file.Code, decl.BodySpan.Start);
-            var directInterfaces = decl.BaseTypeNames
-                .Select(name => ResolveInterfaceName(name, decl.Namespace, interfaceMap, interfacesBySimpleName));
+            var directInterfaces = new List<string>();
+            foreach (var name in decl.BaseTypeNames)
+            {
+                var resolved = hierarchy.ResolveInterfaceReference(
+                    name,
+                    decl.Namespace,
+                    decl.Usings,
+                    decl.ContainingTypes,
+                    out var ambiguous);
+                if (resolved is null)
+                {
+                    var simple = CSharpScanner.SimpleName(name);
+                    if (markers.Contains(simple) || simple is "IRequest")
+                    {
+                        RecordAmbiguousContract(
+                            result, file, decl.BodySpan.Start, decl.Name, name, ambiguous, "request marker");
+                    }
+                    continue;
+                }
+
+                directInterfaces.Add(resolved);
+            }
+
             var reached = MarkerResolver.ReachableMarkers(directInterfaces, interfaceMap, markers);
             if (reached.Count == 0) continue;
 
@@ -234,21 +312,64 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         }
     }
 
-    private static string ResolveInterfaceName(
-        string name,
-        string currentNamespace,
-        IReadOnlyDictionary<string, List<string>> interfaceMap,
-        IReadOnlyDictionary<string, List<string>> interfacesBySimpleName)
+    private static bool LooksLikeHandlerContract(string simple)
+        => simple.Contains("CommandHandler", StringComparison.Ordinal) ||
+           simple.Contains("QueryHandler", StringComparison.Ordinal) ||
+           simple.Contains("RequestHandler", StringComparison.Ordinal);
+
+    private static bool LooksLikeValidatorContract(string simple)
+        => simple is "Validator" or "AbstractValidator" or "IValidator" ||
+           simple.EndsWith("CommandValidator", StringComparison.Ordinal) ||
+           simple.EndsWith("QueryValidator", StringComparison.Ordinal);
+
+    private static void RecordShapeResolutionGap(
+        AnalysisResult result,
+        SourceFile file,
+        int sourceIndex,
+        string owner,
+        string reference,
+        TypeHierarchy hierarchy,
+        IReadOnlyList<string> ambiguousCandidates,
+        string role)
     {
-        if (interfaceMap.ContainsKey(name)) return name;
+        if (ambiguousCandidates.Count > 0)
+        {
+            RecordAmbiguousContract(
+                result, file, sourceIndex, owner, reference, ambiguousCandidates, role);
+            return;
+        }
 
-        var localName = string.IsNullOrEmpty(currentNamespace) ? name : $"{currentNamespace}.{name}";
-        if (interfaceMap.ContainsKey(localName))
-            return localName;
+        // A source-declared interface that simply does not reach a known root is
+        // not an external wrapper; stay quiet. Only an unknown type is a gap.
+        if (hierarchy.HasInterface(reference)) return;
 
-        return interfacesBySimpleName.TryGetValue(CSharpScanner.SimpleName(name), out var candidates) &&
-               candidates.Count == 1
-            ? candidates[0]
-            : name;
+        result.RecordDiagnostic(new AnalysisDiagnostic(
+            AnalysisResult.UnresolvedContractCode,
+            AnalysisDiagnosticSeverity.Info,
+            $"`{owner}` looks like a {role} through `{reference}`, but that contract has no source declaration. " +
+            "External wrappers need explicit support; this shape was not linked.",
+            SourceLocation.Create(file.Path, result.RootPath, file.Code, sourceIndex),
+            file.ProjectName));
+    }
+
+    private static void RecordAmbiguousContract(
+        AnalysisResult result,
+        SourceFile file,
+        int sourceIndex,
+        string owner,
+        string reference,
+        IReadOnlyList<string> candidates,
+        string role)
+    {
+        if (candidates.Count < 2) return;
+
+        result.RecordDiagnostic(new AnalysisDiagnostic(
+            AnalysisResult.AmbiguousContractCode,
+            AnalysisDiagnosticSeverity.Info,
+            $"`{owner}` references `{CSharpScanner.SimpleName(reference)}` as a {role}, " +
+            $"but it matches {candidates.Count} source types ({string.Join(", ", candidates)}); " +
+            "the reference was not resolved.",
+            SourceLocation.Create(file.Path, result.RootPath, file.Code, sourceIndex),
+            file.ProjectName));
     }
 }

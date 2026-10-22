@@ -165,7 +165,11 @@ public static class Analyzer
             list.Add(request);
         }
 
-        CqrsRequest? Resolve(string simpleName, string? writtenNs, string? fallbackNs)
+        CqrsRequest? Resolve(
+            string simpleName,
+            string? writtenNs,
+            string? fallbackNs,
+            IReadOnlyList<string> importedNamespaces)
         {
             // A handler may write a type as `Outer.Inner`, `Ns.Outer.Inner`, or just
             // `Inner`; try the nested-type path and the handler's own namespace.
@@ -185,6 +189,22 @@ public static class Analyzer
                 if (byFullName.TryGetValue(candidate, out var hit))
                     return hit;
             }
+
+            // An unqualified request name is often imported by a using in the
+            // handler/validator file. Two imported matches mean the source is
+            // ambiguous; do not pick one and create a false link.
+            var importedMatches = new List<CqrsRequest>();
+            foreach (var ns in importedNamespaces.Distinct(StringComparer.Ordinal))
+            {
+                if (byFullName.TryGetValue($"{ns}.{simpleName}", out var hit) &&
+                    !importedMatches.Contains(hit))
+                    importedMatches.Add(hit);
+            }
+
+            if (importedMatches.Count == 1)
+                return importedMatches[0];
+            if (importedMatches.Count > 1)
+                return null;
 
             return bySimpleName.TryGetValue(simpleName, out var matches) && matches.Count == 1
                 ? matches[0]
@@ -214,7 +234,11 @@ public static class Analyzer
 
         foreach (var handler in result.Handlers.OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var request = Resolve(handler.RequestName, handler.RequestNamespace, handler.Namespace);
+            var request = Resolve(
+                handler.RequestName,
+                handler.RequestNamespace,
+                handler.Namespace,
+                handler.ImportedNamespaces);
             if (request is null)
             {
                 RecordAmbiguousLink(
@@ -236,7 +260,11 @@ public static class Analyzer
 
         foreach (var validator in result.Validators.OrderBy(v => v.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var request = Resolve(validator.TargetType, validator.TargetNamespace, validator.Namespace);
+            var request = Resolve(
+                validator.TargetType,
+                validator.TargetNamespace,
+                validator.Namespace,
+                validator.ImportedNamespaces);
             if (request is null)
             {
                 RecordAmbiguousLink(

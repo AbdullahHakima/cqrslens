@@ -318,8 +318,8 @@ The whole scan took 145 ms.
 | --- | --- |
 | Projects & references | `.csproj` XML (`ProjectReference` Include/Update) |
 | Requests | classes/records/structs implementing `IRequest` or `IRequest<T>` — directly, through custom interfaces deriving from it, or through `--markers` roots |
-| Handlers | `IRequestHandler<TRequest>` / `IRequestHandler<TRequest, TResponse>` |
-| Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation) |
+| Handlers | `IRequestHandler<TRequest>` / `IRequestHandler<TRequest, TResponse>`, including source-declared wrappers such as `ICommandHandler<T>` |
+| Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation), including source-declared wrappers |
 | Pipeline behaviors | `IPipelineBehavior<...>` implementations |
 | DbContexts | classes deriving from `DbContext` (incl. `IdentityDbContext`), with their `DbSet<T>`s attributed per class |
 
@@ -332,10 +332,15 @@ source-shape discovery while keeping the same no-build workflow. It shims known
 MediatR/FluentValidation/EF Core contracts that are not present in the source:
 
 - Requests are followed through custom marker interfaces (anything deriving from
-  `IRequest`, plus `--markers` roots), but not through base *classes*.
-- Handlers/validators link by fully-qualified name; a bare simple-name link is
-  only used when exactly one request has that name, so same-named requests in
-  different namespaces no longer share links.
+  `IRequest`, plus `--markers` roots), but not through base *classes* (see #53).
+- Same-named contracts are resolved from the declaration's namespace and using
+  directives, including global usings and namespace aliases. Handlers/validators
+  link by fully-qualified name first, then an imported namespace, then a unique
+  simple name. Genuinely ambiguous or unresolved CQRS contracts are reported as
+  informational diagnostics instead of being guessed.
+- External handler/validator wrappers are opaque in text mode unless their
+  inheritance is present in the scanned source (see #54). Source-declared
+  wrappers such as `ICommandHandler<T> : IRequestHandler<T>` are followed.
 - Declarations written in unusual formatting can be missed. When in doubt, the
   report errs toward showing less, not inventing more.
 

@@ -8,39 +8,46 @@ so an external repository changing or disappearing cannot block a release.
 
 ## Latest snapshot
 
-CqrsLens `0.4.0`, text analysis, 2026-10-22:
+CqrsLens `main` after #52 (`0.5.0` development), text analysis, 2026-10-22:
 
 | Repository | Commit | Path | Markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 938 ms |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | 22 | 23 | 0 | 0 | 23/13 | 0/0/0 | 1192 ms |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | 46 | 2 | 0 | 5 | 2/0 | 0/0/0 | 2299 ms |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 266 ms |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | 22 | 23 | 0 | 0 | 23/13 | 0/0/44 | 353 ms |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | 46 | 2 | 120 | 5 | 0/0 | 0/0/0 | 436 ms |
 
 Timings are machine-dependent; counts and commits are the reproducible part.
 Full Markdown reports, SARIF, logs and `results.tsv` come from the workflow
 artifact. The pinned refs live in [`validation/corpus.tsv`](../validation/corpus.tsv).
+The released `0.4.0` snapshot had 0 handlers for the modular monolith and no
+informational diagnostics for these repositories; this table is a development
+snapshot, not the released package's results.
 
 ### What this snapshot says
 
-- **MediatR-native app:** `jasontaylordev/CleanArchitecture` is fully linked
+- **MediatR-native app:** `jasontaylordev/CleanArchitecture` remains fully linked
   (11 requests, 11 handlers, 6 validators). Its three warnings are commands that
   genuinely have no validator in the scanned tree.
 - **External command/handler wrappers:** `ardalis/CleanArchitecture` is detected
   as 23 requests after configuring `ICommand,IQuery`, but its handlers derive
-  from a wrapper supplied by an external package. The scanner cannot see that
-  wrapper's inheritance, so all 23 `MissingHandler` errors are **false
-  positives** in this snapshot. The 13 command-without-validator warnings are
-  also largely false positives: this repo uses FastEndpoints `Validator<T>`,
-  not FluentValidation `AbstractValidator<T>`.
-- **Per-module contracts and request base classes:** `modular-monolith-with-ddd`
-  defines `ICommand` / `IQuery` in each module and most requests derive from
-  `CommandBase` / `QueryBase`. Only two direct `IQuery` requests are found, and
-  none of their handlers (hidden behind module-local `IQueryHandler` wrappers)
-  are linked. The two `MissingHandler` errors are false positives. Five
-  validators are still found through direct FluentValidation inheritance.
-- **Diagnostics are clean.** No files were skipped and no ambiguous links were
-  reported for these three scans. That is not the same as "complete": the
-  false negatives above are silent shape gaps rather than scan diagnostics.
+  from a wrapper supplied by an external package. The scanner now reports 44
+  informational diagnostics instead of failing silently: 13 `ICommandHandler`,
+  10 `IQueryHandler`, and 21 FastEndpoints `Validator` references have no source
+  declaration. These are the known #54 and #51 gaps, not new architecture
+  findings. The 23 `MissingHandler` errors and 13 validator warnings remain
+  **false positives** until those wrappers are supported.
+- **Per-module contracts:** `modular-monolith-with-ddd` now finds 120 handlers
+  through each module's imported `ICommandHandler` / `IQueryHandler` contracts,
+  up from zero. The two direct `IQuery` requests link to their correct module
+  handler and the `2 MissingHandler` false positives are gone. Requests remain
+  at two because most derive from `CommandBase` / `QueryBase`; that is the #53
+  base-class gap, not a resolution failure. Five validators are still found
+  through direct FluentValidation inheritance.
+- **Diagnostics are informative, not a clean bill of health.** No files were
+  skipped and there are no error/warning scan diagnostics. The 44 ardalis info
+  items are actionable gaps surfaced by `UnresolvedContract`. `AmbiguousContract`
+  and `UnresolvedContract` are informational, appear in Markdown, the CI summary
+  and SARIF, and do not disable strict confidence on their own.
 
 ## Known limitations
 
@@ -50,16 +57,19 @@ These are user-facing limits, not promises that the current corpus can fix:
    abstract base classes declared in the scanned source. A command implementing
    `ICommand` from a NuGet package works when `ICommand` is passed to
    `--markers`, but a handler implementing an external `ICommandHandler` cannot
-   be linked to `IRequestHandler` (see [#54](https://github.com/AbdullahHakima/cqrslens/issues/54)).
+   be linked to `IRequestHandler`. These gaps are now surfaced as
+   `UnresolvedContract` info diagnostics (see
+   [#54](https://github.com/AbdullahHakima/cqrslens/issues/54)).
 2. **Custom request base classes are not traversed.** `CommandBase<T>` /
    `QueryBase<T>` hierarchies are not yet expanded when discovering requests;
    classes must implement a recognized marker or `IRequest` directly (see
    [#53](https://github.com/AbdullahHakima/cqrslens/issues/53)).
-3. **Same-named interfaces across modules are ambiguous.** The text scanner does
-   not use `using` directives to disambiguate `ICommand` when several modules
-   declare their own. Configured markers recover direct implementations, but
-   handler/validator linking can still fall back to simple names (see
-   [#52](https://github.com/AbdullahHakima/cqrslens/issues/52)).
+3. **Using directives are parsed, not evaluated by MSBuild.** Namespace and
+   `using` resolution handles explicit local, global and alias imports. SDK
+   implicit usings, generated global usings, conditional compilation, extern
+   aliases and project references are not evaluated, so a contract can still be
+   invisible even though the compiler can see it. When multiple source
+   candidates remain, `AmbiguousContract` is reported instead of guessing.
 4. **Validator frameworks vary.** FluentValidation `AbstractValidator<T>` and
    `IValidator<T>` are recognized. FastEndpoints `Validator<T>` (see
    [#51](https://github.com/AbdullahHakima/cqrslens/issues/51)), custom
