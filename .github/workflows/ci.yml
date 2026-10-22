@@ -18,10 +18,10 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
@@ -95,14 +95,14 @@ jobs:
           grep -q '"schemaVersion": 1' artifacts/strict-baseline.json
 
       - name: Upload package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.os }}
           path: artifacts/*.nupkg
           if-no-files-found: error
 
       - name: Upload report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: report-${{ matrix.os }}
           path: artifacts/ARCHITECTURE-*.md
@@ -114,15 +114,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup .NET 8
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
 
       - name: Download package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: package-ubuntu-latest
           path: artifacts
@@ -201,7 +201,7 @@ jobs:
           grep -q '#### New findings' artifacts/installed-strict-summary.md
 
       - name: Upload installed-tool report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: installed-report
           path: |
@@ -220,15 +220,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Setup .NET ${{ matrix.runtime }}
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ matrix.runtime }}
 
       - name: Download package
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: package-ubuntu-latest
           path: artifacts
@@ -272,7 +272,7 @@ jobs:
           RUNTIME_VERSION: ${{ matrix.runtime }}
 
       - name: Upload runtime report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: runtime-report-${{ matrix.runtime }}
           path: artifacts/runtime-*-ARCHITECTURE.md
