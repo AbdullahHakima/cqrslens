@@ -21,6 +21,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         "IPipelineBehavior",
         "AbstractValidator",
         "IValidator",
+        "Validator",
         "DbContext",
         "DbContextOptions",
         "DbSet",
@@ -405,6 +406,12 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         if (probe.GetTypeByMetadataName("FluentValidation.AbstractValidator`1") is null)
             fluent.Add("public abstract class AbstractValidator<T> : IValidator<T> { protected AbstractValidator() { } }");
         AppendNamespace(sb, "FluentValidation", fluent);
+
+        var fastEndpoints = new List<string>();
+        if (probe.GetTypeByMetadataName("FastEndpoints.Validator`1") is null)
+            fastEndpoints.Add(
+                "public abstract class Validator<T> : FluentValidation.AbstractValidator<T> { protected Validator() { } }");
+        AppendNamespace(sb, "FastEndpoints", fastEndpoints);
 
         var ef = new List<string>();
         if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContext") is null)

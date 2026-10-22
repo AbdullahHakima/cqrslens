@@ -8,13 +8,13 @@ so an external repository changing or disappearing cannot block a release.
 
 ## Latest snapshot
 
-CqrsLens `0.5.0` development after #54, text analysis, 2026-10-22:
+CqrsLens `0.5.0` development after #51, text analysis, 2026-10-22:
 
 | Repository | Commit | Path | Markers | Handler markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 307 ms |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | `ICommandHandler,IQueryHandler` | 22 | 23 | 23 | 0 | 0/13 | 0/0/21 | 423 ms |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 763 ms |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 417 ms |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | `ICommandHandler,IQueryHandler` | 22 | 23 | 23 | 21 | 0/13 | 0/0/0 | 585 ms |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 1190 ms |
 
 Timings are machine-dependent; counts and commits are the reproducible part.
 Full Markdown reports, SARIF, logs and `results.tsv` come from the workflow
@@ -31,11 +31,15 @@ shapes; this table is a development snapshot, not the released package's results
   requests and now links all 23 handlers after configuring
   `ICommandHandler,IQueryHandler` as handler roots. The explicit roots let the
   scanner read the first generic argument of the external wrapper, so the 23
-  `MissingHandler` errors are gone. Its 13 FastEndpoints validators remain
-  unresolved (#51), producing 13 `CommandWithoutValidator` warnings and 21
-  `UnresolvedContract` info items. Without handler markers the default scan still
+  `MissingHandler` errors are gone. Without handler markers the default scan still
   links zero handlers and reports the wrapper gaps instead of guessing; the
   corpus row opts in explicitly.
+- **FastEndpoints validators:** 21 `Validator<T>` classes are now found and
+  linked to their endpoint request DTOs, and the 21 `UnresolvedContract` info
+  items are gone. The 13 `CommandWithoutValidator` warnings remain because they
+  are genuine: those validators target web request DTOs such as
+  `CreateContributorRequest`, while the MediatR commands have no validators in
+  the pinned tree. This is not a missed link.
 - **Per-module contracts and request bases:** `modular-monolith-with-ddd` now
   finds 105 requests and links all 105 handlers, up from 2 requests and 120
   handlers in the #52 snapshot. The previous extra 15 handlers were duplicate
@@ -50,11 +54,11 @@ shapes; this table is a development snapshot, not the released package's results
   remaining discovered commands. There are no `MissingHandler` errors. The
   warnings are useful validation coverage, not base-class false positives.
 - **Diagnostics are informative, not a clean bill of health.** No files were
-  skipped and there are no error/warning scan diagnostics. The 21 ardalis info
-  items are FastEndpoints `Validator` gaps surfaced by `UnresolvedContract`; they
-  are the remaining #51 work, not handler-link failures. `AmbiguousContract` and
-  `UnresolvedContract` are informational, appear in Markdown, the CI summary and
-  SARIF, and do not disable strict confidence on their own.
+  skipped and there are no scan diagnostics in this snapshot. The configured
+  handler roots and built-in FastEndpoints validator root account for the known
+  external shapes. `AmbiguousContract` and `UnresolvedContract` remain
+  informational, appear in Markdown, the CI summary and SARIF, and do not disable
+  strict confidence on their own.
 
 ## Known limitations
 
@@ -74,9 +78,9 @@ These are user-facing limits, not promises that the current corpus can fix:
    invisible even though the compiler can see it. When multiple source
    candidates remain, `AmbiguousContract` is reported instead of guessing.
 3. **Validator frameworks vary.** FluentValidation `AbstractValidator<T>` and
-   `IValidator<T>` are recognized. FastEndpoints `Validator<T>` (see
-   [#51](https://github.com/AbdullahHakima/cqrslens/issues/51)), custom
-   validation pipelines and manual validation are not.
+   `IValidator<T>`, plus FastEndpoints `Validator<T>`, are recognized. Other
+   external validator wrappers, custom validation pipelines and manual validation
+   are not.
 4. **No MSBuild evaluation.** Conditional compilation, imported props, generated
    sources, source generators and assembly references are not evaluated. Text
    mode is intentionally build-free; the Roslyn mode is still a source-only
@@ -140,7 +144,7 @@ pull requests and is not a required check.
 | Repository | License | Why it is included |
 | --- | --- | --- |
 | [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | MIT | Direct MediatR requests, handlers and FluentValidation validators; the happy path. |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | MIT | Popular template with external command/handler wrappers and FastEndpoints validation; exercises explicit handler-root configuration and the remaining validator gap. |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | MIT | Popular template with external command/handler wrappers and FastEndpoints validation; exercises explicit handler roots and validators whose targets are web DTOs rather than CQRS requests. |
 | [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | MIT | Multi-module DDD app with per-module contracts and generic request base classes; exercises module-aware resolution and base-class traversal. |
 
 Full commit SHAs are pinned in the corpus file. Updating a pin is a deliberate

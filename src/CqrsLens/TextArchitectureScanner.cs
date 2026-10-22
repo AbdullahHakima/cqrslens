@@ -122,6 +122,9 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
     {
         "AbstractValidator",
         "IValidator",
+        // FastEndpoints.Validator<T> is a framework contract that commonly
+        // arrives through a package, so it is not always in the scanned source.
+        "Validator",
     };
 
     /// <summary>
@@ -256,7 +259,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
 
             if (decl.BaseRawNames.Any(b => b is "DbContext" or "IdentityDbContext" or
                                                 "AbstractValidator" or "IValidator" or
-                                                "IPipelineBehavior"))
+                                                "Validator" or "IPipelineBehavior"))
                 continue;
 
             var location = SourceLocation.Create(
@@ -417,7 +420,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
 
         var hint = role == "handler"
             ? "Name an external handler wrapper with --handler-markers / handlerMarkers to link it."
-            : "External validator wrappers are not linked yet.";
+            : "FastEndpoints `Validator<T>` is recognized; other external validator wrappers are not linked yet.";
         result.RecordDiagnostic(new AnalysisDiagnostic(
             AnalysisResult.UnresolvedContractCode,
             AnalysisDiagnosticSeverity.Info,

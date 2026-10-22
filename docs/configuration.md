@@ -106,3 +106,7 @@ cqrslens . --markers ICommand,IQuery --handler-markers ICommandHandler,IQueryHan
 CqrsLens then reads the first generic argument as the request type, matching the
 MediatR convention. Explicit configuration avoids guessing from a type name; the
 default scan is unchanged.
+
+FastEndpoints validators do not need configuration: `Validator<T>` is recognized
+as a validator root and its first generic argument is linked using the same rules
+as FluentValidation validators.
