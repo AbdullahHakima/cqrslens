@@ -19,7 +19,7 @@ dotnet tool install -g CqrsLens
 ## Usage
 
 ```bash
-cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--strict]
+cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--strict]
 ```
 
 - The folder is searched recursively for `.csproj` and `.cs` files (`bin`, `obj`, `.git` are skipped).
@@ -131,6 +131,20 @@ Add `--strict` to fail (exit code `4`) when any **error** is found and the scan
 is complete enough to trust its architecture errors — built for CI gates. An
 incomplete or ambiguous scan reports diagnostics instead of failing on
 low-confidence data. The report is still written.
+
+### Existing codebases: baselines
+
+Adopt `--strict` incrementally by recording current findings once:
+
+```bash
+cqrslens . --write-baseline cqrslens-baseline.json
+cqrslens . --baseline cqrslens-baseline.json --strict
+```
+
+Findings are matched by rule + target + relative file, not line number, so
+unrelated edits and moved lines stay known. With a baseline, `--strict` fails
+only on **new** errors, and the report separates new from known findings. See
+[`docs/baseline.md`](docs/baseline.md) for the workflow and file format.
 
 ## Use in CI
 
