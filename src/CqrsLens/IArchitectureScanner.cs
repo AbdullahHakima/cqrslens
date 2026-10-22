@@ -7,5 +7,6 @@ internal interface IArchitectureScanner
     void Scan(
         IReadOnlyList<SourceFile> files,
         IReadOnlySet<string> markers,
+        IReadOnlySet<string> handlerMarkers,
         AnalysisResult result);
 }

@@ -21,6 +21,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         "IPipelineBehavior",
         "AbstractValidator",
         "IValidator",
+        "Validator",
         "DbContext",
         "DbContextOptions",
         "DbSet",
@@ -38,6 +39,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
     public void Scan(
         IReadOnlyList<SourceFile> files,
         IReadOnlySet<string> markers,
+        IReadOnlySet<string> handlerMarkers,
         AnalysisResult result)
     {
         var allFiles = files.ToList();
@@ -48,7 +50,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             var ownFiles = project.ToList();
             try
             {
-                ScanProject(ownFiles, allFiles, markers, result, ProjectLabel(project.Key));
+                ScanProject(
+                    ownFiles, allFiles, markers, handlerMarkers, result, ProjectLabel(project.Key));
             }
             catch (Exception ex)
             {
@@ -70,6 +73,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         IReadOnlyList<SourceFile> ownFiles,
         IReadOnlyList<SourceFile> allFiles,
         IReadOnlySet<string> markers,
+        IReadOnlySet<string> handlerMarkers,
         AnalysisResult result,
         string projectLabel)
     {
@@ -93,7 +97,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         {
             try
             {
-                ProcessTree(compilation, tree, file, markers, result);
+                ProcessTree(compilation, tree, file, markers, handlerMarkers, result);
             }
             catch (Exception ex)
             {
@@ -158,6 +162,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         SyntaxTree tree,
         SourceFile file,
         IReadOnlySet<string> markers,
+        IReadOnlySet<string> handlerMarkers,
         AnalysisResult result)
     {
         var model = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
@@ -172,7 +177,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 continue;
 
             AddRequest(symbol, file.ProjectName, markers, result);
-            AddHandlers(symbol, file.ProjectName, result);
+            AddHandlers(symbol, file.ProjectName, handlerMarkers, result);
             AddValidators(symbol, file.ProjectName, result);
             AddBehavior(symbol, file.ProjectName, result);
             AddDbContext(symbol, file.ProjectName, result);
@@ -249,12 +254,14 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
     private static void AddHandlers(
         INamedTypeSymbol symbol,
         string? projectName,
+        IReadOnlySet<string> handlerMarkers,
         AnalysisResult result)
     {
         if (symbol.IsAbstract) return;
 
         foreach (var handlerInterface in ImplementedInterfaces(symbol)
-                     .Where(i => i.Name == "IRequestHandler" && i.TypeArguments.Length >= 1))
+                     .Where(i => (i.Name == "IRequestHandler" || handlerMarkers.Contains(i.Name)) &&
+                                 i.TypeArguments.Length >= 1))
         {
             var target = handlerInterface.TypeArguments[0];
             if (target.TypeKind == TypeKind.TypeParameter)
@@ -399,6 +406,12 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         if (probe.GetTypeByMetadataName("FluentValidation.AbstractValidator`1") is null)
             fluent.Add("public abstract class AbstractValidator<T> : IValidator<T> { protected AbstractValidator() { } }");
         AppendNamespace(sb, "FluentValidation", fluent);
+
+        var fastEndpoints = new List<string>();
+        if (probe.GetTypeByMetadataName("FastEndpoints.Validator`1") is null)
+            fastEndpoints.Add(
+                "public abstract class Validator<T> : FluentValidation.AbstractValidator<T> { protected Validator() { } }");
+        AppendNamespace(sb, "FastEndpoints", fastEndpoints);
 
         var ef = new List<string>();
         if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContext") is null)

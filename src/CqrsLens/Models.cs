@@ -144,6 +144,9 @@ public sealed class HandlerInfo
     // Set when the request name in IRequestHandler<...> could be resolved to a namespace.
     public string? RequestNamespace { get; set; }
 
+    /// <summary>Namespaces imported by the declaring file, used by the linker.</summary>
+    internal List<string> ImportedNamespaces { get; } = new();
+
     public string? ProjectName { get; set; }
     public SourceLocation? Location { get; set; }
 }
@@ -165,6 +168,9 @@ public sealed class ValidatorInfo
 
     // Set when the validated type name could be resolved to a namespace.
     public string? TargetNamespace { get; set; }
+
+    /// <summary>Namespaces imported by the declaring file, used by the linker.</summary>
+    internal List<string> ImportedNamespaces { get; } = new();
 
     public string? ProjectName { get; set; }
     public SourceLocation? Location { get; set; }
@@ -252,6 +258,18 @@ public sealed class AnalysisResult
     public const string RoslynScanFailureCode = "RoslynScanFailure";
     public const string RoslynUnresolvedContractsCode = "RoslynUnresolvedContracts";
     public const string AmbiguousLinkCode = "AmbiguousLink";
+
+    /// <summary>
+    /// A shape contract has multiple source candidates and no local/using match.
+    /// Informational only: it explains a gap without changing check severity.
+    /// </summary>
+    public const string AmbiguousContractCode = "AmbiguousContract";
+
+    /// <summary>
+    /// A CQRS-looking wrapper/base type is not declared in the scanned source.
+    /// Informational only; external handler wrappers are tracked by #54.
+    /// </summary>
+    public const string UnresolvedContractCode = "UnresolvedContract";
 
     /// <summary>Source files discovered before any read/scan failures.</summary>
     public int DiscoveredFileCount { get; set; }
