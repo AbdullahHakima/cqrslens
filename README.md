@@ -346,7 +346,7 @@ The whole scan took 145 ms.
 | Projects & references | `.csproj` XML (`ProjectReference` Include/Update) |
 | Requests | classes/records/structs implementing `IRequest` or `IRequest<T>` — directly, through custom interfaces deriving from it, through source-declared base classes, or through `--markers` roots |
 | Handlers | `IRequestHandler<TRequest>` / `IRequestHandler<TRequest, TResponse>`, including source-declared wrappers and external wrappers named with `--handler-markers`; generic and non-generic overloads are resolved by arity |
-| Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation), including source-declared wrappers |
+| Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation) and `Validator<T>` (FastEndpoints), including source-declared wrappers |
 | Pipeline behaviors | `IPipelineBehavior<...>` implementations |
 | DbContexts | classes deriving from `DbContext` (incl. `IdentityDbContext`), with their `DbSet<T>`s attributed per class |
 
@@ -356,7 +356,8 @@ CqrsLens defaults to targeted source-text matching with no build or package
 restore. That makes text mode fast and able to map solutions that do not compile,
 at the cost of some precision. Opt-in `--analysis roslyn` uses Roslyn symbols for
 source-shape discovery while keeping the same no-build workflow. It shims known
-MediatR/FluentValidation/EF Core contracts that are not present in the source:
+MediatR/FluentValidation/FastEndpoints/EF Core contracts that are not present in
+the source:
 
 - Requests are followed through custom marker interfaces (anything deriving from
   `IRequest`, plus `--markers` roots) and through base *classes* declared in the
@@ -373,6 +374,8 @@ MediatR/FluentValidation/EF Core contracts that are not present in the source:
   present in the scanned source. Name them with `--handler-markers` /
   `handlerMarkers` to link handlers through them. Source-declared wrappers such
   as `ICommandHandler<T> : IRequestHandler<T>` are followed automatically.
+- FastEndpoints `Validator<T>` is recognized by name. Other external validator
+  wrappers and manual validation are not modeled.
 - Declarations written in unusual formatting can be missed. When in doubt, the
   report errs toward showing less, not inventing more.
 
