@@ -2,6 +2,38 @@
 
 All notable changes to CqrsLens are documented here.
 
+## [0.5.0] - 2026-10-22
+
+### Added
+
+- **FastEndpoints validators**: `Validator<T>` is recognized as a validator root
+  in text mode, and the Roslyn backend shims the same contract. Its first generic
+  argument is linked with the existing FluentValidation identity rules, so
+  endpoint validators appear in the CQRS map and no longer produce
+  `CommandWithoutValidator` warnings when they target a request (#51).
+- **External handler wrappers**: `--handler-markers ICommandHandler,IQueryHandler`
+  and the `handlerMarkers` config key (plus the Action's `handler-markers` input)
+  describe wrappers supplied by a package. CqrsLens reads the first generic
+  argument as the request type, matching MediatR. Without configuration, external
+  wrappers remain opaque and the scan diagnostic points to the option (#54).
+- **Module-aware contract resolution**: same-named requests, handlers and
+  validators are resolved through each file's namespace and `using` directives,
+  including global usings and namespace aliases. Genuine ambiguity is reported as
+  an informational diagnostic instead of linking the wrong contract (#52).
+- **Source-declared request base classes**: `CommandBase` / `QueryBase<T>` chains
+  declared in the scanned source are followed transitively, with concrete generic
+  response substitution and arity-aware handler/validator resolution (#53).
+
+### Changed
+
+- The real-world validation corpus records request and handler roots separately;
+  the ardalis row opts into `ICommandHandler,IQueryHandler`. The snapshot now
+  links 23/23 handlers there and recognizes 21 FastEndpoints validators, while
+  keeping the 13 genuine command-without-validator warnings.
+- FastEndpoints validators are discovered by default; other external validator
+  wrappers still require source declarations. Text analysis remains the default
+  and Roslyn remains opt-in.
+
 ## [0.4.0] - 2026-10-22
 
 ### Added

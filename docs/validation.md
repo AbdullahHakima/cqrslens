@@ -8,19 +8,19 @@ so an external repository changing or disappearing cannot block a release.
 
 ## Latest snapshot
 
-CqrsLens `0.5.0` development after #51, text analysis, 2026-10-22:
+CqrsLens `0.5.0`, text analysis, 2026-10-22:
 
 | Repository | Commit | Path | Markers | Handler markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 417 ms |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | `ICommandHandler,IQueryHandler` | 22 | 23 | 23 | 21 | 0/13 | 0/0/0 | 585 ms |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 1190 ms |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 1607 ms |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | `ICommandHandler,IQueryHandler` | 22 | 23 | 23 | 21 | 0/13 | 0/0/0 | 842 ms |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 1133 ms |
 
 Timings are machine-dependent; counts and commits are the reproducible part.
 Full Markdown reports, SARIF, logs and `results.tsv` come from the workflow
 artifact. The pinned refs live in [`validation/corpus.tsv`](../validation/corpus.tsv).
 The released `0.4.0` snapshot predates these scanner changes and linked far fewer
-shapes; this table is a development snapshot, not the released package's results.
+shapes; this table is the `0.5.0` release snapshot.
 
 ### What this snapshot says
 
