@@ -195,7 +195,23 @@ public enum CheckSeverity
     Error,
 }
 
-public sealed record CheckFinding(CheckSeverity Severity, string Code, string Message);
+public sealed record CheckFinding(
+    CheckSeverity Severity,
+    string Code,
+    string Message,
+    string? Target = null,
+    SourceLocation? Location = null,
+    string? ProjectName = null,
+    bool IsKnown = false)
+{
+    /// <summary>
+    /// Stable baseline identity: rule code + target + root-relative file. Line
+    /// numbers deliberately do not participate, so moving code does not turn a
+    /// known finding into a new one.
+    /// </summary>
+    public string BaselineKey =>
+        Baseline.CreateKey(Code, Target, Location?.File);
+}
 
 public sealed class AnalysisResult
 {
@@ -208,6 +224,12 @@ public sealed class AnalysisResult
     public List<DbContextInfo> DbContexts { get; } = new();
 
     public List<CheckFinding> Checks { get; } = new();
+
+    /// <summary>True when checks were compared with a baseline file.</summary>
+    public bool BaselineApplied { get; set; }
+
+    /// <summary>Baseline file used for this analysis, when any.</summary>
+    public string? BaselinePath { get; set; }
 
     public List<AnalysisDiagnostic> Diagnostics { get; } = new();
 

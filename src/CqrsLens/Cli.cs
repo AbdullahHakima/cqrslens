@@ -8,6 +8,8 @@ public sealed class CliOptions
     public string? Output { get; set; }
     public string? Format { get; set; }
     public string? ConfigPath { get; set; }
+    public string? BaselinePath { get; set; }
+    public string? WriteBaselinePath { get; set; }
     public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.Text;
     public bool AnalysisModeSpecified { get; set; }
     public DateTimeOffset? GeneratedAt { get; set; }
@@ -90,6 +92,16 @@ public static class CliParser
                     foreach (var name in args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                         options.Markers.Add(CSharpScanner.SimpleName(name));
                     break;
+                case "--baseline":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --baseline needs a value, e.g. --baseline cqrslens-baseline.json");
+                    options.BaselinePath = args[++i];
+                    break;
+                case "--write-baseline":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --write-baseline needs a value, e.g. --write-baseline cqrslens-baseline.json");
+                    options.WriteBaselinePath = args[++i];
+                    break;
                 case "--strict":
                     options.Strict = true;
                     break;
@@ -108,6 +120,9 @@ public static class CliParser
 
         if (options.Format is not null && options.Format != "md" && options.Format != "html")
             return Error($"error: unknown format '{options.Format}' - use md or html.");
+
+        if (options.BaselinePath is not null && options.WriteBaselinePath is not null)
+            return Error("error: use either --baseline or --write-baseline, not both.");
 
         return new CliCommand(CliCommandKind.Run, options);
     }
@@ -152,7 +167,7 @@ public static class CliRunner
         {
             return Execute(command.Options!, stdout, stderr);
         }
-        catch (ConfigurationException ex)
+        catch (Exception ex) when (ex is ConfigurationException or BaselineException)
         {
             stderr.WriteLine($"error: {ex.Message}");
             return ExitCodes.Usage;
@@ -207,7 +222,6 @@ public static class CliRunner
                      (options.Format is null &&
                       options.Output is not null &&
                       options.Output.EndsWith(".html", StringComparison.OrdinalIgnoreCase));
-        var report = isHtml ? HtmlReportGenerator.Generate(result) : ReportGenerator.Generate(result);
 
         var output = options.Output ?? Path.Combine(
             Directory.GetCurrentDirectory(), isHtml ? "ARCHITECTURE.html" : "ARCHITECTURE.md");
@@ -220,6 +234,19 @@ public static class CliRunner
             stderr.WriteLine($"error: output path is a directory: {output}");
             return ExitCodes.Usage;
         }
+
+        if (options.WriteBaselinePath is not null)
+        {
+            Baseline.Write(result, options.WriteBaselinePath);
+            Baseline.MarkAllKnown(result, options.WriteBaselinePath);
+        }
+        else if (options.BaselinePath is not null)
+        {
+            var baseline = Baseline.Read(options.BaselinePath);
+            Baseline.Apply(result, baseline, options.BaselinePath);
+        }
+
+        var report = isHtml ? HtmlReportGenerator.Generate(result) : ReportGenerator.Generate(result);
 
         var outputDirectory = Path.GetDirectoryName(fullOutput);
         if (!string.IsNullOrEmpty(outputDirectory))
@@ -245,7 +272,19 @@ public static class CliRunner
         if (result.Checks.Count > 0)
             stdout.WriteLine($"Architecture checks: {errors} error(s), {warnings} warning(s) - see the report.");
 
-        if (options.Strict && errors > 0)
+        if (result.BaselineApplied)
+        {
+            var known = result.Checks.Count(c => c.IsKnown);
+            var newFindings = result.Checks.Count - known;
+            if (options.WriteBaselinePath is not null)
+                stdout.WriteLine($"Baseline written to {options.WriteBaselinePath}: {known} finding(s) recorded.");
+            else
+                stdout.WriteLine($"Baseline: {known} known finding(s), {newFindings} new finding(s).");
+        }
+
+        var newErrors = result.Checks.Count(c =>
+            c.Severity == CheckSeverity.Error && (!result.BaselineApplied || !c.IsKnown));
+        if (options.Strict && newErrors > 0)
         {
             if (!result.CanRunStrictChecks)
             {
@@ -255,7 +294,8 @@ public static class CliRunner
                 return ExitCodes.Success;
             }
 
-            stderr.WriteLine($"error: --strict - {errors} architecture check error(s) found.");
+            var suffix = result.BaselineApplied ? "new architecture check error(s)" : "architecture check error(s)";
+            stderr.WriteLine($"error: --strict - {newErrors} {suffix} found.");
             return ExitCodes.StrictFailure;
         }
 
@@ -266,7 +306,7 @@ public static class CliRunner
     {
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--baseline FILE] [--write-baseline FILE] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (or .html) in the current directory.");
@@ -279,6 +319,9 @@ public static class CliRunner
         writer.WriteLine("  --markers     Comma-separated custom marker interface names that also count");
         writer.WriteLine("                as request roots (e.g. ICommand,IQuery,IMessage). Requests hidden");
         writer.WriteLine("                behind interfaces deriving from IRequest are always followed.");
+        writer.WriteLine("  --baseline    Compare checks with a baseline file; --strict then fails only");
+        writer.WriteLine("                on errors not present in the baseline.");
+        writer.WriteLine("  --write-baseline  Record current checks as the baseline, then continue.");
         writer.WriteLine("  --strict      Exit with code 4 when architecture checks report an error");
         writer.WriteLine("                and the scan is complete; incomplete scans report diagnostics.");
         writer.WriteLine("  --version     Print the tool version and exit.");

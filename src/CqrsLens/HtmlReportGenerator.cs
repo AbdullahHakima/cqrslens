@@ -184,16 +184,33 @@ public static class HtmlReportGenerator
         }
         else
         {
-            var errors = result.Checks.Count(c => c.Severity == CheckSeverity.Error);
-            var warnings = result.Checks.Count - errors;
-            html.AppendLine($"<p>{errors} error(s), {warnings} warning(s):</p>");
-            html.AppendLine("<ul class=\"checks\">");
-            foreach (var check in result.Checks)
+            var newChecks = result.BaselineApplied
+                ? result.Checks.Where(c => !c.IsKnown).ToList()
+                : result.Checks;
+            var knownChecks = result.BaselineApplied
+                ? result.Checks.Where(c => c.IsKnown).ToList()
+                : new List<CheckFinding>();
+
+            var errors = newChecks.Count(c => c.Severity == CheckSeverity.Error);
+            var warnings = newChecks.Count - errors;
+            if (result.BaselineApplied)
             {
-                var cls = check.Severity == CheckSeverity.Error ? "error" : "warning";
-                var badge = check.Severity == CheckSeverity.Error ? "❌ Error" : "⚠️ Warning";
-                html.AppendLine($"<li class=\"{cls}\">{badge} <strong>{E(check.Code)}</strong> — {E(check.Message)}</li>");
+                html.AppendLine(
+                    $"<p>{errors} new error(s), {warnings} new warning(s); " +
+                    $"{knownChecks.Count} known finding(s) from the baseline:</p>");
+                if (newChecks.Count == 0)
+                    html.AppendLine("<p>No new findings.</p>");
             }
+            else
+            {
+                html.AppendLine($"<p>{errors} error(s), {warnings} warning(s):</p>");
+            }
+
+            html.AppendLine("<ul class=\"checks\">");
+            foreach (var check in newChecks)
+                AppendCheckHtml(html, check, known: false);
+            foreach (var check in knownChecks)
+                AppendCheckHtml(html, check, known: true);
             html.AppendLine("</ul>");
         }
 
@@ -212,6 +229,21 @@ public static class HtmlReportGenerator
         html.AppendLine("</html>");
 
         return html.ToString();
+    }
+
+    private static void AppendCheckHtml(StringBuilder html, CheckFinding check, bool known)
+    {
+        var cls = known
+            ? "info"
+            : check.Severity == CheckSeverity.Error ? "error" : "warning";
+        var badge = known
+            ? "ℹ️ Known"
+            : check.Severity == CheckSeverity.Error ? "❌ Error" : "⚠️ Warning";
+        var locality = check.Location is null
+            ? ""
+            : $" <code>{E($"{check.Location.File}:{check.Location.Line}:{check.Location.Column}")}</code>";
+        html.AppendLine(
+            $"<li class=\"{cls}\">{badge} <strong>{E(check.Code)}</strong> — {E(check.Message)}{locality}</li>");
     }
 
     private static void AppendCard(StringBuilder html, string label, int value)
