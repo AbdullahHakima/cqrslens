@@ -178,6 +178,14 @@ The report and SARIF file are uploaded as `cqrslens-architecture-report` and
 findings, and emits GitHub annotations for new findings. See
 [`docs/ci.md`](docs/ci.md) for SARIF upload permissions and CLI equivalents.
 
+### Real-world validation
+
+A nightly, non-blocking [validation workflow](.github/workflows/real-world-validation.yml)
+scans a pinned public MediatR / Clean Architecture corpus and publishes counts,
+diagnostics, reports and SARIF. The current snapshot and known static-analysis
+limitations are in [`docs/validation.md`](docs/validation.md); run the same
+corpus locally with `bash scripts/validate-real-world.sh` after a Release build.
+
 ## What you get
 
 Everything below is **actual output** generated from [`samples/SampleShop`](samples/SampleShop),

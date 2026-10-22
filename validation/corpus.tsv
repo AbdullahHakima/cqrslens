@@ -1,0 +1,14 @@
+# Pinned real-world corpus. Columns are tab-separated:
+# name <TAB> clone URL <TAB> commit <TAB> subdirectory <TAB> markers
+#
+# Commits are full SHAs on purpose: a nightly run must test the same code even
+# when upstream default branches move. Update deliberately when reviewing
+# scanner changes, and record the new date in docs/validation.md.
+#
+# markers: "-" means no custom markers; otherwise pass --markers so apps whose
+# request contracts live in an external package or are repeated per module are
+# measured with their intended abstractions. Results still record the markers
+# used, so a default-scan gap remains visible in the notes.
+jasontaylordev-clean-architecture	https://github.com/jasontaylordev/CleanArchitecture.git	968abf7dc4884d14d558e04828dff6d3324b1775	.	-
+ardalis-clean-architecture	https://github.com/ardalis/CleanArchitecture.git	e7c79be54ba0b001a5b332c1efe935f520b9db4b	.	ICommand,IQuery
+modular-monolith-with-ddd	https://github.com/kgrzybek/modular-monolith-with-ddd.git	91c8ef24b4cb6ef558c95d8267fa07d68c7059f8	src	ICommand,IQuery
