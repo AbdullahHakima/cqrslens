@@ -37,11 +37,34 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Restore (locked)
+        run: dotnet restore CqrsLens.sln --locked-mode
+
+      - name: Build
+        run: dotnet build CqrsLens.sln -c Release --no-restore --nologo
+
       - name: Test
-        run: dotnet test CqrsLens.sln -c Release
+        run: dotnet test CqrsLens.sln -c Release --no-build --nologo
 
       - name: Pack
-        run: dotnet pack src/CqrsLens/CqrsLens.csproj -c Release -o artifacts
+        run: dotnet pack src/CqrsLens/CqrsLens.csproj -c Release --no-build -o artifacts
+
+      - name: Verify the packed tool installs and runs
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n1)
+          test -n "$version"
+          dotnet tool install --global CqrsLens --version "$version" \
+            --add-source "$PWD/artifacts"
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          cqrslens samples/SampleShop --analysis text --strict \
+            --generated-at 2026-01-02T03:04:05Z -o artifacts/release-smoke.md
+          grep -q "| Requests (commands + queries) | 4 |" artifacts/release-smoke.md
+          grep -q "| Handlers | 4 |" artifacts/release-smoke.md
+          grep -q "| Validators | 2 |" artifacts/release-smoke.md
+          grep -q "| Pipeline behaviors | 1 |" artifacts/release-smoke.md
+          grep -q "| DbContexts | 1 |" artifacts/release-smoke.md
 
       - name: NuGet login (Trusted Publishing)
         uses: NuGet/login@v1
