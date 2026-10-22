@@ -59,9 +59,9 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- **Scanner hardening from real-world validation**: external/custom handler
-  wrappers (#54) and FastEndpoints validators (#51); same-named contract
-  resolution (#52) and request base classes (#53) are complete
+- **Scanner hardening from real-world validation**: FastEndpoints validators
+  (#51); external handler wrappers (#54), request base classes (#53), and
+  same-named contract resolution (#52) are complete
 - **Roslyn hardening**: load evaluated MSBuild/package references and compare
   broader real codebases before considering Roslyn as the default. Text mode
   stays as the fast fallback.

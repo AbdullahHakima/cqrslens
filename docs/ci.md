@@ -40,6 +40,7 @@ the repository root. It uploads `cqrslens-architecture-report` and
 | `format` | `md` | `md` or `html`. |
 | `strict` | `false` | Fail on architecture-check errors; with `baseline`, only new errors. |
 | `markers` | empty | Comma-separated custom request markers. |
+| `handler-markers` | empty | Comma-separated handler roots for external wrapper interfaces. |
 | `analysis` | empty | `text` or `roslyn`; empty uses config, then text. |
 | `config` | empty | `.cqrslens.json` path; empty auto-discovers at the scan root. |
 | `baseline` | empty | Baseline file for known/new matching. |

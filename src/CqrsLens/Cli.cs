@@ -20,6 +20,8 @@ public sealed class CliOptions
     public bool Strict { get; set; }
     public bool MarkersSpecified { get; set; }
     public HashSet<string> Markers { get; } = new(StringComparer.Ordinal);
+    public bool HandlerMarkersSpecified { get; set; }
+    public HashSet<string> HandlerMarkers { get; } = new(StringComparer.Ordinal);
 }
 
 public enum CliCommandKind
@@ -95,6 +97,13 @@ public static class CliParser
                     options.MarkersSpecified = true;
                     foreach (var name in args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                         options.Markers.Add(CSharpScanner.SimpleName(name));
+                    break;
+                case "--handler-markers":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --handler-markers needs a value, e.g. --handler-markers ICommandHandler,IQueryHandler");
+                    options.HandlerMarkersSpecified = true;
+                    foreach (var name in args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        options.HandlerMarkers.Add(CSharpScanner.SimpleName(name));
                     break;
                 case "--baseline":
                     if (i + 1 >= args.Length)
@@ -247,6 +256,9 @@ public static class CliRunner
         var markers = options.MarkersSpecified
             ? options.Markers
             : settings.Markers;
+        var handlerMarkers = options.HandlerMarkersSpecified
+            ? options.HandlerMarkers
+            : settings.HandlerMarkers;
 
         var result = Analyzer.Analyze(
             path,
@@ -254,6 +266,7 @@ public static class CliRunner
             new AnalysisOptions
             {
                 Markers = markers,
+                HandlerMarkers = handlerMarkers,
                 GeneratedAt = options.GeneratedAt,
                 Include = settings.Include,
                 Exclude = settings.Exclude,
@@ -409,12 +422,12 @@ public static class CliRunner
     {
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (or .html) in the current directory.");
         writer.WriteLine("  --config      Config file. Default: <path>/.cqrslens.json when present.");
-        writer.WriteLine("                Settings: analysis, markers, include/exclude globs, layers, rules.");
+        writer.WriteLine("                Settings: analysis, markers, handlerMarkers, include/exclude globs, layers, rules.");
         writer.WriteLine("  --format      Report format: md (default) or html. A .html -o path implies html.");
         writer.WriteLine("  --analysis    Analysis backend: text (default) or roslyn (opt-in).");
         writer.WriteLine("  --generated-at  Fixed ISO-8601 timestamp for reproducible reports (tests/CI);");
@@ -422,6 +435,9 @@ public static class CliRunner
         writer.WriteLine("  --markers     Comma-separated custom marker interface names that also count");
         writer.WriteLine("                as request roots (e.g. ICommand,IQuery,IMessage). Requests hidden");
         writer.WriteLine("                behind interfaces deriving from IRequest are always followed.");
+        writer.WriteLine("  --handler-markers  Comma-separated custom handler roots for external wrappers");
+        writer.WriteLine("                (e.g. ICommandHandler,IQueryHandler). Source-declared wrappers");
+        writer.WriteLine("                are followed automatically.");
         writer.WriteLine("  --baseline    Compare checks with a baseline file; --strict then fails only");
         writer.WriteLine("                on errors not present in the baseline.");
         writer.WriteLine("  --write-baseline  Record current checks as the baseline, then continue.");

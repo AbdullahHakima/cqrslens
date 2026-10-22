@@ -7,6 +7,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
     public void Scan(
         IReadOnlyList<SourceFile> files,
         IReadOnlySet<string> markers,
+        IReadOnlySet<string> handlerMarkers,
         AnalysisResult result)
     {
         var fragments = new ConcurrentBag<(SourceFile File, CSharpScanner.FileScan Scan)>();
@@ -74,11 +75,15 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             }
         }
 
+        var handlerRoots = new HashSet<string>(HandlerRoots, StringComparer.Ordinal);
+        foreach (var marker in handlerMarkers)
+            handlerRoots.Add(CSharpScanner.SimpleName(marker));
+
         foreach (var (file, scan) in ordered)
         {
             CSharpScanner.ApplyScan(scan, file.Code, file.ProjectName, result, file.Path);
             DiscoverMarkerRequests(scan, file, hierarchy, interfaceMap, markers, result);
-            DiscoverIndirectShapes(scan, file, hierarchy, result);
+            DiscoverIndirectShapes(scan, file, hierarchy, handlerRoots, result);
         }
     }
 
@@ -127,6 +132,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         CSharpScanner.FileScan scan,
         SourceFile file,
         TypeHierarchy hierarchy,
+        IReadOnlySet<string> handlerRoots,
         AnalysisResult result)
     {
         foreach (var decl in scan.Classes)
@@ -147,7 +153,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                     var resolvedHandler = hierarchy.TryResolveShapeTarget(
                         decl.Namespace,
                         part,
-                        HandlerRoots,
+                        handlerRoots,
                         decl.Usings,
                         decl.ContainingTypes,
                         out var requestType,
@@ -178,7 +184,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                             result.Handlers.Add(handler);
                         }
                     }
-                    else if (LooksLikeHandlerContract(simple))
+                    else if (handlerRoots.Contains(simple) || LooksLikeHandlerContract(simple))
                     {
                         RecordShapeResolutionGap(
                             result, file, decl.BodySpan.Start, decl.Name, simple,
@@ -409,11 +415,14 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         // not an external wrapper; stay quiet. Only an unknown type is a gap.
         if (hierarchy.HasInterface(reference)) return;
 
+        var hint = role == "handler"
+            ? "Name an external handler wrapper with --handler-markers / handlerMarkers to link it."
+            : "External validator wrappers are not linked yet.";
         result.RecordDiagnostic(new AnalysisDiagnostic(
             AnalysisResult.UnresolvedContractCode,
             AnalysisDiagnosticSeverity.Info,
             $"`{owner}` looks like a {role} through `{reference}`, but that contract has no source declaration. " +
-            "External wrappers need explicit support; this shape was not linked.",
+            hint,
             SourceLocation.Create(file.Path, result.RootPath, file.Code, sourceIndex),
             file.ProjectName));
     }

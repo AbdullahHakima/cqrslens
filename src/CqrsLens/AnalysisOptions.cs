@@ -10,6 +10,14 @@ public sealed class AnalysisOptions
     public IReadOnlySet<string> Markers { get; init; } =
         new HashSet<string>(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Interface names that count as handler roots in addition to
+    /// IRequestHandler. Useful for wrappers supplied by an external package
+    /// whose inheritance chain is not part of the scanned source.
+    /// </summary>
+    public IReadOnlySet<string> HandlerMarkers { get; init; } =
+        new HashSet<string>(StringComparer.Ordinal);
+
     public DateTimeOffset? GeneratedAt { get; init; }
 
     /// <summary>Root-relative include globs; empty means include everything.</summary>

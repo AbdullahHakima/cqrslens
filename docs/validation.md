@@ -8,34 +8,34 @@ so an external repository changing or disappearing cannot block a release.
 
 ## Latest snapshot
 
-CqrsLens `0.5.0` development after #53, text analysis, 2026-10-22:
+CqrsLens `0.5.0` development after #54, text analysis, 2026-10-22:
 
-| Repository | Commit | Path | Markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time |
-| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 652 ms |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | 22 | 23 | 0 | 0 | 23/13 | 0/0/44 | 470 ms |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 1595 ms |
+| Repository | Commit | Path | Markers | Handler markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 307 ms |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | `ICommandHandler,IQueryHandler` | 22 | 23 | 23 | 0 | 0/13 | 0/0/21 | 423 ms |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 763 ms |
 
 Timings are machine-dependent; counts and commits are the reproducible part.
 Full Markdown reports, SARIF, logs and `results.tsv` come from the workflow
 artifact. The pinned refs live in [`validation/corpus.tsv`](../validation/corpus.tsv).
-The released `0.4.0` snapshot had 0 handlers for the modular monolith and no
-informational diagnostics for these repositories; this table is a development
-snapshot, not the released package's results.
+The released `0.4.0` snapshot predates these scanner changes and linked far fewer
+shapes; this table is a development snapshot, not the released package's results.
 
 ### What this snapshot says
 
 - **MediatR-native app:** `jasontaylordev/CleanArchitecture` remains fully linked
   (11 requests, 11 handlers, 6 validators). Its three warnings are commands that
   genuinely have no validator in the scanned tree.
-- **External command/handler wrappers:** `ardalis/CleanArchitecture` is detected
-  as 23 requests after configuring `ICommand,IQuery`, but its handlers derive
-  from a wrapper supplied by an external package. The scanner now reports 44
-  informational diagnostics instead of failing silently: 13 `ICommandHandler`,
-  10 `IQueryHandler`, and 21 FastEndpoints `Validator` references have no source
-  declaration. These are the known #54 and #51 gaps, not new architecture
-  findings. The 23 `MissingHandler` errors and 13 validator warnings remain
-  **false positives** until those wrappers are supported.
+- **External command/handler wrappers:** `ardalis/CleanArchitecture` detects 23
+  requests and now links all 23 handlers after configuring
+  `ICommandHandler,IQueryHandler` as handler roots. The explicit roots let the
+  scanner read the first generic argument of the external wrapper, so the 23
+  `MissingHandler` errors are gone. Its 13 FastEndpoints validators remain
+  unresolved (#51), producing 13 `CommandWithoutValidator` warnings and 21
+  `UnresolvedContract` info items. Without handler markers the default scan still
+  links zero handlers and reports the wrapper gaps instead of guessing; the
+  corpus row opts in explicitly.
 - **Per-module contracts and request bases:** `modular-monolith-with-ddd` now
   finds 105 requests and links all 105 handlers, up from 2 requests and 120
   handlers in the #52 snapshot. The previous extra 15 handlers were duplicate
@@ -50,10 +50,11 @@ snapshot, not the released package's results.
   remaining discovered commands. There are no `MissingHandler` errors. The
   warnings are useful validation coverage, not base-class false positives.
 - **Diagnostics are informative, not a clean bill of health.** No files were
-  skipped and there are no error/warning scan diagnostics. The 44 ardalis info
-  items are actionable gaps surfaced by `UnresolvedContract`. `AmbiguousContract`
-  and `UnresolvedContract` are informational, appear in Markdown, the CI summary
-  and SARIF, and do not disable strict confidence on their own.
+  skipped and there are no error/warning scan diagnostics. The 21 ardalis info
+  items are FastEndpoints `Validator` gaps surfaced by `UnresolvedContract`; they
+  are the remaining #51 work, not handler-link failures. `AmbiguousContract` and
+  `UnresolvedContract` are informational, appear in Markdown, the CI summary and
+  SARIF, and do not disable strict confidence on their own.
 
 ## Known limitations
 
@@ -63,9 +64,9 @@ These are user-facing limits, not promises that the current corpus can fix:
    request base classes are followed transitively, including generic response
    substitution. A chain that leaves the scanned source cannot be continued; it
    is surfaced as an `UnresolvedContract` info diagnostic instead of being
-   guessed. External handler wrappers are still opaque: a handler implementing
-   an external `ICommandHandler` cannot be linked to `IRequestHandler` (see
-   [#54](https://github.com/AbdullahHakima/cqrslens/issues/54)).
+   guessed. External handler wrappers stay opaque unless they are named with
+   `--handler-markers` / `handlerMarkers`; source-declared wrappers are followed
+   automatically.
 2. **Using directives are parsed, not evaluated by MSBuild.** Namespace and
    `using` resolution handles explicit local, global and alias imports. SDK
    implicit usings, generated global usings, conditional compilation, extern
@@ -127,8 +128,8 @@ pull requests and is not a required check.
 1. Pick a public repository with a clear license and a useful MediatR/CQRS
    shape.
 2. Add its full commit SHA (not a branch) and scan path to
-   `validation/corpus.tsv`; add custom markers only when the project documents
-   them.
+   `validation/corpus.tsv`; add custom request or handler markers only when the
+   project documents them.
 3. Run the script locally and review the report, not just the counts.
 4. Update the snapshot table and limitations above when the corpus changes.
 5. File focused scanner issues for false positives/negatives found here. Do not
@@ -139,7 +140,7 @@ pull requests and is not a required check.
 | Repository | License | Why it is included |
 | --- | --- | --- |
 | [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | MIT | Direct MediatR requests, handlers and FluentValidation validators; the happy path. |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | MIT | Popular template with external command/handler wrappers and FastEndpoints validation; exposes external-base-type gaps. |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | MIT | Popular template with external command/handler wrappers and FastEndpoints validation; exercises explicit handler-root configuration and the remaining validator gap. |
 | [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | MIT | Multi-module DDD app with per-module contracts and generic request base classes; exercises module-aware resolution and base-class traversal. |
 
 Full commit SHAs are pinned in the corpus file. Updating a pin is a deliberate

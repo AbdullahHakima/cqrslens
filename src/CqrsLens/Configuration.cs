@@ -16,6 +16,7 @@ public sealed record CqrsLensSettings(
     string? ConfigPath,
     AnalysisMode? AnalysisMode,
     IReadOnlySet<string> Markers,
+    IReadOnlySet<string> HandlerMarkers,
     IReadOnlyList<string> Include,
     IReadOnlyList<string> Exclude,
     IReadOnlyDictionary<string, string> LayerOverrides,
@@ -24,6 +25,7 @@ public sealed record CqrsLensSettings(
     public static readonly CqrsLensSettings Empty = new(
         null,
         null,
+        new HashSet<string>(StringComparer.Ordinal),
         new HashSet<string>(StringComparer.Ordinal),
         Array.Empty<string>(),
         Array.Empty<string>(),
@@ -121,13 +123,8 @@ public static class ConfigurationLoader
             };
         }
 
-        var markers = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var marker in (IEnumerable<string>?)config.Markers ?? Array.Empty<string>())
-        {
-            if (string.IsNullOrWhiteSpace(marker))
-                throw Invalid(path, "markers cannot contain an empty value");
-            markers.Add(CSharpScanner.SimpleName(marker.Trim()));
-        }
+        var markers = ValidateMarkerNames(path, "markers", config.Markers);
+        var handlerMarkers = ValidateMarkerNames(path, "handlerMarkers", config.HandlerMarkers);
 
         var include = ValidatePatterns(path, "include", config.Include);
         var exclude = ValidatePatterns(path, "exclude", config.Exclude);
@@ -167,10 +164,27 @@ public static class ConfigurationLoader
             path,
             analysis,
             markers,
+            handlerMarkers,
             include,
             exclude,
             layers,
             rules);
+    }
+
+    private static IReadOnlySet<string> ValidateMarkerNames(
+        string path,
+        string property,
+        IReadOnlyList<string>? values)
+    {
+        var markers = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var marker in values ?? Array.Empty<string>())
+        {
+            if (string.IsNullOrWhiteSpace(marker))
+                throw Invalid(path, $"{property} cannot contain an empty value");
+            markers.Add(CSharpScanner.SimpleName(marker.Trim()));
+        }
+
+        return markers;
     }
 
     private static IReadOnlyList<string> ValidatePatterns(
@@ -207,6 +221,7 @@ public static class ConfigurationLoader
 
         public string? Analysis { get; set; }
         public List<string>? Markers { get; set; }
+        public List<string>? HandlerMarkers { get; set; }
         public List<string>? Include { get; set; }
         public List<string>? Exclude { get; set; }
         public Dictionary<string, string>? Layers { get; set; }
