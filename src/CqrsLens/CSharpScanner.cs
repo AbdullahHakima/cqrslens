@@ -19,6 +19,12 @@ public static partial class CSharpScanner
         public List<ClassDecl> Classes { get; } = new();
         public List<InterfaceDecl> InterfaceDecls { get; } = new();
 
+        /// <summary>
+        /// Local and global using directives in this file. Project-level global
+        /// usings are appended by the text scanner before resolution runs.
+        /// </summary>
+        public List<UsingDirective> Usings { get; } = new();
+
         /// <summary>Interface name → its base interface names as written, generics stripped.</summary>
         public Dictionary<string, List<string>> Interfaces { get; } = new(StringComparer.Ordinal);
     }
@@ -38,6 +44,9 @@ public static partial class CSharpScanner
 
         /// <summary>Declared generic parameter names (e.g. TRequest, TResponse).</summary>
         public List<string> TypeParameters { get; init; } = new();
+
+        /// <summary>Using directives from the declaring file, shared with the scan.</summary>
+        public List<UsingDirective> Usings { get; init; } = new();
 
         public bool IsAbstract { get; init; }
 
@@ -63,6 +72,10 @@ public static partial class CSharpScanner
         public required string Namespace { get; init; }
         public required string BaseList { get; init; }
         public List<string> TypeParameters { get; init; } = new();
+
+        /// <summary>Using directives from the declaring file, shared with the scan.</summary>
+        public List<UsingDirective> Usings { get; init; } = new();
+
         public List<string> ContainingTypes { get; } = new();
         public required (int Start, int End) BodySpan { get; init; }
 
@@ -222,6 +235,7 @@ public static partial class CSharpScanner
         var mask = SourceMask.Build(code);
         var namespaces = NamespaceMap.Build(code, mask);
         var scan = new FileScan { Namespace = namespaces.FirstNamespace };
+        scan.Usings.AddRange(UsingDirectiveParser.Extract(code, mask, namespaces));
 
         foreach (Match m in InterfaceDeclarationRegex().Matches(code))
         {
@@ -235,6 +249,7 @@ public static partial class CSharpScanner
                 Namespace = namespaces.NamespaceAt(m.Index),
                 BaseList = baseList,
                 TypeParameters = ParseTypeParameters(m.Groups[2].Value),
+                Usings = scan.Usings,
                 BodySpan = ComputeTypeSpan(code, mask, m.Index, openBrace),
             });
             if (!scan.Interfaces.ContainsKey(name))
@@ -259,6 +274,7 @@ public static partial class CSharpScanner
                 BaseTypeNames = ExtractBaseTypeNames(baseList),
                 BaseRawNames = ExtractBaseRawNames(baseList),
                 TypeParameters = ParseTypeParameters(m.Groups[2].Value),
+                Usings = scan.Usings,
                 IsAbstract = IsAbstractDeclaration(code, m.Index),
                 BodySpan = span,
             });
@@ -299,6 +315,25 @@ public static partial class CSharpScanner
         if (openBrace < 0) return (declStart, declStart);
         var close = mask.FindMatchingBrace(openBrace);
         return (declStart, close < 0 ? code.Length : close + 1);
+    }
+
+    /// <summary>
+    /// Records namespaces imported by non-alias, non-static usings. The linker
+    /// uses them after written/fallback namespaces and before a unique-simple-name
+    /// guess, so a handler can point at the contract its file actually imports.
+    /// </summary>
+    internal static void AddImportedNamespaces(
+        IEnumerable<UsingDirective> usings,
+        List<string> target)
+    {
+        foreach (var directive in usings)
+        {
+            foreach (var ns in directive.NamespaceCandidates())
+            {
+                if (!target.Contains(ns, StringComparer.Ordinal))
+                    target.Add(ns);
+            }
+        }
     }
 
     /// <summary>
@@ -361,6 +396,7 @@ public static partial class CSharpScanner
                     Location = location,
                 };
                 handler.ContainingTypes.AddRange(decl.ContainingTypes);
+                AddImportedNamespaces(decl.Usings, handler.ImportedNamespaces);
                 result.Handlers.Add(handler);
             }
 
@@ -390,6 +426,7 @@ public static partial class CSharpScanner
                     Location = location,
                 };
                 validator.ContainingTypes.AddRange(decl.ContainingTypes);
+                AddImportedNamespaces(decl.Usings, validator.ImportedNamespaces);
                 result.Validators.Add(validator);
             }
 
