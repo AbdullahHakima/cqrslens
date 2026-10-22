@@ -80,16 +80,42 @@ public static class ArchitectureChecker
             }
         }
 
-        findings.Sort((a, b) =>
+        Sort(findings);
+        return findings;
+    }
+
+    /// <summary>Applies .cqrslens.json rule severities; null means the rule is off.</summary>
+    public static List<CheckFinding> ApplyRuleSeverities(
+        IEnumerable<CheckFinding> findings,
+        IReadOnlyDictionary<string, CheckSeverity?> overrides)
+    {
+        var filtered = new List<CheckFinding>();
+        foreach (var finding in findings)
+        {
+            var severity = finding.Severity;
+            if (overrides.TryGetValue(finding.Code, out var configured))
+            {
+                if (configured is null)
+                    continue;
+                severity = configured.Value;
+            }
+
+            filtered.Add(finding with { Severity = severity });
+        }
+
+        Sort(filtered);
+        return filtered;
+    }
+
+    public static bool HasErrors(IEnumerable<CheckFinding> findings)
+        => findings.Any(f => f.Severity == CheckSeverity.Error);
+
+    private static void Sort(List<CheckFinding> findings)
+        => findings.Sort((a, b) =>
         {
             var bySeverity = b.Severity.CompareTo(a.Severity); // errors first
             if (bySeverity != 0) return bySeverity;
             var byCode = string.Compare(a.Code, b.Code, StringComparison.Ordinal);
             return byCode != 0 ? byCode : string.Compare(a.Message, b.Message, StringComparison.Ordinal);
         });
-        return findings;
-    }
-
-    public static bool HasErrors(IEnumerable<CheckFinding> findings)
-        => findings.Any(f => f.Severity == CheckSeverity.Error);
 }

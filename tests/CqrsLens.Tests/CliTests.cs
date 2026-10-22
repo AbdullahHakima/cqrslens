@@ -132,6 +132,7 @@ public class CliTests : IDisposable
     [InlineData("-o")]
     [InlineData("--output")]
     [InlineData("--format")]
+    [InlineData("--config")]
     [InlineData("--analysis")]
     [InlineData("--markers")]
     public void OptionWithoutValue_IsUsageError(string option)

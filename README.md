@@ -19,7 +19,7 @@ dotnet tool install -g CqrsLens
 ## Usage
 
 ```bash
-cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--strict]
+cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--strict]
 ```
 
 - The folder is searched recursively for `.csproj` and `.cs` files (`bin`, `obj`, `.git` are skipped).
@@ -78,6 +78,29 @@ Reports record the scanner, a single generation timestamp, source locations and 
 diagnostics section for skipped files, unresolved contracts and ambiguous links.
 `--strict` only exits with code 4 when the scan is complete enough to trust its
 architecture errors; on an incomplete scan it reports the diagnostics instead.
+
+### Configuration
+
+For larger or noisy repositories, put settings in `.cqrslens.json` at the scan
+root (`--config FILE` selects another file):
+
+```json
+{
+  "$schema": "https://raw.githubusercontent.com/AbdullahHakima/cqrslens/main/cqrslens.schema.json",
+  "analysis": "text",
+  "markers": ["ICommand", "IQuery"],
+  "include": ["src/**"],
+  "exclude": ["**/Migrations/**", "**/Generated/**"],
+  "layers": { "Contoso.Domain": "Domain" },
+  "rules": { "AmbiguousProjectName": "off", "CommandWithoutValidator": "warning" }
+}
+```
+
+`include`/`exclude` are case-insensitive root-relative globs (`**`, `*`, `?`).
+`layers` overrides project classification, and `rules` accepts `off`, `warning`
+or `error` for any architecture rule. Unknown keys and invalid values are usage
+errors. Explicit `--analysis` and `--markers` flags override the config values.
+See [`docs/configuration.md`](docs/configuration.md) for the full reference.
 
 ### Custom marker interfaces
 

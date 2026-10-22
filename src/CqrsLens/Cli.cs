@@ -7,9 +7,12 @@ public sealed class CliOptions
     public string? Path { get; set; }
     public string? Output { get; set; }
     public string? Format { get; set; }
+    public string? ConfigPath { get; set; }
     public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.Text;
+    public bool AnalysisModeSpecified { get; set; }
     public DateTimeOffset? GeneratedAt { get; set; }
     public bool Strict { get; set; }
+    public bool MarkersSpecified { get; set; }
     public HashSet<string> Markers { get; } = new(StringComparer.Ordinal);
 }
 
@@ -47,6 +50,11 @@ public static class CliParser
                         return Error("error: -o needs a value, e.g. -o ARCHITECTURE.md");
                     options.Output = args[++i];
                     break;
+                case "--config":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --config needs a value, e.g. --config .cqrslens.json");
+                    options.ConfigPath = args[++i];
+                    break;
                 case "--format":
                     if (i + 1 >= args.Length)
                         return Error("error: --format needs a value: md or html");
@@ -62,6 +70,7 @@ public static class CliParser
                         options.AnalysisMode = AnalysisMode.Roslyn;
                     else
                         return Error($"error: unknown analysis mode '{analysis}' - use text or roslyn.");
+                    options.AnalysisModeSpecified = true;
                     break;
                 case "--generated-at":
                     if (i + 1 >= args.Length)
@@ -77,6 +86,7 @@ public static class CliParser
                 case "--markers":
                     if (i + 1 >= args.Length)
                         return Error("error: --markers needs a value, e.g. --markers ICommand,IQuery");
+                    options.MarkersSpecified = true;
                     foreach (var name in args[++i].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
                         options.Markers.Add(CSharpScanner.SimpleName(name));
                     break;
@@ -142,6 +152,11 @@ public static class CliRunner
         {
             return Execute(command.Options!, stdout, stderr);
         }
+        catch (ConfigurationException ex)
+        {
+            stderr.WriteLine($"error: {ex.Message}");
+            return ExitCodes.Usage;
+        }
         catch (Exception ex)
         {
             // Keep the CLI's failure output concise; never dump a stack trace on users.
@@ -160,6 +175,7 @@ public static class CliRunner
         }
 
         var fullRoot = Path.GetFullPath(path);
+        var settings = ConfigurationLoader.Load(fullRoot, options.ConfigPath);
         if (CsprojParser.FindProjectFiles(fullRoot).Count == 0)
         {
             stderr.WriteLine($"error: no .csproj files found under: {path}");
@@ -167,11 +183,25 @@ public static class CliRunner
             return ExitCodes.NoProjects;
         }
 
+        var analysisMode = options.AnalysisModeSpecified
+            ? options.AnalysisMode
+            : settings.AnalysisMode ?? options.AnalysisMode;
+        var markers = options.MarkersSpecified
+            ? options.Markers
+            : settings.Markers;
+
         var result = Analyzer.Analyze(
             path,
-            options.AnalysisMode,
-            options.Markers,
-            options.GeneratedAt);
+            analysisMode,
+            new AnalysisOptions
+            {
+                Markers = markers,
+                GeneratedAt = options.GeneratedAt,
+                Include = settings.Include,
+                Exclude = settings.Exclude,
+                LayerOverrides = settings.LayerOverrides,
+                RuleSeverities = settings.RuleSeverities,
+            });
 
         var isHtml = options.Format == "html" ||
                      (options.Format is null &&
@@ -236,10 +266,12 @@ public static class CliRunner
     {
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (or .html) in the current directory.");
+        writer.WriteLine("  --config      Config file. Default: <path>/.cqrslens.json when present.");
+        writer.WriteLine("                Settings: analysis, markers, include/exclude globs, layers, rules.");
         writer.WriteLine("  --format      Report format: md (default) or html. A .html -o path implies html.");
         writer.WriteLine("  --analysis    Analysis backend: text (default) or roslyn (opt-in).");
         writer.WriteLine("  --generated-at  Fixed ISO-8601 timestamp for reproducible reports (tests/CI);");

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AbdullahHakima/cqrslens/main/cqrslens.schema.json",
+  "title": "CqrsLens configuration",
+  "description": "Configuration for CqrsLens .NET architecture scans.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional schema URL for editor completion."
+    },
+    "analysis": {
+      "type": "string",
+      "enum": ["text", "roslyn"],
+      "description": "Analysis backend. Text is the default."
+    },
+    "markers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Custom marker interface names that also count as request roots."
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Root-relative globs. When present, only matching source files are scanned."
+    },
+    "exclude": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Root-relative globs removed after include."
+    },
+    "layers": {
+      "type": "object",
+      "description": "Project-name to layer overrides.",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "rules": {
+      "type": "object",
+      "description": "Per-rule severity overrides.",
+      "additionalProperties": false,
+      "properties": {
+        "MissingHandler": { "$ref": "#/$defs/severity" },
+        "LayerViolation": { "$ref": "#/$defs/severity" },
+        "CommandWithoutValidator": { "$ref": "#/$defs/severity" },
+        "AmbiguousProjectName": { "$ref": "#/$defs/severity" }
+      }
+    }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["off", "warning", "error"]
+    }
+  }
+}
