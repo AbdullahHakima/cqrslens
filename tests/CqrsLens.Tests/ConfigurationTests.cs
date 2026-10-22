@@ -94,6 +94,62 @@ public class ConfigurationTests : IDisposable
     }
 
     [Fact]
+    public void ConfigHandlerMarkers_LinkExternalWrappers()
+    {
+        WriteFile("Features/Contributors.cs", """
+            using Ardalis.SharedKernel;
+
+            namespace App.Features;
+
+            public sealed record CreateContributorCommand : ICommand<Result<int>>;
+            public sealed class CreateContributorHandler
+                : ICommandHandler<CreateContributorCommand, Result<int>> { }
+            """);
+        WriteConfig("""
+            {
+              "markers": ["ICommand"],
+              "handlerMarkers": ["ICommandHandler"]
+            }
+            """);
+
+        var output = Path.Combine(_root, "handlers.md");
+        var result = Run(new[] { _root, "-o", output });
+
+        Assert.Equal(ExitCodes.Success, result.Code);
+        Assert.Contains("1 request(s), 1 handler(s)", result.Stdout);
+        Assert.DoesNotContain("MissingHandler", File.ReadAllText(output));
+    }
+
+    [Fact]
+    public void CliHandlerMarkers_OverrideConfigHandlerMarkers()
+    {
+        WriteFile("Features/Contributors.cs", """
+            using Ardalis.SharedKernel;
+
+            namespace App.Features;
+
+            public sealed record CreateContributorCommand : ICommand<Result<int>>;
+            public sealed class CreateContributorHandler
+                : ICommandHandler<CreateContributorCommand, Result<int>> { }
+            """);
+        WriteConfig("""
+            {
+              "markers": ["ICommand"],
+              "handlerMarkers": ["IWrongHandler"]
+            }
+            """);
+
+        var output = Path.Combine(_root, "override.md");
+        var withoutOverride = Run(new[] { _root, "-o", output });
+        Assert.Equal(ExitCodes.Success, withoutOverride.Code);
+        Assert.Contains("1 request(s), 0 handler(s)", withoutOverride.Stdout);
+
+        var withOverride = Run(new[] { _root, "-o", output, "--handler-markers", "ICommandHandler" });
+        Assert.Equal(ExitCodes.Success, withOverride.Code);
+        Assert.Contains("1 request(s), 1 handler(s)", withOverride.Stdout);
+    }
+
+    [Fact]
     public void CliAnalysis_OverridesConfigAnalysis()
     {
         WriteFile("Features/PingQuery.cs", """
@@ -170,6 +226,8 @@ public class ConfigurationTests : IDisposable
     [InlineData("""{ "rules": { "NoSuchRule": "error" } }""")]
     [InlineData("""{ "rules": { "MissingHandler": "fatal" } }""")]
     [InlineData("""{ "analysis": "magic" }""")]
+    [InlineData("""{ "markers": [""] }""")]
+    [InlineData("""{ "handlerMarkers": [""] }""")]
     public void InvalidConfig_IsAUsageError(string json)
     {
         WriteConfig(json);
