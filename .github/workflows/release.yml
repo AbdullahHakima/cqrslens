@@ -60,8 +60,11 @@ jobs:
           export PATH="$HOME/.dotnet/tools:$PATH"
           cqrslens samples/SampleShop --analysis text --strict \
             --generated-at 2026-01-02T03:04:05Z -o artifacts/release-smoke.md
-          grep -q "4 request(s), 4 handler(s), 2 validator(s), 1 behavior(s), 1 DbContext(s)" \
-            artifacts/release-smoke.md
+          grep -q "| Requests (commands + queries) | 4 |" artifacts/release-smoke.md
+          grep -q "| Handlers | 4 |" artifacts/release-smoke.md
+          grep -q "| Validators | 2 |" artifacts/release-smoke.md
+          grep -q "| Pipeline behaviors | 1 |" artifacts/release-smoke.md
+          grep -q "| DbContexts | 1 |" artifacts/release-smoke.md
 
       - name: NuGet login (Trusted Publishing)
         uses: NuGet/login@v1

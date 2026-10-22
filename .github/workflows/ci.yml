@@ -47,8 +47,12 @@ jobs:
             --strict \
             --generated-at 2026-01-02T03:04:05Z \
             -o "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
-          grep -q "4 request(s), 4 handler(s), 2 validator(s), 1 behavior(s), 1 DbContext(s)" \
+          grep -q "| Requests (commands + queries) | 4 |" \
             "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "| Handlers | 4 |" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "| Validators | 2 |" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "| Pipeline behaviors | 1 |" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+          grep -q "| DbContexts | 1 |" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
           grep -q "## CQRS Map" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
           test -s "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
 
@@ -101,8 +105,11 @@ jobs:
             --strict \
             --generated-at 2026-01-02T03:04:05Z \
             -o artifacts/installed-ARCHITECTURE.md
-          grep -q "4 request(s), 4 handler(s), 2 validator(s), 1 behavior(s), 1 DbContext(s)" \
-            artifacts/installed-ARCHITECTURE.md
+          grep -q "| Requests (commands + queries) | 4 |" artifacts/installed-ARCHITECTURE.md
+          grep -q "| Handlers | 4 |" artifacts/installed-ARCHITECTURE.md
+          grep -q "| Validators | 2 |" artifacts/installed-ARCHITECTURE.md
+          grep -q "| Pipeline behaviors | 1 |" artifacts/installed-ARCHITECTURE.md
+          grep -q "| DbContexts | 1 |" artifacts/installed-ARCHITECTURE.md
           grep -q "## CQRS Map" artifacts/installed-ARCHITECTURE.md
           test -s artifacts/installed-ARCHITECTURE.md
 
