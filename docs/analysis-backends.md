@@ -13,9 +13,9 @@ The backend boundary is `IArchitectureScanner`. `Analyzer` still owns file
 discovery, project ownership, linking, checks and timing; a scanner only turns
 source files into the shared analysis model.
 
-## Roslyn rollout
+## Roslyn backend
 
-The rollout for #1 is incremental:
+The 0.3.0 rollout for #1:
 
 1. text mode stays the default behind the scanner boundary;
 2. Roslyn covers requests, handlers, validators, behaviors and DbContexts;
@@ -34,8 +34,9 @@ not execute package code or claim that the target solution builds.
 
 It does not yet evaluate the target solution through MSBuild, so project/package
 references outside the shimmed contracts can remain unresolved. When a project or
-file cannot be scanned, Roslyn isolation records skipped files and a warning
-instead of silently returning an empty architecture.
+file cannot be scanned, Roslyn isolation records skipped files and structured
+diagnostics instead of silently returning an empty architecture. Those
+diagnostics also disable confidence-sensitive `--strict` failures.
 
 The important constraint is that report generation, architecture checks and
 Mermaid output should not care which scanner produced the model. That keeps the

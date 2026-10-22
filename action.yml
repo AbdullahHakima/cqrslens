@@ -30,10 +30,14 @@ inputs:
     description: Comma-separated custom marker interfaces (e.g. ICommand,IQuery).
     required: false
     default: ''
+  analysis:
+    description: 'Analysis backend: text (default) or roslyn.'
+    required: false
+    default: 'text'
   version:
     description: CqrsLens NuGet tool version to install.
     required: false
-    default: '0.2.0'
+    default: '0.3.0'
 
 outputs:
   report-path:
@@ -66,8 +70,10 @@ runs:
         CQRSLENS_FORMAT: ${{ inputs.format }}
         CQRSLENS_STRICT: ${{ inputs.strict }}
         CQRSLENS_MARKERS: ${{ inputs.markers }}
+        CQRSLENS_ANALYSIS: ${{ inputs.analysis }}
       run: |
-        args=("$CQRSLENS_PATH" -o "$CQRSLENS_OUTPUT" --format "$CQRSLENS_FORMAT")
+        args=("$CQRSLENS_PATH" -o "$CQRSLENS_OUTPUT" --format "$CQRSLENS_FORMAT" \
+          --analysis "$CQRSLENS_ANALYSIS")
         if [ "$CQRSLENS_STRICT" = "true" ]; then
           args+=(--strict)
         fi

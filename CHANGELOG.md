@@ -2,6 +2,53 @@
 
 All notable changes to CqrsLens are documented here.
 
+## [0.3.0] - 2026-10-22
+
+### Added
+
+- **Opt-in Roslyn analysis** (`--analysis roslyn`) that resolves real
+  MediatR/FluentValidation/EF Core contracts, compiles source groups together,
+  reports unresolved contracts, and keeps text mode as the default and fallback.
+  `samples/SampleShop` parity is enforced in both modes (#1, #28).
+- **Traceable analysis results**: source locations on every request, handler,
+  validator, behavior and DbContext; structured diagnostics for skipped files,
+  unresolved contracts, scanner failures and ambiguous links; scanner identity
+  and a single `GeneratedAt` timestamp. Reports render the diagnostics section
+  in Markdown and HTML (#29).
+- **Reproducible reports** via `--generated-at`; timing is reported as `0 ms`
+  in this mode so golden files are byte-identical (#31).
+- Installed-package smoke tests, an Ubuntu/Windows CI matrix, locked NuGet
+  restore, and an adversarial fixture with a golden CQRS map (#30).
+
+### Fixed
+
+- Test projects are classified as `Tests`, not production layers, and duplicate
+  project names no longer produce false layer violations (#22).
+- Custom handler/validator interfaces, multiple implemented interfaces, generic
+  open-type identity and nested type identity are resolved correctly (#23, #26).
+- Multi-namespace files, nested namespaces, and braces inside comments, strings,
+  chars and raw literals no longer corrupt shape identities or links
+  (#15, #25).
+- EF Core `DbContext`/`DbSet` detection uses balanced declarations and no longer
+  misattributes DbSets across classes (#26).
+- Project discovery skips only root-relative `bin`/`obj` segments, handles
+  inaccessible paths and reparse points, creates output directories, and returns
+  stable CLI exit codes (#27).
+- Mermaid ids are collision-free with readable stable suffixes; report labels,
+  Markdown tables and HTML are escaped; Mermaid is pinned to `10.9.4` with a
+  SHA-384 SRI check and documented as requiring network on first view
+  (#13, #16, #31).
+- The GitHub Action pins a published version, exposes `markers` and `analysis`
+  inputs, always uploads the report, and the release workflow refuses a tag that
+  does not match the package version (#24).
+
+### Changed
+
+- `--strict` only exits with code `4` when architecture errors are found and the
+  scan is complete enough to trust them; incomplete scans report diagnostics.
+- CI now restores lock files, builds and tests on Ubuntu and Windows, scans the
+  sample through the packed `.nupkg`, and verifies CLI exit codes.
+
 ## [0.2.1] - 2026-10-21
 
 ### Fixed
