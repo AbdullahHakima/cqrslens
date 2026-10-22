@@ -13,7 +13,14 @@ public static class Analyzer
         string rootPath,
         IReadOnlySet<string>? markers = null,
         DateTimeOffset? generatedAt = null)
-        => Analyze(rootPath, DefaultScanner, markers, generatedAt);
+        => Analyze(
+            rootPath,
+            DefaultScanner,
+            new AnalysisOptions
+            {
+                Markers = markers ?? new HashSet<string>(StringComparer.Ordinal),
+                GeneratedAt = generatedAt,
+            });
 
     public static AnalysisResult Analyze(
         string rootPath,
@@ -22,19 +29,30 @@ public static class Analyzer
         DateTimeOffset? generatedAt = null)
         => Analyze(
             rootPath,
+            mode,
+            new AnalysisOptions
+            {
+                Markers = markers ?? new HashSet<string>(StringComparer.Ordinal),
+                GeneratedAt = generatedAt,
+            });
+
+    public static AnalysisResult Analyze(
+        string rootPath,
+        AnalysisMode mode,
+        AnalysisOptions options)
+        => Analyze(
+            rootPath,
             mode == AnalysisMode.Roslyn ? RoslynScanner : DefaultScanner,
-            markers,
-            generatedAt);
+            options);
 
     internal static AnalysisResult Analyze(
         string rootPath,
         IArchitectureScanner scanner,
-        IReadOnlySet<string>? markers = null,
-        DateTimeOffset? generatedAt = null)
+        AnalysisOptions options)
     {
         var stopwatch = Stopwatch.StartNew();
         var root = Path.GetFullPath(rootPath);
-        var markerSet = markers ?? new HashSet<string>(StringComparer.Ordinal);
+        var markerSet = options.Markers;
         var result = new AnalysisResult
         {
             RootPath = root,
@@ -44,14 +62,22 @@ public static class Analyzer
                 nameof(RoslynArchitectureScanner) => "roslyn",
                 var name => name,
             },
-            GeneratedAt = generatedAt ?? DateTimeOffset.UtcNow,
+            GeneratedAt = options.GeneratedAt ?? DateTimeOffset.UtcNow,
         };
 
         result.Projects.AddRange(CsprojParser.LoadProjects(root));
         foreach (var project in result.Projects)
-            project.Layer = LayerClassifier.Classify(project.Name, project.DirectoryPath, root);
+        {
+            project.Layer = options.LayerOverrides.TryGetValue(project.Name, out var layerOverride)
+                ? layerOverride
+                : LayerClassifier.Classify(project.Name, project.DirectoryPath, root);
+        }
 
-        var files = CsprojParser.FindSourceFiles(root);
+        var pathFilter = new SourcePathFilter(options.Include, options.Exclude);
+        var files = CsprojParser.FindSourceFiles(root)
+            .Where(file => pathFilter.IsIncluded(
+                Path.GetRelativePath(root, file).Replace(Path.DirectorySeparatorChar, '/')))
+            .ToList();
         result.DiscoveredFileCount = files.Count;
 
         var sources = new ConcurrentBag<(string File, string Code)>();
@@ -97,10 +123,14 @@ public static class Analyzer
         }
 
         Link(result);
-        result.Checks.AddRange(ArchitectureChecker.RunChecks(result));
+        result.Checks.AddRange(ArchitectureChecker.ApplyRuleSeverities(
+            ArchitectureChecker.RunChecks(result),
+            options.RuleSeverities));
 
         stopwatch.Stop();
-        result.ElapsedMilliseconds = generatedAt is null ? stopwatch.ElapsedMilliseconds : 0;
+        result.ElapsedMilliseconds = options.GeneratedAt is null
+            ? stopwatch.ElapsedMilliseconds
+            : 0;
         return result;
     }
 
