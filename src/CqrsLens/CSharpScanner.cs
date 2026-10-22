@@ -113,6 +113,22 @@ public static partial class CSharpScanner
     }
 
     /// <summary>
+    /// Internal identity for a source type. Overloaded generic and non-generic
+    /// declarations share the same C# name (CommandBase / CommandBase&lt;T&gt;), so
+    /// the arity has to be part of identity when resolving references.
+    /// </summary>
+    internal static string TypeIdentity(string fullName, int arity)
+        => arity == 0 ? fullName : $"{fullName}`{arity}";
+
+    /// <summary>Marker name from an internal type identity (drops the `N arity suffix).</summary>
+    internal static string SimpleNameFromIdentity(string name)
+    {
+        var simple = SimpleName(name);
+        var tick = simple.LastIndexOf('`');
+        return tick > 0 ? simple[..tick] : simple;
+    }
+
+    /// <summary>
     /// The simple type name, removing namespace, generic arguments and nullable
     /// annotations: <c>App.Queries.GetThing&lt;int&gt;?</c> → <c>GetThing</c>.
     /// </summary>

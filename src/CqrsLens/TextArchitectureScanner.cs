@@ -46,17 +46,20 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         {
             foreach (var decl in scan.InterfaceDecls)
             {
-                var fullName = decl.FullName;
+                var fullName = CSharpScanner.TypeIdentity(
+                    decl.FullName, decl.TypeParameters.Count);
                 if (!interfaceMap.TryGetValue(fullName, out var list))
                     interfaceMap[fullName] = list = new List<string>();
 
-                foreach (var baseName in CSharpScanner.ExtractBaseTypeNames(decl.BaseList))
+                foreach (var part in CSharpScanner.SplitTopLevel(decl.BaseList))
                 {
+                    var (baseName, baseArgs) = CSharpScanner.ParseTypeReference(part);
                     var resolved = hierarchy.ResolveInterfaceReference(
                         baseName,
                         decl.Namespace,
                         decl.Usings,
                         decl.ContainingTypes,
+                        baseArgs.Count,
                         out var ambiguous);
                     if (resolved is null)
                     {
@@ -253,19 +256,23 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             var location = SourceLocation.Create(
                 file.Path, result.RootPath, file.Code, decl.BodySpan.Start);
             var directInterfaces = new List<string>();
-            foreach (var name in decl.BaseTypeNames)
+            var directAmbiguity = false;
+            foreach (var part in CSharpScanner.SplitTopLevel(decl.BaseList))
             {
+                var (name, args) = CSharpScanner.ParseTypeReference(part);
                 var resolved = hierarchy.ResolveInterfaceReference(
                     name,
                     decl.Namespace,
                     decl.Usings,
                     decl.ContainingTypes,
+                    args.Count,
                     out var ambiguous);
                 if (resolved is null)
                 {
                     var simple = CSharpScanner.SimpleName(name);
                     if (markers.Contains(simple) || simple is "IRequest")
                     {
+                        directAmbiguity = true;
                         RecordAmbiguousContract(
                             result, file, decl.BodySpan.Start, decl.Name, name, ambiguous, "request marker");
                     }
@@ -276,7 +283,27 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             }
 
             var reached = MarkerResolver.ReachableMarkers(directInterfaces, interfaceMap, markers);
-            if (reached.Count == 0) continue;
+            string? shapeResponseType = null;
+            if (reached.Count == 0)
+            {
+                // Direct interfaces did not reach a root. Follow source-declared
+                // base classes (QueryBase<T>, custom command bases) as well; this
+                // is deliberately attempted only as a fallback so direct-interface
+                // behavior and its diagnostics stay unchanged.
+                var shape = hierarchy.ResolveRequestShape(decl, markers);
+                if (shape.Roots.Count == 0)
+                {
+                    if (!directAmbiguity)
+                    {
+                        RecordRequestResolutionGap(
+                            result, file, decl.BodySpan.Start, decl.Name, shape);
+                    }
+                    continue;
+                }
+
+                reached = shape.Roots;
+                shapeResponseType = shape.ResponseType;
+            }
 
             if (!reached.Contains("IRequest") && !reached.Any(markers.Contains))
                 continue;
@@ -299,8 +326,8 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                 Location = location,
             };
             request.ContainingTypes.AddRange(decl.ContainingTypes);
-            request.ResponseType =
-                MarkerResolver.TryExtractMarkerResponse(decl, reached)
+            request.ResponseType = shapeResponseType
+                ?? MarkerResolver.TryExtractMarkerResponse(decl, reached)
                 ?? decl.BaseRawNames
                     .Select(b => CSharpScanner.ExtractGenericArguments(decl.BaseList, b)?.FirstOrDefault())
                     .FirstOrDefault(a => a is not null);
@@ -310,6 +337,45 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                     request.Name, decl.BaseRawNames.Concat(reached));
             result.Requests.Add(request);
         }
+    }
+
+    private static void RecordRequestResolutionGap(
+        AnalysisResult result,
+        SourceFile file,
+        int sourceIndex,
+        string owner,
+        RequestShapeResolution shape)
+    {
+        if (shape.AmbiguousCandidates.Count > 0)
+        {
+            RecordAmbiguousContract(
+                result, file, sourceIndex, owner, "base",
+                shape.AmbiguousCandidates, "request base");
+            return;
+        }
+
+        if (!owner.EndsWith("Command", StringComparison.Ordinal) &&
+            !owner.EndsWith("Query", StringComparison.Ordinal))
+            return;
+
+        var unresolved = shape.UnresolvedBases
+            .Where(name => name.EndsWith("Base", StringComparison.Ordinal) ||
+                           name.Contains("Command", StringComparison.Ordinal) ||
+                           name.Contains("Query", StringComparison.Ordinal) ||
+                           name.Contains("Request", StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList();
+        if (unresolved.Count == 0) return;
+
+        result.RecordDiagnostic(new AnalysisDiagnostic(
+            AnalysisResult.UnresolvedContractCode,
+            AnalysisDiagnosticSeverity.Info,
+            $"`{owner}` looks like a request, but its base chain references " +
+            $"{string.Join(", ", unresolved.Select(n => $"`{n}`"))}, which has no source " +
+            "declaration. Request discovery stopped at that base type.",
+            SourceLocation.Create(file.Path, result.RootPath, file.Code, sourceIndex),
+            file.ProjectName));
     }
 
     private static bool LooksLikeHandlerContract(string simple)

@@ -19,6 +19,7 @@ internal sealed class TypeHierarchy
     private readonly Dictionary<string, List<CSharpScanner.ClassDecl>> _classesBySimple;
     private readonly Dictionary<string, CSharpScanner.InterfaceDecl> _interfacesByFull;
     private readonly Dictionary<string, List<CSharpScanner.InterfaceDecl>> _interfacesBySimple;
+    private readonly HashSet<string> _interfaceSimpleNames;
 
     public TypeHierarchy(
         IEnumerable<CSharpScanner.ClassDecl> classes,
@@ -28,16 +29,26 @@ internal sealed class TypeHierarchy
         _classesBySimple = new Dictionary<string, List<CSharpScanner.ClassDecl>>(StringComparer.Ordinal);
         foreach (var decl in classes)
         {
-            _classesByFull.TryAdd(decl.FullName, decl);
-            AddBySimple(_classesBySimple, CSharpScanner.SimpleName(decl.Name), decl);
+            var arity = decl.TypeParameters.Count;
+            _classesByFull.TryAdd(CSharpScanner.TypeIdentity(decl.FullName, arity), decl);
+            AddBySimple(
+                _classesBySimple,
+                CSharpScanner.TypeIdentity(CSharpScanner.SimpleName(decl.Name), arity),
+                decl);
         }
 
         _interfacesByFull = new Dictionary<string, CSharpScanner.InterfaceDecl>(StringComparer.Ordinal);
         _interfacesBySimple = new Dictionary<string, List<CSharpScanner.InterfaceDecl>>(StringComparer.Ordinal);
+        _interfaceSimpleNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (var decl in interfaces)
         {
-            _interfacesByFull.TryAdd(decl.FullName, decl);
-            AddBySimple(_interfacesBySimple, CSharpScanner.SimpleName(decl.Name), decl);
+            var arity = decl.TypeParameters.Count;
+            _interfacesByFull.TryAdd(CSharpScanner.TypeIdentity(decl.FullName, arity), decl);
+            AddBySimple(
+                _interfacesBySimple,
+                CSharpScanner.TypeIdentity(CSharpScanner.SimpleName(decl.Name), arity),
+                decl);
+            _interfaceSimpleNames.Add(CSharpScanner.SimpleName(decl.Name));
         }
     }
 
@@ -49,10 +60,162 @@ internal sealed class TypeHierarchy
     }
 
     public bool HasInterface(string name)
-        => _interfacesBySimple.ContainsKey(CSharpScanner.SimpleName(name));
+        => _interfaceSimpleNames.Contains(CSharpScanner.SimpleNameFromIdentity(name));
 
     /// <summary>
-    /// Resolves an interface reference to its full source name. A null result with
+    /// Follows a class's source-declared base classes and interfaces to find
+    /// request roots (IRequest and configured markers). Unlike shape-target
+    /// resolution this keeps every root it sees, so a request can be classified
+    /// through a meaningful base class such as QueryBase&lt;T&gt;.
+    /// </summary>
+    public RequestShapeResolution ResolveRequestShape(
+        CSharpScanner.ClassDecl decl,
+        IReadOnlySet<string> markerRoots)
+    {
+        var shape = new RequestShapeResolution();
+        VisitRequestClass(
+            decl,
+            EmptyBindings,
+            markerRoots,
+            new HashSet<string>(StringComparer.Ordinal),
+            0,
+            shape);
+        return shape;
+    }
+
+    private void VisitRequestClass(
+        CSharpScanner.ClassDecl decl,
+        IReadOnlyDictionary<string, string> bindings,
+        IReadOnlySet<string> markerRoots,
+        HashSet<string> visited,
+        int depth,
+        RequestShapeResolution shape)
+    {
+        if (depth > 32 ||
+            !visited.Add(VisitKey(decl.FullName, decl.TypeParameters.Count, bindings))) return;
+
+        foreach (var part in SplitBaseList(decl.BaseList))
+        {
+            var (name, rawArgs) = CSharpScanner.ParseTypeReference(part);
+            var args = rawArgs.Select(a => Substitute(a, bindings)).ToList();
+            VisitRequestBase(
+                name,
+                args,
+                decl.Namespace,
+                decl.Usings,
+                decl.ContainingTypes,
+                markerRoots,
+                visited,
+                depth + 1,
+                shape);
+        }
+    }
+
+    private void VisitRequestInterface(
+        CSharpScanner.InterfaceDecl decl,
+        IReadOnlyDictionary<string, string> bindings,
+        IReadOnlySet<string> markerRoots,
+        HashSet<string> visited,
+        int depth,
+        RequestShapeResolution shape)
+    {
+        if (depth > 32 ||
+            !visited.Add(VisitKey(decl.FullName, decl.TypeParameters.Count, bindings))) return;
+
+        foreach (var part in SplitBaseList(decl.BaseList))
+        {
+            var (name, rawArgs) = CSharpScanner.ParseTypeReference(part);
+            var args = rawArgs.Select(a => Substitute(a, bindings)).ToList();
+            VisitRequestBase(
+                name,
+                args,
+                decl.Namespace,
+                decl.Usings,
+                decl.ContainingTypes,
+                markerRoots,
+                visited,
+                depth + 1,
+                shape);
+        }
+    }
+
+    private void VisitRequestBase(
+        string name,
+        IReadOnlyList<string> args,
+        string currentNamespace,
+        IReadOnlyList<UsingDirective> usings,
+        IReadOnlyList<string> containingTypes,
+        IReadOnlySet<string> markerRoots,
+        HashSet<string> visited,
+        int depth,
+        RequestShapeResolution shape)
+    {
+        var simple = CSharpScanner.SimpleName(name);
+        var isRoot = simple is "IRequest" || markerRoots.Contains(simple);
+
+        var interfaceDecl = ResolveInterface(
+            name, currentNamespace, usings, containingTypes, args.Count,
+            out var interfaceAmbiguous);
+        AddRequestAmbiguities(shape, interfaceAmbiguous);
+        if (interfaceDecl is not null)
+        {
+            if (isRoot) AddRequestRoot(shape, simple, args);
+            var interfaceBindings = Bind(interfaceDecl.TypeParameters, args, EmptyBindings);
+            VisitRequestInterface(
+                interfaceDecl, interfaceBindings, markerRoots, visited, depth + 1, shape);
+            return;
+        }
+
+        var classDecl = ResolveClass(
+            name, currentNamespace, usings, containingTypes, args.Count,
+            out var classAmbiguous);
+        AddRequestAmbiguities(shape, classAmbiguous);
+        if (classDecl is not null)
+        {
+            if (isRoot) AddRequestRoot(shape, simple, args);
+            var classBindings = Bind(classDecl.TypeParameters, args, EmptyBindings);
+            VisitRequestClass(
+                classDecl, classBindings, markerRoots, visited, depth + 1, shape);
+            return;
+        }
+
+        // An external marker/root is usable; an ambiguous source name is not.
+        if (isRoot && interfaceAmbiguous.Count == 0 && classAmbiguous.Count == 0)
+        {
+            AddRequestRoot(shape, simple, args);
+            return;
+        }
+
+        if (!isRoot && interfaceAmbiguous.Count == 0 && classAmbiguous.Count == 0 &&
+            !shape.UnresolvedBases.Contains(simple, StringComparer.Ordinal))
+            shape.UnresolvedBases.Add(simple);
+    }
+
+    private static void AddRequestRoot(
+        RequestShapeResolution shape,
+        string root,
+        IReadOnlyList<string> args)
+    {
+        if (!shape.Roots.Contains(root, StringComparer.Ordinal))
+            shape.Roots.Add(root);
+        if (shape.ResponseType is null && args.Count > 0)
+            shape.ResponseType = args[0];
+    }
+
+    private static void AddRequestAmbiguities(
+        RequestShapeResolution shape,
+        IReadOnlyList<string> candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!shape.AmbiguousCandidates.Contains(candidate, StringComparer.Ordinal))
+                shape.AmbiguousCandidates.Add(candidate);
+        }
+    }
+
+    /// <summary>
+    /// Resolves an interface reference to its internal source identity (full name
+    /// plus generic arity). A null result with
     /// <paramref name="ambiguousCandidates"/> populated means the simple name has
     /// multiple candidates and no local/using match. A non-null simple name means
     /// the interface is external/unresolved (e.g. MediatR.IRequest).
@@ -62,12 +225,13 @@ internal sealed class TypeHierarchy
         string currentNamespace,
         IReadOnlyList<UsingDirective> usings,
         IReadOnlyList<string> containingTypes,
+        int arity,
         out IReadOnlyList<string> ambiguousCandidates)
     {
         var decl = ResolveInterface(
-            name, currentNamespace, usings, containingTypes, out ambiguousCandidates);
+            name, currentNamespace, usings, containingTypes, arity, out ambiguousCandidates);
         if (decl is not null)
-            return decl.FullName;
+            return CSharpScanner.TypeIdentity(decl.FullName, decl.TypeParameters.Count);
 
         return ambiguousCandidates.Count > 0
             ? null
@@ -95,7 +259,8 @@ internal sealed class TypeHierarchy
 
         var ambiguities = new List<string>();
         var interfaceDecl = ResolveInterface(
-            name, currentNamespace, usings, containingTypes, out var interfaceAmbiguous);
+            name, currentNamespace, usings, containingTypes, args.Count,
+            out var interfaceAmbiguous);
         AddAmbiguities(ambiguities, interfaceAmbiguous);
         if (interfaceDecl is not null)
         {
@@ -112,7 +277,8 @@ internal sealed class TypeHierarchy
         }
 
         var classDecl = ResolveClass(
-            name, currentNamespace, usings, containingTypes, out var classAmbiguous);
+            name, currentNamespace, usings, containingTypes, args.Count,
+            out var classAmbiguous);
         AddAmbiguities(ambiguities, classAmbiguous);
         if (classDecl is not null)
         {
@@ -152,7 +318,8 @@ internal sealed class TypeHierarchy
         out string target)
     {
         target = "";
-        if (depth > 32 || !visited.Add(VisitKey(decl.FullName, bindings))) return false;
+        if (depth > 32 ||
+            !visited.Add(VisitKey(decl.FullName, decl.TypeParameters.Count, bindings))) return false;
 
         foreach (var part in SplitBaseList(decl.BaseList))
         {
@@ -167,7 +334,8 @@ internal sealed class TypeHierarchy
             }
 
             var baseDecl = ResolveInterface(
-                name, decl.Namespace, decl.Usings, decl.ContainingTypes, out var baseAmbiguous);
+                name, decl.Namespace, decl.Usings, decl.ContainingTypes, args.Count,
+                out var baseAmbiguous);
             AddAmbiguities(ambiguities, baseAmbiguous);
             if (baseDecl is null) continue;
             var baseBindings = Bind(baseDecl.TypeParameters, args, EmptyBindings);
@@ -189,7 +357,8 @@ internal sealed class TypeHierarchy
         out string target)
     {
         target = "";
-        if (depth > 32 || !visited.Add(VisitKey(decl.FullName, bindings))) return false;
+        if (depth > 32 ||
+            !visited.Add(VisitKey(decl.FullName, decl.TypeParameters.Count, bindings))) return false;
 
         foreach (var part in SplitBaseList(decl.BaseList))
         {
@@ -204,7 +373,8 @@ internal sealed class TypeHierarchy
             }
 
             var baseInterface = ResolveInterface(
-                name, decl.Namespace, decl.Usings, decl.ContainingTypes, out var interfaceAmbiguous);
+                name, decl.Namespace, decl.Usings, decl.ContainingTypes, args.Count,
+                out var interfaceAmbiguous);
             AddAmbiguities(ambiguities, interfaceAmbiguous);
             if (baseInterface is not null)
             {
@@ -216,7 +386,8 @@ internal sealed class TypeHierarchy
             }
 
             var baseClass = ResolveClass(
-                name, decl.Namespace, decl.Usings, decl.ContainingTypes, out var classAmbiguous);
+                name, decl.Namespace, decl.Usings, decl.ContainingTypes, args.Count,
+                out var classAmbiguous);
             AddAmbiguities(ambiguities, classAmbiguous);
             if (baseClass is null) continue;
             var classBindings = Bind(baseClass.TypeParameters, args, EmptyBindings);
@@ -243,12 +414,14 @@ internal sealed class TypeHierarchy
         string currentNamespace,
         IReadOnlyList<UsingDirective> usings,
         IReadOnlyList<string> containingTypes,
+        int arity,
         out IReadOnlyList<string> ambiguousCandidates)
         => Resolve(
             name,
             currentNamespace,
             usings,
             containingTypes,
+            arity,
             _interfacesByFull,
             _interfacesBySimple,
             out ambiguousCandidates);
@@ -258,12 +431,14 @@ internal sealed class TypeHierarchy
         string currentNamespace,
         IReadOnlyList<UsingDirective> usings,
         IReadOnlyList<string> containingTypes,
+        int arity,
         out IReadOnlyList<string> ambiguousCandidates)
         => Resolve(
             name,
             currentNamespace,
             usings,
             containingTypes,
+            arity,
             _classesByFull,
             _classesBySimple,
             out ambiguousCandidates);
@@ -273,6 +448,7 @@ internal sealed class TypeHierarchy
         string currentNamespace,
         IReadOnlyList<UsingDirective> usings,
         IReadOnlyList<string> containingTypes,
+        int arity,
         IReadOnlyDictionary<string, T> byFull,
         IReadOnlyDictionary<string, List<T>> bySimple,
         out IReadOnlyList<string> ambiguousCandidates)
@@ -290,14 +466,17 @@ internal sealed class TypeHierarchy
 
         if (explicitGlobal)
         {
-            return byFull.TryGetValue(name, out var globalHit) ? globalHit : null;
+            return byFull.TryGetValue(
+                CSharpScanner.TypeIdentity(name, arity), out var globalHit)
+                ? globalHit
+                : null;
         }
 
         AddScopeCandidates(name, currentNamespace, containingTypes, candidates);
 
         foreach (var candidate in candidates.Distinct(StringComparer.Ordinal))
         {
-            if (byFull.TryGetValue(candidate, out var hit))
+            if (byFull.TryGetValue(CSharpScanner.TypeIdentity(candidate, arity), out var hit))
                 return hit;
         }
 
@@ -310,14 +489,14 @@ internal sealed class TypeHierarchy
             foreach (var ns in directive.NamespaceCandidates())
             {
                 var candidate = $"{ns}.{name}";
-                if (byFull.ContainsKey(candidate) &&
+                if (byFull.ContainsKey(CSharpScanner.TypeIdentity(candidate, arity)) &&
                     !usingMatches.Contains(candidate, StringComparer.Ordinal))
                     usingMatches.Add(candidate);
             }
         }
 
         if (usingMatches.Count == 1)
-            return byFull[usingMatches[0]];
+            return byFull[CSharpScanner.TypeIdentity(usingMatches[0], arity)];
         if (usingMatches.Count > 1)
         {
             ambiguousCandidates = usingMatches.OrderBy(c => c, StringComparer.Ordinal).ToList();
@@ -325,7 +504,8 @@ internal sealed class TypeHierarchy
         }
 
         var simple = CSharpScanner.SimpleName(name);
-        if (bySimple.TryGetValue(simple, out var simpleCandidates) && simpleCandidates.Count > 0)
+        var simpleKey = CSharpScanner.TypeIdentity(simple, arity);
+        if (bySimple.TryGetValue(simpleKey, out var simpleCandidates) && simpleCandidates.Count > 0)
         {
             if (simpleCandidates.Count == 1)
                 return simpleCandidates[0];
@@ -431,15 +611,31 @@ internal sealed class TypeHierarchy
         return sb.ToString();
     }
 
-    private static string VisitKey(string fullName, IReadOnlyDictionary<string, string> bindings)
-        => bindings.Count == 0
-            ? fullName
-            : fullName + "|" + string.Join(",", bindings.OrderBy(p => p.Key, StringComparer.Ordinal)
+    private static string VisitKey(
+        string fullName,
+        int arity,
+        IReadOnlyDictionary<string, string> bindings)
+    {
+        var identity = CSharpScanner.TypeIdentity(fullName, arity);
+        return bindings.Count == 0
+            ? identity
+            : identity + "|" + string.Join(",", bindings
+                .OrderBy(p => p.Key, StringComparer.Ordinal)
                 .Select(p => $"{p.Key}={p.Value}"));
+    }
 
     private static IEnumerable<string> SplitBaseList(string baseList)
         => CSharpScanner.SplitTopLevel(baseList);
 
     private static readonly Dictionary<string, string> EmptyBindings =
         new(StringComparer.Ordinal);
+}
+
+/// <summary>Result of following a class's base classes/interfaces for request roots.</summary>
+internal sealed class RequestShapeResolution
+{
+    public List<string> Roots { get; } = new();
+    public string? ResponseType { get; set; }
+    public List<string> AmbiguousCandidates { get; } = new();
+    public List<string> UnresolvedBases { get; } = new();
 }

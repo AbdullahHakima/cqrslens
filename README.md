@@ -108,8 +108,10 @@ See [`docs/configuration.md`](docs/configuration.md) for the full reference.
 
 Many codebases wrap MediatR in their own abstractions. CqrsLens follows interface
 inheritance automatically: a class implementing `ICommand<T>` is a request when
-`ICommand<T>` (transitively) derives from `IRequest<T>`. For marker hierarchies that
-do **not** derive from `IRequest`, name the roots explicitly:
+`ICommand<T>` (transitively) derives from `IRequest<T>`. It also follows
+source-declared base classes such as `CommandBase` / `QueryBase<T>`, substituting
+concrete generic response types along the chain. For marker hierarchies that do
+**not** derive from `IRequest`, name the roots explicitly:
 
 ```bash
 cqrslens <path> --markers ICommand,IQuery,IMessage
@@ -317,8 +319,8 @@ The whole scan took 145 ms.
 | Shape | How |
 | --- | --- |
 | Projects & references | `.csproj` XML (`ProjectReference` Include/Update) |
-| Requests | classes/records/structs implementing `IRequest` or `IRequest<T>` — directly, through custom interfaces deriving from it, or through `--markers` roots |
-| Handlers | `IRequestHandler<TRequest>` / `IRequestHandler<TRequest, TResponse>`, including source-declared wrappers such as `ICommandHandler<T>` |
+| Requests | classes/records/structs implementing `IRequest` or `IRequest<T>` — directly, through custom interfaces deriving from it, through source-declared base classes, or through `--markers` roots |
+| Handlers | `IRequestHandler<TRequest>` / `IRequestHandler<TRequest, TResponse>`, including source-declared wrappers such as `ICommandHandler<T>`; generic and non-generic overloads are resolved by arity |
 | Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation), including source-declared wrappers |
 | Pipeline behaviors | `IPipelineBehavior<...>` implementations |
 | DbContexts | classes deriving from `DbContext` (incl. `IdentityDbContext`), with their `DbSet<T>`s attributed per class |
@@ -332,11 +334,16 @@ source-shape discovery while keeping the same no-build workflow. It shims known
 MediatR/FluentValidation/EF Core contracts that are not present in the source:
 
 - Requests are followed through custom marker interfaces (anything deriving from
-  `IRequest`, plus `--markers` roots), but not through base *classes* (see #53).
+  `IRequest`, plus `--markers` roots) and through base *classes* declared in the
+  scanned source, including generic response substitution. A chain that leaves
+  the scanned source cannot be continued; that gap is reported as an
+  informational diagnostic instead of being guessed (see #54 for external
+  handler wrappers).
 - Same-named contracts are resolved from the declaration's namespace and using
-  directives, including global usings and namespace aliases. Handlers/validators
-  link by fully-qualified name first, then an imported namespace, then a unique
-  simple name. Genuinely ambiguous or unresolved CQRS contracts are reported as
+  directives, including global usings and namespace aliases. Generic and
+  non-generic overloads are distinguished by arity. Handlers/validators link by
+  fully-qualified name first, then an imported namespace, then a unique simple
+  name. Genuinely ambiguous or unresolved CQRS contracts are reported as
   informational diagnostics instead of being guessed.
 - External handler/validator wrappers are opaque in text mode unless their
   inheritance is present in the scanned source (see #54). Source-declared

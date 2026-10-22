@@ -30,7 +30,7 @@ public static class MarkerResolver
             var current = queue.Dequeue();
             if (!visited.Add(current)) continue;
 
-            var simpleName = CSharpScanner.SimpleName(current);
+            var simpleName = CSharpScanner.SimpleNameFromIdentity(current);
             if (simpleName is "IRequest")
                 reachesRequest = true;
             if (markerRoots.Contains(simpleName) && foundSet.Add(simpleName))

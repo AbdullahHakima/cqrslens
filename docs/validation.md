@@ -8,13 +8,13 @@ so an external repository changing or disappearing cannot block a release.
 
 ## Latest snapshot
 
-CqrsLens `main` after #52 (`0.5.0` development), text analysis, 2026-10-22:
+CqrsLens `0.5.0` development after #53, text analysis, 2026-10-22:
 
 | Repository | Commit | Path | Markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time |
 | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 266 ms |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | 22 | 23 | 0 | 0 | 23/13 | 0/0/44 | 353 ms |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | 46 | 2 | 120 | 5 | 0/0 | 0/0/0 | 436 ms |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 652 ms |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | 22 | 23 | 0 | 0 | 23/13 | 0/0/44 | 470 ms |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 1595 ms |
 
 Timings are machine-dependent; counts and commits are the reproducible part.
 Full Markdown reports, SARIF, logs and `results.tsv` come from the workflow
@@ -36,13 +36,19 @@ snapshot, not the released package's results.
   declaration. These are the known #54 and #51 gaps, not new architecture
   findings. The 23 `MissingHandler` errors and 13 validator warnings remain
   **false positives** until those wrappers are supported.
-- **Per-module contracts:** `modular-monolith-with-ddd` now finds 120 handlers
-  through each module's imported `ICommandHandler` / `IQueryHandler` contracts,
-  up from zero. The two direct `IQuery` requests link to their correct module
-  handler and the `2 MissingHandler` false positives are gone. Requests remain
-  at two because most derive from `CommandBase` / `QueryBase`; that is the #53
-  base-class gap, not a resolution failure. Five validators are still found
-  through direct FluentValidation inheritance.
+- **Per-module contracts and request bases:** `modular-monolith-with-ddd` now
+  finds 105 requests and links all 105 handlers, up from 2 requests and 120
+  handlers in the #52 snapshot. The previous extra 15 handlers were duplicate
+  wrapper matches; generic/non-generic declarations are now resolved by arity,
+  so each handler links to its own request. Request discovery follows each
+  module's source-declared `CommandBase` / `CommandBase<T>` / `QueryBase<T>`
+  chains and substitutes concrete response types such as `Guid` and
+  `List<MeetingCommentDto>`. Five validators are found and linked through direct
+  FluentValidation inheritance.
+- **The 71 modular warnings are real coverage gaps.** The sample defines only
+  five command validators, so `CommandWithoutValidator` correctly reports the
+  remaining discovered commands. There are no `MissingHandler` errors. The
+  warnings are useful validation coverage, not base-class false positives.
 - **Diagnostics are informative, not a clean bill of health.** No files were
   skipped and there are no error/warning scan diagnostics. The 44 ardalis info
   items are actionable gaps surfaced by `UnresolvedContract`. `AmbiguousContract`
@@ -53,36 +59,32 @@ snapshot, not the released package's results.
 
 These are user-facing limits, not promises that the current corpus can fix:
 
-1. **External base types are opaque.** Text mode only follows interfaces and
-   abstract base classes declared in the scanned source. A command implementing
-   `ICommand` from a NuGet package works when `ICommand` is passed to
-   `--markers`, but a handler implementing an external `ICommandHandler` cannot
-   be linked to `IRequestHandler`. These gaps are now surfaced as
-   `UnresolvedContract` info diagnostics (see
+1. **Base-class discovery stops at the scanned source boundary.** Source-declared
+   request base classes are followed transitively, including generic response
+   substitution. A chain that leaves the scanned source cannot be continued; it
+   is surfaced as an `UnresolvedContract` info diagnostic instead of being
+   guessed. External handler wrappers are still opaque: a handler implementing
+   an external `ICommandHandler` cannot be linked to `IRequestHandler` (see
    [#54](https://github.com/AbdullahHakima/cqrslens/issues/54)).
-2. **Custom request base classes are not traversed.** `CommandBase<T>` /
-   `QueryBase<T>` hierarchies are not yet expanded when discovering requests;
-   classes must implement a recognized marker or `IRequest` directly (see
-   [#53](https://github.com/AbdullahHakima/cqrslens/issues/53)).
-3. **Using directives are parsed, not evaluated by MSBuild.** Namespace and
+2. **Using directives are parsed, not evaluated by MSBuild.** Namespace and
    `using` resolution handles explicit local, global and alias imports. SDK
    implicit usings, generated global usings, conditional compilation, extern
    aliases and project references are not evaluated, so a contract can still be
    invisible even though the compiler can see it. When multiple source
    candidates remain, `AmbiguousContract` is reported instead of guessing.
-4. **Validator frameworks vary.** FluentValidation `AbstractValidator<T>` and
+3. **Validator frameworks vary.** FluentValidation `AbstractValidator<T>` and
    `IValidator<T>` are recognized. FastEndpoints `Validator<T>` (see
    [#51](https://github.com/AbdullahHakima/cqrslens/issues/51)), custom
    validation pipelines and manual validation are not.
-5. **No MSBuild evaluation.** Conditional compilation, imported props, generated
+4. **No MSBuild evaluation.** Conditional compilation, imported props, generated
    sources, source generators and assembly references are not evaluated. Text
    mode is intentionally build-free; the Roslyn mode is still a source-only
    opt-in and does not replace a build.
-6. **Notifications, streams and domain events are out of scope.** Only
+5. **Notifications, streams and domain events are out of scope.** Only
    request/response handlers are modeled.
-7. **Layer classification is heuristic.** Non-standard project names can be
+6. **Layer classification is heuristic.** Non-standard project names can be
    wrong; use the `layers` configuration to override project layers.
-8. **Sample/test projects are scanned.** The corpus scans whole repositories
+7. **Sample/test projects are scanned.** The corpus scans whole repositories
    where practical, so templates and test helpers can contribute counts. Use
    `include` / `exclude` (or a narrower `path`) for production-only scans.
 
@@ -138,7 +140,7 @@ pull requests and is not a required check.
 | --- | --- | --- |
 | [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | MIT | Direct MediatR requests, handlers and FluentValidation validators; the happy path. |
 | [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | MIT | Popular template with external command/handler wrappers and FastEndpoints validation; exposes external-base-type gaps. |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | MIT | Multi-module DDD app with per-module contracts and base request classes; exposes module ambiguity and base-class gaps. |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | MIT | Multi-module DDD app with per-module contracts and generic request base classes; exercises module-aware resolution and base-class traversal. |
 
 Full commit SHAs are pinned in the corpus file. Updating a pin is a deliberate
 review action, not an automatic nightly bump.
