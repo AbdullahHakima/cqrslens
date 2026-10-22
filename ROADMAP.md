@@ -5,6 +5,18 @@ where they exist; the dates are not promises.
 
 ## Done
 
+**0.4.0** (October 2026)
+
+- `.cqrslens.json` configuration with schema, source filters, layer overrides
+  and rule severities (#43)
+- Baselines and new-only `--strict` checks with stable, line-independent keys
+  (#44)
+- SARIF 2.1.0, GitHub annotations, job summaries and repository-relative CI
+  paths (#45)
+- .NET 8/9/10 runtime compatibility and an Action that sets up .NET 10 (#46)
+- Pinned real-world validation corpus, nightly informational workflow and
+  documented limitations (#47)
+
 **0.3.0** (October 2026)
 
 - Correctness pass for test-project classification, custom handler/validator
@@ -47,6 +59,9 @@ where they exist; the dates are not promises.
 
 ## Next
 
+- **Scanner hardening from real-world validation**: external/custom handler
+  wrappers (#54), request base classes (#53), same-named interfaces and `using`
+  resolution (#52), and FastEndpoints validators (#51)
 - **Roslyn hardening**: load evaluated MSBuild/package references and compare
   broader real codebases before considering Roslyn as the default. Text mode
   stays as the fast fallback.
@@ -58,8 +73,7 @@ where they exist; the dates are not promises.
 
 ## After that
 
-- `--format json` and a `cqrslens.json` config file (include/exclude
-  paths, layer names, marker defaults)
+- `--format json` output for external dashboards and custom tooling
 - Colored console output and a progress line while scanning
 - More mediators: Mediator (martinothamar) and Wolverine conventions
 - GitHub Action mode that comments the architecture diff on a pull request

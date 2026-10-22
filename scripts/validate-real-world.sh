@@ -156,7 +156,7 @@ while IFS=$'\t' read -r name url ref subdir markers; do
         "$check_errors" "$check_warnings" \
         "$diag_errors" "$diag_warnings" "$diag_info" \
         "$((duration_ms / 1000))" "$status"
-done < "$corpus"
+done < <(tr -d '\r' < "$corpus")
 
 {
     printf '# Real-world validation\n\n'
