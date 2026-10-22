@@ -73,6 +73,7 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, result.Code);
         Assert.Contains("Usage: cqrslens", result.Stdout);
+        Assert.Contains("--handler-markers", result.Stdout);
         Assert.Contains("--version", result.Stdout);
     }
 
@@ -135,6 +136,7 @@ public class CliTests : IDisposable
     [InlineData("--config")]
     [InlineData("--analysis")]
     [InlineData("--markers")]
+    [InlineData("--handler-markers")]
     [InlineData("--baseline")]
     [InlineData("--write-baseline")]
     [InlineData("--sarif")]
@@ -317,7 +319,8 @@ public class CliTests : IDisposable
         var command = CliParser.Parse(new[]
         {
             "src", "-o", "out.html", "--format", "HTML", "--analysis", "roslyn",
-            "--markers", "ICommand, App.IQuery", "--strict",
+            "--markers", "ICommand, App.IQuery",
+            "--handler-markers", "ICommandHandler, App.IQueryHandler", "--strict",
         });
 
         Assert.Equal(CliCommandKind.Run, command.Kind);
@@ -328,5 +331,8 @@ public class CliTests : IDisposable
         Assert.Equal(AnalysisMode.Roslyn, options.AnalysisMode);
         Assert.True(options.Strict);
         Assert.Equal(new[] { "ICommand", "IQuery" }, options.Markers.OrderBy(m => m));
+        Assert.Equal(
+            new[] { "ICommandHandler", "IQueryHandler" },
+            options.HandlerMarkers.OrderBy(m => m));
     }
 }

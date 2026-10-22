@@ -23,6 +23,14 @@
       },
       "description": "Custom marker interface names that also count as request roots."
     },
+    "handlerMarkers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "description": "Custom handler-root interface names for wrappers supplied by an external package."
+    },
     "include": {
       "type": "array",
       "items": {

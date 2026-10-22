@@ -106,7 +106,7 @@ public static class Analyzer
                 FindOwningProject(result.Projects, f.File)?.Name))
             .ToList();
 
-        scanner.Scan(sourceFiles, markerSet, result);
+        scanner.Scan(sourceFiles, markerSet, options.HandlerMarkers, result);
         result.SkippedFiles.Sort(StringComparer.OrdinalIgnoreCase);
         result.FileCount = Math.Max(0, result.DiscoveredFileCount - result.SkippedFiles.Count);
 

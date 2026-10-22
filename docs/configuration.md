@@ -18,6 +18,7 @@ unknown key or invalid value fails with exit code `1` instead of being ignored.
   "$schema": "https://raw.githubusercontent.com/AbdullahHakima/cqrslens/main/cqrslens.schema.json",
   "analysis": "text",
   "markers": ["ICommand", "IQuery"],
+  "handlerMarkers": ["ICommandHandler", "IQueryHandler"],
   "include": ["src/**"],
   "exclude": [
     "**/Migrations/**",
@@ -43,6 +44,7 @@ unknown key or invalid value fails with exit code `1` instead of being ignored.
 | --- | --- |
 | `analysis` | `text` (default) or `roslyn`. `--analysis` overrides it. |
 | `markers` | Custom marker interfaces that count as request roots. `--markers` overrides the list. |
+| `handlerMarkers` | Custom handler-root interfaces for wrappers supplied by an external package. Source-declared wrappers are followed automatically. `--handler-markers` overrides the list. |
 | `include` | Optional root-relative globs. When present, only matching source files are scanned. |
 | `exclude` | Root-relative globs removed after `include`. |
 | `layers` | Project-name to layer overrides; they replace the naming/folder classifier and feed the layer checks. |
@@ -74,3 +76,33 @@ exists.
 all `.csproj` files so the project graph remains useful. Use `layers` to correct
 a project's classification, or `exclude` generated source that should not affect
 the CQRS map or checks.
+
+## External handler wrappers
+
+Source-declared handler abstractions are traversed automatically:
+
+```csharp
+public interface ICommandHandler<TCommand> : IRequestHandler<TCommand> { }
+public sealed class CreateOrderHandler : ICommandHandler<CreateOrderCommand> { }
+```
+
+Some applications instead use wrappers from a package, for example
+`Ardalis.SharedKernel.ICommandHandler<TCommand, TResult>`. Because that interface
+is not in the scanned source, name it explicitly as a handler root:
+
+```json
+{
+  "markers": ["ICommand", "IQuery"],
+  "handlerMarkers": ["ICommandHandler", "IQueryHandler"]
+}
+```
+
+or on the command line:
+
+```bash
+cqrslens . --markers ICommand,IQuery --handler-markers ICommandHandler,IQueryHandler
+```
+
+CqrsLens then reads the first generic argument as the request type, matching the
+MediatR convention. Explicit configuration avoids guessing from a type name; the
+default scan is unchanged.

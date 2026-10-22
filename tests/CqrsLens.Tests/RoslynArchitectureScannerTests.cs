@@ -306,6 +306,7 @@ public class RoslynArchitectureScannerTests
         new RoslynArchitectureScanner().Scan(
             files,
             new HashSet<string>(StringComparer.Ordinal),
+            new HashSet<string>(StringComparer.Ordinal),
             result);
         return result;
     }

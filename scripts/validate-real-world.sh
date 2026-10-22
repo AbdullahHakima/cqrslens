@@ -42,16 +42,16 @@ mkdir -p "$output/reports" "$output/logs" "$output/clones"
 rm -rf "$output/reports"/* "$output/logs"/* "$output/clones"/*
 results="$output/results.tsv"
 markdown="$output/validation.md"
-printf 'repository\turl\trequested_ref\tresolved_commit\tscan_path\tmarkers\tprojects\trequests\thandlers\tvalidators\tbehaviors\tdbcontexts\tcheck_errors\tcheck_warnings\tdiag_errors\tdiag_warnings\tdiag_info\tduration_ms\tstatus\treport\n' > "$results"
+printf 'repository\turl\trequested_ref\tresolved_commit\tscan_path\tmarkers\thandler_markers\tprojects\trequests\thandlers\tvalidators\tbehaviors\tdbcontexts\tcheck_errors\tcheck_warnings\tdiag_errors\tdiag_warnings\tdiag_info\tduration_ms\tstatus\treport\n' > "$results"
 
 tool_version="$(dotnet "$tool" --version 2>/dev/null | sed 's/^CqrsLens //' || true)"
 tool_version="${tool_version:-unknown}"
 generated_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 failures=0
 
-while IFS=$'\t' read -r name url ref subdir markers; do
+while IFS=$'\t' read -r name url ref subdir markers handler_markers; do
     [[ -z "${name:-}" || "$name" == \#* ]] && continue
-    [[ -z "${url:-}" || -z "${ref:-}" || -z "${subdir:-}" || -z "${markers:-}" ]] && {
+    [[ -z "${url:-}" || -z "${ref:-}" || -z "${subdir:-}" || -z "${markers:-}" || -z "${handler_markers:-}" ]] && {
         echo "error: malformed corpus row: $name" >&2
         exit 2
     }
@@ -87,6 +87,9 @@ while IFS=$'\t' read -r name url ref subdir markers; do
             marker_args=()
             if [[ "$markers" != "-" ]]; then
                 marker_args+=(--markers "$markers")
+            fi
+            if [[ "$handler_markers" != "-" ]]; then
+                marker_args+=(--handler-markers "$handler_markers")
             fi
 
             start_ns="$(date +%s%N)"
@@ -144,8 +147,8 @@ while IFS=$'\t' read -r name url ref subdir markers; do
         fi
     fi
 
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$name" "$url" "$ref" "$commit" "$subdir" "$markers" \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$name" "$url" "$ref" "$commit" "$subdir" "$markers" "$handler_markers" \
         "$projects" "$requests" "$handlers" "$validators" "$behaviors" "$dbcontexts" \
         "$check_errors" "$check_warnings" \
         "$diag_errors" "$diag_warnings" "$diag_info" \
@@ -165,16 +168,16 @@ done < <(tr -d '\r' < "$corpus")
     printf -- '- Corpus: `validation/corpus.tsv` (full commit SHAs)\n'
     printf -- '- Analysis: text scanner; no build or MSBuild evaluation\n'
     printf -- '- Strict gate: disabled (this is an informational corpus run)\n\n'
-    printf '| Repository | Commit | Path | Markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time | Status |\n'
-    printf '| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n'
+    printf '| Repository | Commit | Path | Markers | Handler markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time | Status |\n'
+    printf '| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |\n'
     awk -F '\t' '
         NR == 1 { next }
         {
             url = $2
             sub(/\.git$/, "", url)
-            printf "| [%s](%s) | `%s` | `%s` | `%s` | %s | %s | %s | %s | %s/%s | %s/%s/%s | %sms | %s |\n", \
-                $1, url, substr($4, 1, 12), $5, $6, $7, $8, $9, \
-                $10, $13, $14, $15, $16, $17, $18, $19
+            printf "| [%s](%s) | `%s` | `%s` | `%s` | `%s` | %s | %s | %s | %s | %s/%s | %s/%s/%s | %sms | %s |\n", \
+                $1, url, substr($4, 1, 12), $5, $6, $7, $8, $9, $10, $11, \
+                $14, $15, $16, $17, $18, $19, $20
         }
     ' "$results"
     printf '\n'

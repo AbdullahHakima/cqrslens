@@ -30,6 +30,10 @@ inputs:
     description: Comma-separated custom marker interfaces (e.g. ICommand,IQuery).
     required: false
     default: ''
+  handler-markers:
+    description: Comma-separated custom handler roots for external wrappers (e.g. ICommandHandler,IQueryHandler).
+    required: false
+    default: ''
   analysis:
     description: 'Analysis backend override: empty (config/default), text, or roslyn.'
     required: false
@@ -93,6 +97,7 @@ runs:
         CQRSLENS_FORMAT: ${{ inputs.format }}
         CQRSLENS_STRICT: ${{ inputs.strict }}
         CQRSLENS_MARKERS: ${{ inputs.markers }}
+        CQRSLENS_HANDLER_MARKERS: ${{ inputs.handler-markers }}
         CQRSLENS_ANALYSIS: ${{ inputs.analysis }}
         CQRSLENS_CONFIG: ${{ inputs.config }}
         CQRSLENS_BASELINE: ${{ inputs.baseline }}
@@ -108,6 +113,9 @@ runs:
         fi
         if [ -n "$CQRSLENS_MARKERS" ]; then
           args+=(--markers "$CQRSLENS_MARKERS")
+        fi
+        if [ -n "$CQRSLENS_HANDLER_MARKERS" ]; then
+          args+=(--handler-markers "$CQRSLENS_HANDLER_MARKERS")
         fi
         if [ -n "$CQRSLENS_ANALYSIS" ]; then
           args+=(--analysis "$CQRSLENS_ANALYSIS")

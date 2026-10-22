@@ -19,7 +19,7 @@ dotnet tool install -g CqrsLens
 ## Usage
 
 ```bash
-cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--strict]
+cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--strict]
 ```
 
 - The folder is searched recursively for `.csproj` and `.cs` files (`bin`, `obj`, `.git` are skipped).
@@ -101,8 +101,9 @@ root (`--config FILE` selects another file):
 `include`/`exclude` are case-insensitive root-relative globs (`**`, `*`, `?`).
 `layers` overrides project classification, and `rules` accepts `off`, `warning`
 or `error` for any architecture rule. Unknown keys and invalid values are usage
-errors. Explicit `--analysis` and `--markers` flags override the config values.
-See [`docs/configuration.md`](docs/configuration.md) for the full reference.
+errors. Explicit `--analysis`, `--markers` and `--handler-markers` flags override
+the config values. See [`docs/configuration.md`](docs/configuration.md) for the
+full reference.
 
 ### Custom marker interfaces
 
@@ -120,6 +121,29 @@ cqrslens <path> --markers ICommand,IQuery,IMessage
 Configured markers count as request roots, and interfaces inheriting them count too.
 Requests are classified by name suffix first (`…Command` / `…Query`), then by the
 marker they were reached through, and are marked with their marker in the analysis.
+
+### External handler wrappers
+
+Handler wrappers declared in the scanned source are followed automatically. If the
+wrapper comes from a package — for example
+`Ardalis.SharedKernel.ICommandHandler<TCommand, TResult>` — name it as a handler
+root so handlers can link back to their requests:
+
+```bash
+cqrslens <path> --handler-markers ICommandHandler,IQueryHandler
+```
+
+```json
+{
+  "markers": ["ICommand", "IQuery"],
+  "handlerMarkers": ["ICommandHandler", "IQueryHandler"]
+}
+```
+
+The first generic argument is treated as the request type, matching MediatR's
+`IRequestHandler<TRequest, TResponse>` convention. This is opt-in: without the
+option, an external wrapper remains opaque and is surfaced as an informational
+scan diagnostic instead of being guessed.
 
 ### Architecture checks
 
@@ -171,6 +195,7 @@ permissions:
     upload-sarif: 'false'        # true requires security-events: write
     annotations: 'true'          # file/line annotations for new findings
     markers: ''                  # optional: ICommand,IQuery,IMessage
+    handler-markers: ''          # optional external wrapper roots
     analysis: ''                 # text, roslyn, or empty to use config/default
     version: '0.4.0'             # tool version installed by the action
 ```
@@ -320,7 +345,7 @@ The whole scan took 145 ms.
 | --- | --- |
 | Projects & references | `.csproj` XML (`ProjectReference` Include/Update) |
 | Requests | classes/records/structs implementing `IRequest` or `IRequest<T>` — directly, through custom interfaces deriving from it, through source-declared base classes, or through `--markers` roots |
-| Handlers | `IRequestHandler<TRequest>` / `IRequestHandler<TRequest, TResponse>`, including source-declared wrappers such as `ICommandHandler<T>`; generic and non-generic overloads are resolved by arity |
+| Handlers | `IRequestHandler<TRequest>` / `IRequestHandler<TRequest, TResponse>`, including source-declared wrappers and external wrappers named with `--handler-markers`; generic and non-generic overloads are resolved by arity |
 | Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation), including source-declared wrappers |
 | Pipeline behaviors | `IPipelineBehavior<...>` implementations |
 | DbContexts | classes deriving from `DbContext` (incl. `IdentityDbContext`), with their `DbSet<T>`s attributed per class |
@@ -337,17 +362,17 @@ MediatR/FluentValidation/EF Core contracts that are not present in the source:
   `IRequest`, plus `--markers` roots) and through base *classes* declared in the
   scanned source, including generic response substitution. A chain that leaves
   the scanned source cannot be continued; that gap is reported as an
-  informational diagnostic instead of being guessed (see #54 for external
-  handler wrappers).
+  informational diagnostic instead of being guessed.
 - Same-named contracts are resolved from the declaration's namespace and using
   directives, including global usings and namespace aliases. Generic and
   non-generic overloads are distinguished by arity. Handlers/validators link by
   fully-qualified name first, then an imported namespace, then a unique simple
   name. Genuinely ambiguous or unresolved CQRS contracts are reported as
   informational diagnostics instead of being guessed.
-- External handler/validator wrappers are opaque in text mode unless their
-  inheritance is present in the scanned source (see #54). Source-declared
-  wrappers such as `ICommandHandler<T> : IRequestHandler<T>` are followed.
+- External handler wrappers are opaque by default unless their inheritance is
+  present in the scanned source. Name them with `--handler-markers` /
+  `handlerMarkers` to link handlers through them. Source-declared wrappers such
+  as `ICommandHandler<T> : IRequestHandler<T>` are followed automatically.
 - Declarations written in unusual formatting can be missed. When in doubt, the
   report errs toward showing less, not inventing more.
 
