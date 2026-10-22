@@ -10,6 +10,10 @@ public sealed class CliOptions
     public string? ConfigPath { get; set; }
     public string? BaselinePath { get; set; }
     public string? WriteBaselinePath { get; set; }
+    public string? SarifPath { get; set; }
+    public string? SummaryPath { get; set; }
+    public string? CiRoot { get; set; }
+    public bool GitHubAnnotations { get; set; }
     public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.Text;
     public bool AnalysisModeSpecified { get; set; }
     public DateTimeOffset? GeneratedAt { get; set; }
@@ -102,6 +106,24 @@ public static class CliParser
                         return Error("error: --write-baseline needs a value, e.g. --write-baseline cqrslens-baseline.json");
                     options.WriteBaselinePath = args[++i];
                     break;
+                case "--sarif":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --sarif needs a value, e.g. --sarif cqrslens.sarif");
+                    options.SarifPath = args[++i];
+                    break;
+                case "--summary":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --summary needs a value, e.g. --summary cqrslens-summary.md");
+                    options.SummaryPath = args[++i];
+                    break;
+                case "--ci-root":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --ci-root needs a value, e.g. --ci-root $GITHUB_WORKSPACE");
+                    options.CiRoot = args[++i];
+                    break;
+                case "--github-annotations":
+                    options.GitHubAnnotations = true;
+                    break;
                 case "--strict":
                     options.Strict = true;
                     break;
@@ -191,6 +213,27 @@ public static class CliRunner
 
         var fullRoot = Path.GetFullPath(path);
         var settings = ConfigurationLoader.Load(fullRoot, options.ConfigPath);
+
+        string? ciRoot = null;
+        if (options.CiRoot is not null)
+        {
+            try
+            {
+                ciRoot = Path.GetFullPath(options.CiRoot);
+            }
+            catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+            {
+                stderr.WriteLine($"error: invalid --ci-root '{options.CiRoot}': {ex.Message}");
+                return ExitCodes.Usage;
+            }
+
+            if (!Directory.Exists(ciRoot))
+            {
+                stderr.WriteLine($"error: --ci-root directory not found: {options.CiRoot}");
+                return ExitCodes.Usage;
+            }
+        }
+
         if (CsprojParser.FindProjectFiles(fullRoot).Count == 0)
         {
             stderr.WriteLine($"error: no .csproj files found under: {path}");
@@ -227,11 +270,40 @@ public static class CliRunner
             Directory.GetCurrentDirectory(), isHtml ? "ARCHITECTURE.html" : "ARCHITECTURE.md");
         var fullOutput = Path.GetFullPath(output);
 
-        if (Directory.Exists(fullOutput) ||
-            output.EndsWith(Path.DirectorySeparatorChar) ||
-            output.EndsWith(Path.AltDirectorySeparatorChar))
+        if (IsDirectoryOutput(output, fullOutput))
         {
             stderr.WriteLine($"error: output path is a directory: {output}");
+            return ExitCodes.Usage;
+        }
+
+        var fullSarif = options.SarifPath is null ? null : Path.GetFullPath(options.SarifPath);
+        if (fullSarif is not null && IsDirectoryOutput(options.SarifPath!, fullSarif))
+        {
+            stderr.WriteLine($"error: SARIF path is a directory: {options.SarifPath}");
+            return ExitCodes.Usage;
+        }
+
+        var fullSummary = options.SummaryPath is null ? null : Path.GetFullPath(options.SummaryPath);
+        if (fullSummary is not null && IsDirectoryOutput(options.SummaryPath!, fullSummary))
+        {
+            stderr.WriteLine($"error: summary path is a directory: {options.SummaryPath}");
+            return ExitCodes.Usage;
+        }
+
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (fullSarif is not null && string.Equals(fullSarif, fullOutput, comparison))
+        {
+            stderr.WriteLine("error: --sarif and the report output must be different files.");
+            return ExitCodes.Usage;
+        }
+
+        if (fullSummary is not null &&
+            (string.Equals(fullSummary, fullOutput, comparison) ||
+             string.Equals(fullSummary, fullSarif, comparison)))
+        {
+            stderr.WriteLine("error: --summary and the other output paths must be different files.");
             return ExitCodes.Usage;
         }
 
@@ -254,11 +326,30 @@ public static class CliRunner
 
         File.WriteAllText(fullOutput, report);
 
+        if (fullSarif is not null)
+        {
+            EnsureOutputDirectory(fullSarif);
+            File.WriteAllText(fullSarif, SarifReportGenerator.Generate(result, ciRoot));
+        }
+
+        if (fullSummary is not null)
+        {
+            EnsureOutputDirectory(fullSummary);
+            File.WriteAllText(fullSummary, SummaryGenerator.Generate(result, ciRoot));
+        }
+
+        if (options.GitHubAnnotations)
+            GitHubAnnotations.Write(result, stdout, ciRoot);
+
         stdout.WriteLine($"Scanned {result.Projects.Count} project(s): " +
                          $"{result.Requests.Count} request(s), {result.Handlers.Count} handler(s), " +
                          $"{result.Validators.Count} validator(s), {result.Behaviors.Count} behavior(s), " +
                          $"{result.DbContexts.Count} DbContext(s).");
         stdout.WriteLine($"Report written to {fullOutput}");
+        if (fullSarif is not null)
+            stdout.WriteLine($"SARIF written to {fullSarif}");
+        if (fullSummary is not null)
+            stdout.WriteLine($"Summary written to {fullSummary}");
         if (result.SkippedFiles.Count > 0)
             stderr.WriteLine($"warning: {result.SkippedFiles.Count} source file(s) skipped - see the report.");
 
@@ -302,11 +393,23 @@ public static class CliRunner
         return ExitCodes.Success;
     }
 
+    private static bool IsDirectoryOutput(string raw, string fullPath)
+        => Directory.Exists(fullPath) ||
+           raw.EndsWith(Path.DirectorySeparatorChar) ||
+           raw.EndsWith(Path.AltDirectorySeparatorChar);
+
+    private static void EnsureOutputDirectory(string fullPath)
+    {
+        var directory = Path.GetDirectoryName(fullPath);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+    }
+
     public static void WriteUsage(TextWriter writer)
     {
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--baseline FILE] [--write-baseline FILE] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (or .html) in the current directory.");
@@ -322,6 +425,10 @@ public static class CliRunner
         writer.WriteLine("  --baseline    Compare checks with a baseline file; --strict then fails only");
         writer.WriteLine("                on errors not present in the baseline.");
         writer.WriteLine("  --write-baseline  Record current checks as the baseline, then continue.");
+        writer.WriteLine("  --sarif       Also write SARIF 2.1.0 for code scanning.");
+        writer.WriteLine("  --summary     Also write a compact Markdown job summary.");
+        writer.WriteLine("  --github-annotations  Emit file/line GitHub Actions annotations.");
+        writer.WriteLine("  --ci-root     Repository root used to rebase annotation/SARIF paths.");
         writer.WriteLine("  --strict      Exit with code 4 when architecture checks report an error");
         writer.WriteLine("                and the scan is complete; incomplete scans report diagnostics.");
         writer.WriteLine("  --version     Print the tool version and exit.");

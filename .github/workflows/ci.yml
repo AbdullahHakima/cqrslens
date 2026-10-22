@@ -34,6 +34,12 @@ jobs:
       - name: Test
         run: dotnet test CqrsLens.sln -c Release --no-build --nologo
 
+      - name: Verify runtime roll-forward
+        shell: bash
+        run: |
+          grep -q '"rollForward": "LatestMajor"' \
+            src/CqrsLens/bin/Release/net8.0/cqrslens.runtimeconfig.json
+
       - name: Pack
         run: dotnet pack src/CqrsLens/CqrsLens.csproj -c Release --no-build -o artifacts
 
@@ -55,6 +61,38 @@ jobs:
           grep -q "| DbContexts | 1 |" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
           grep -q "## CQRS Map" "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
           test -s "artifacts/ARCHITECTURE-${RUNNER_OS}.md"
+
+      - name: Smoke test SARIF, annotations, summary and baselines
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project src/CqrsLens -c Release --no-build -- \
+            tests/fixtures/StrictFailure \
+            --generated-at 2026-01-02T03:04:05Z \
+            --ci-root "$GITHUB_WORKSPACE" \
+            --github-annotations \
+            --sarif artifacts/strict-smoke.sarif \
+            --summary artifacts/strict-smoke-summary.md \
+            -o artifacts/strict-smoke.md \
+            > artifacts/strict-smoke-annotations.txt
+          grep -q '::error file=tests/fixtures/StrictFailure/UnhandledQuery.cs,line=' \
+            artifacts/strict-smoke-annotations.txt
+          grep -q '"ruleId": "MissingHandler"' artifacts/strict-smoke.sarif
+          grep -q '"partialFingerprints"' artifacts/strict-smoke.sarif
+          grep -q '#### New findings' artifacts/strict-smoke-summary.md
+
+          dotnet run --project src/CqrsLens -c Release --no-build -- \
+            tests/fixtures/StrictFailure \
+            --write-baseline artifacts/strict-baseline.json \
+            -o artifacts/strict-baseline-report.md
+          dotnet run --project src/CqrsLens -c Release --no-build -- \
+            tests/fixtures/StrictFailure \
+            --baseline artifacts/strict-baseline.json \
+            --strict \
+            --sarif artifacts/strict-baseline.sarif \
+            -o artifacts/strict-baseline-check.md
+          grep -q '"baselineState": "unchanged"' artifacts/strict-baseline.sarif
+          grep -q '"schemaVersion": 1' artifacts/strict-baseline.json
 
       - name: Upload package
         uses: actions/upload-artifact@v4
@@ -96,10 +134,22 @@ jobs:
           version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n1)
           test -n "$version"
           ls -l artifacts
+          cat > "$RUNNER_TEMP/nuget-local.config" <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="$PWD/artifacts" />
+            </packageSources>
+          </configuration>
+          EOF
           dotnet tool install --global CqrsLens --version "$version" \
-            --add-source "$PWD/artifacts"
+            --configfile "$RUNNER_TEMP/nuget-local.config"
           export PATH="$HOME/.dotnet/tools:$PATH"
           cqrslens --version
+          runtimeconfig=$(find "$HOME/.dotnet/tools/.store/cqrslens/$version" -name cqrslens.runtimeconfig.json | head -n1)
+          test -n "$runtimeconfig"
+          grep -q '"rollForward": "LatestMajor"' "$runtimeconfig"
           cqrslens samples/SampleShop \
             --analysis text \
             --strict \
@@ -132,9 +182,98 @@ jobs:
           set -e
           test "$strict_code" -eq 4
 
+      - name: Verify CI outputs from the installed tool
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PATH="$HOME/.dotnet/tools:$PATH"
+          cqrslens tests/fixtures/StrictFailure \
+            --generated-at 2026-01-02T03:04:05Z \
+            --ci-root "$GITHUB_WORKSPACE" \
+            --github-annotations \
+            --sarif artifacts/installed-strict.sarif \
+            --summary artifacts/installed-strict-summary.md \
+            -o artifacts/installed-strict.md \
+            > artifacts/installed-strict-annotations.txt
+          grep -q '"ruleId": "MissingHandler"' artifacts/installed-strict.sarif
+          grep -q '::error file=tests/fixtures/StrictFailure/UnhandledQuery.cs,line=' \
+            artifacts/installed-strict-annotations.txt
+          grep -q '#### New findings' artifacts/installed-strict-summary.md
+
       - name: Upload installed-tool report
         uses: actions/upload-artifact@v4
         with:
           name: installed-report
-          path: artifacts/installed-ARCHITECTURE.md
+          path: |
+            artifacts/installed-ARCHITECTURE.md
+            artifacts/installed-strict.sarif
+            artifacts/installed-strict-summary.md
+          if-no-files-found: error
+
+  runtime-compat:
+    name: runtime (${{ matrix.runtime }})
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: ['8.0.x', '9.0.x', '10.0.x']
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET ${{ matrix.runtime }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ matrix.runtime }}
+
+      - name: Download package
+        uses: actions/download-artifact@v4
+        with:
+          name: package-ubuntu-latest
+          path: artifacts
+
+      - name: Install and run the packed tool on this runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n1)
+          test -n "$version"
+
+          export DOTNET_ROOT="$(dirname "$(readlink -f "$(command -v dotnet)")")"
+          export PATH="$DOTNET_ROOT:$RUNNER_TEMP/cqrslens-tools:$PATH"
+          echo "DOTNET_ROOT=$DOTNET_ROOT"
+          dotnet --list-runtimes
+
+          cat > "$RUNNER_TEMP/nuget-local.config" <<EOF
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="$PWD/artifacts" />
+            </packageSources>
+          </configuration>
+          EOF
+          dotnet tool install cqrslens --tool-path "$RUNNER_TEMP/cqrslens-tools" \
+            --version "$version" --configfile "$RUNNER_TEMP/nuget-local.config"
+          runtimeconfig=$(find "$RUNNER_TEMP/cqrslens-tools/.store/cqrslens/$version" -name cqrslens.runtimeconfig.json | head -n1)
+          test -n "$runtimeconfig"
+          grep -q '"rollForward": "LatestMajor"' "$runtimeconfig"
+          cqrslens --version
+          cqrslens samples/SampleShop \
+            --analysis text \
+            --strict \
+            --generated-at 2026-01-02T03:04:05Z \
+            -o artifacts/runtime-${RUNTIME_VERSION}-ARCHITECTURE.md
+          grep -q "| Requests (commands + queries) | 4 |" \
+            "artifacts/runtime-${RUNTIME_VERSION}-ARCHITECTURE.md"
+          grep -q "| Handlers | 4 |" "artifacts/runtime-${RUNTIME_VERSION}-ARCHITECTURE.md"
+        env:
+          RUNTIME_VERSION: ${{ matrix.runtime }}
+
+      - name: Upload runtime report
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-report-${{ matrix.runtime }}
+          path: artifacts/runtime-*-ARCHITECTURE.md
           if-no-files-found: error
