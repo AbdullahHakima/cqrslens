@@ -1,11 +1,24 @@
 ﻿flowchart LR
-    ArchiveWidgetCommand["ArchiveWidgetCommand"]
-    ArchiveWidgetCommandHandler(["ArchiveWidgetCommandHandler"])
-    ArchiveWidgetCommandValidator{"ArchiveWidgetCommandValidator"}
-    CreateWidgetCommand["CreateWidgetCommand"]
-    CreateWidgetCommandHandler(["CreateWidgetCommandHandler"])
-    CreateWidgetCommandValidator{"CreateWidgetCommandValidator"}
-    ArchiveWidgetCommand --> ArchiveWidgetCommandHandler
-    ArchiveWidgetCommandValidator -.-> ArchiveWidgetCommand
-    CreateWidgetCommand --> CreateWidgetCommandHandler
-    CreateWidgetCommandValidator -.-> CreateWidgetCommand
+    accTitle: CQRS map
+    accDescr: 2 requests, 2 handlers, 2 validators.
+    subgraph prj_Foo_Bar["Requests in Foo-Bar"]
+        req_ArchiveWidgetCommand["ArchiveWidgetCommand"]:::clsCommand
+    end
+    subgraph prj_Foo_Bar_2["Requests in Foo.Bar"]
+        req_CreateWidgetCommand["CreateWidgetCommand"]:::clsCommand
+    end
+    hdl_ArchiveWidgetCommandHandler(["ArchiveWidgetCommandHandler"]):::clsHandler
+    hdl_CreateWidgetCommandHandler(["CreateWidgetCommandHandler"]):::clsHandler
+    val_ArchiveWidgetCommandValidator["ArchiveWidgetCommandValidator"]:::clsValidator
+    val_CreateWidgetCommandValidator["CreateWidgetCommandValidator"]:::clsValidator
+    req_ArchiveWidgetCommand --> hdl_ArchiveWidgetCommandHandler
+    val_ArchiveWidgetCommandValidator -.->|validates| req_ArchiveWidgetCommand
+    req_CreateWidgetCommand --> hdl_CreateWidgetCommandHandler
+    val_CreateWidgetCommandValidator -.->|validates| req_CreateWidgetCommand
+    style prj_Foo_Bar fill:none,stroke:#94a3b8,stroke-dasharray:4 3
+    style prj_Foo_Bar_2 fill:none,stroke:#94a3b8,stroke-dasharray:4 3
+    classDef clsCommand fill:#e8f1ff,stroke:#2563eb,stroke-width:2px,color:#102a43
+    classDef clsQuery fill:#e6fffa,stroke:#0f766e,stroke-width:2px,color:#0f2e2e
+    classDef clsRequest fill:#f5f3ff,stroke:#6d28d9,stroke-width:2px,color:#2e1065
+    classDef clsHandler fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#1e293b
+    classDef clsValidator fill:#fff7ed,stroke:#c2410c,stroke-width:1.5px,color:#431407

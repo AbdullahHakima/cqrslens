@@ -1,0 +1,68 @@
+name: Mermaid render check (non-gating)
+
+# Informational only: this workflow is not triggered by pull requests and is not
+# a required check. It catches Mermaid syntax or GitHub-entity regressions with
+# the same renderer/config used by the HTML report.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mermaid-render-check
+  cancel-in-progress: true
+
+jobs:
+  render:
+    name: Parse and render every generated diagram
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Restore (locked)
+        run: dotnet restore CqrsLens.sln --locked-mode
+
+      - name: Build
+        run: dotnet build CqrsLens.sln -c Release --no-restore --nologo
+
+      - name: Generate sample and adversarial reports
+        shell: bash
+        run: |
+          mkdir -p artifacts/render-check
+          dotnet run --project src/CqrsLens -c Release --no-build -- \
+            samples/SampleShop \
+            -o artifacts/render-check/sample.md \
+            --generated-at 2026-01-01T00:00:00Z
+          dotnet run --project src/CqrsLens -c Release --no-build -- \
+            tests/fixtures/Adversarial \
+            -o artifacts/render-check/adversarial.md \
+            --generated-at 2026-01-01T00:00:00Z
+
+      - name: Install render-check dependencies
+        working-directory: scripts/mermaid-render-check
+        run: npm ci --no-audit --no-fund
+
+      - name: Install Chromium
+        working-directory: scripts/mermaid-render-check
+        run: npx playwright install --with-deps chromium
+
+      - name: Parse and render every diagram
+        run: >-
+          node scripts/mermaid-render-check/check.mjs
+          artifacts/render-check/sample.md
+          artifacts/render-check/adversarial.md

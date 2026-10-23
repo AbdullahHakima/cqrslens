@@ -198,7 +198,7 @@ public class ConfigurationTests : IDisposable
         var report = File.ReadAllText(output);
         Assert.Contains("KeepQuery", report);
         Assert.DoesNotContain("DropQuery", report);
-        Assert.Contains("subgraph layer_Domain[\"Domain\"]", report);
+        Assert.Contains("subgraph lyr_Domain[\"Domain\"]", report);
     }
 
     [Fact]

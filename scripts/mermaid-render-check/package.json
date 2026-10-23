@@ -1,0 +1,11 @@
+{
+  "name": "cqrslens-mermaid-render-check",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Non-gating Mermaid 12.2 parser/render check for generated CqrsLens reports.",
+  "dependencies": {
+    "mermaid": "12.2.0",
+    "playwright": "1.55.0"
+  }
+}
