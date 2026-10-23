@@ -2,6 +2,23 @@
 
 All notable changes to CqrsLens are documented here.
 
+## [0.5.1] - 2026-10-23
+
+### Changed
+
+- Mermaid reports hardened for GitHub rendering: role-prefixed ASCII node ids,
+  reserved-word handling, GitHub-safe label entities, and diagrams split at
+  15 requests grouped by project.
+
+### Fixed
+
+- Text mode missed DbContext classes declared with a primary constructor, such
+  as `class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options), IAppDbContext`.
+  The base-call argument list is now stripped before the base type is matched,
+  and the declaration scan no longer reads `DbContext(options)` as part of the
+  parameter list when it is the only base entry. These contexts and their
+  `DbSet<>` properties are detected, matching the Roslyn backend.
+
 ## [0.5.0] - 2026-10-22
 
 ### Added
