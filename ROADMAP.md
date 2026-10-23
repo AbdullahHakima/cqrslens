@@ -3,6 +3,18 @@
 What is planned, in the order I expect to work on it. Issues are linked
 where they exist; the dates are not promises.
 
+## In progress
+
+**Visualization quality and GitHub rendering**
+
+- Bounded, role-prefixed Mermaid diagrams with GitHub-safe entities and escaped
+  table cells; CQRS maps split at 15 requests and balanced by project
+- Semantic styling, layer colors and legends driven by enabled checks
+- Mermaid 12.2.0 HTML pin with GitHub-compatible layout and per-diagram
+  render/source fallbacks
+- Non-gating Mermaid parser/render check; a fully pre-rendered SVG mode remains
+  a follow-up (see below)
+
 ## Done
 
 **0.5.0** (October 2026)
