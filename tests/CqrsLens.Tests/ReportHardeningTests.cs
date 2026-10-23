@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using CqrsLens;
 using Xunit;
 
@@ -66,9 +67,9 @@ public class ReportHardeningTests
         var graph = DiagramBuilder.ProjectGraph(result);
 
         Assert.NotNull(graph);
-        Assert.Contains("Foo_Bar[\"Foo.Bar\"]", graph);
-        Assert.Contains("Foo_Bar_2[\"Foo-Bar\"]", graph);
-        Assert.DoesNotContain(" Foo_Bar[\"Foo-Bar\"]", graph);
+        Assert.Contains("prj_Foo_Bar[\"Foo-Bar\"]", graph);
+        Assert.Contains("prj_Foo_Bar_2[\"Foo.Bar\"]", graph);
+        Assert.DoesNotContain(" prj_Foo_Bar[\"Foo.Bar\"]", graph);
     }
 
     [Fact]
@@ -91,20 +92,74 @@ public class ReportHardeningTests
         var map = DiagramBuilder.CqrsMap(result);
 
         Assert.NotNull(map);
-        Assert.Contains("Foo_Bar[\"Foo.Bar\"]", map);
-        Assert.Contains("Foo_Bar_2[\"Foo-Bar\"]", map);
+        Assert.Contains("req_Foo_Bar[\"Foo.Bar\"]", map);
+        Assert.Contains("req_Foo_Bar_2[\"Foo-Bar\"]", map);
     }
 
     [Fact]
-    public void MermaidLabels_EscapeQuotesBracketsPipesAndNewlines()
+    public void CqrsMap_DisambiguatesDuplicateSimpleNamesInLabels()
+    {
+        var result = new AnalysisResult { RootPath = "/tmp" };
+        var one = new CqrsRequest
+        {
+            Name = "PingCommand", Namespace = "Demo.One", ProjectName = "App",
+        };
+        one.Handlers.Add("Demo.One.PingHandler");
+        one.Validators.Add("Demo.One.PingValidator");
+        var two = new CqrsRequest
+        {
+            Name = "PingCommand", Namespace = "Demo.Two", ProjectName = "App",
+        };
+        two.Handlers.Add("Demo.Two.PingHandler");
+        two.Validators.Add("Demo.Two.PingValidator");
+        result.Requests.Add(one);
+        result.Requests.Add(two);
+
+        var map = Assert.Single(DiagramBuilder.CqrsMapSections(result)).Source;
+
+        Assert.Contains("req_Demo_One_PingCommand[\"Demo.One.PingCommand\"]", map);
+        Assert.Contains("req_Demo_Two_PingCommand[\"Demo.Two.PingCommand\"]", map);
+        Assert.Contains("hdl_Demo_One_PingHandler([\"Demo.One.PingHandler\"])", map);
+        Assert.Contains("hdl_Demo_Two_PingHandler([\"Demo.Two.PingHandler\"])", map);
+        Assert.Contains("val_Demo_One_PingValidator[\"Demo.One.PingValidator\"]", map);
+        Assert.Contains("val_Demo_Two_PingValidator[\"Demo.Two.PingValidator\"]", map);
+    }
+
+    [Fact]
+    public void MermaidLabels_UseNativeEntitiesSafeFromGitHubHtmlDecoding()
     {
         var label = DiagramBuilder.MermaidLabel("A\"B<C>|D\nE");
+        Assert.Equal("A#quot;B#lt;C#gt;#124;D E", label);
 
-        Assert.Equal("A&quot;B&lt;C&gt;&#124;D E", label);
+        var ampersands = DiagramBuilder.MermaidLabel("A&B#C");
+        Assert.Equal("A#38;B#35;C", ampersands);
+        Assert.DoesNotContain("&quot;", label);
+        Assert.DoesNotContain("&lt;", label);
+    }
+
+    [Theory]
+    [InlineData("end", "n_end")]
+    [InlineData("graph", "n_graph")]
+    [InlineData("subgraph", "n_subgraph")]
+    [InlineData("style", "n_style")]
+    [InlineData("class", "n_class")]
+    [InlineData("classDef", "n_classDef")]
+    [InlineData("linkStyle", "n_linkStyle")]
+    [InlineData("flowchart", "n_flowchart")]
+    public void MermaidId_PrefixesReservedWords(string name, string expected)
+        => Assert.Equal(expected, DiagramBuilder.MermaidId(name));
+
+    [Fact]
+    public void MermaidId_StaysAsciiAndReadable()
+    {
+        Assert.Equal("SampleShop_Application", DiagramBuilder.MermaidId("SampleShop.Application"));
+        Assert.Equal("n_9lives", DiagramBuilder.MermaidId("9lives"));
+        Assert.Equal("n", DiagramBuilder.MermaidId(""));
+        Assert.Matches("^[A-Za-z_][A-Za-z0-9_]*$", DiagramBuilder.MermaidId("café/订单"));
     }
 
     [Fact]
-    public void MarkdownTables_EscapePipesAndCollapseNewlines()
+    public void MarkdownTables_EscapePipesAnglesAndCollapseNewlines()
     {
         var result = FixedResult("Pipe|Name\nSecond");
 
@@ -114,6 +169,10 @@ public class ReportHardeningTests
         Assert.Contains("A\\|B", md);
         Assert.Contains("Foo.Bar", md);
         Assert.DoesNotContain("Pipe|Name\nSecond", md);
+
+        var generic = ReportGenerator.Generate(FixedResult("List<ProductDto> & A<B>C"));
+        Assert.Contains("List&lt;ProductDto&gt; &amp; A&lt;B&gt;C", generic);
+        Assert.Contains("List#lt;ProductDto#gt; #38; A#lt;B#gt;C", generic);
     }
 
     [Fact]
@@ -131,14 +190,193 @@ public class ReportHardeningTests
     }
 
     [Fact]
-    public void Html_PinsMermaidWithSriAndDocumentsOfflineBehavior()
+    public void Html_PinsMermaidWithSriAndGitHubCompatibleConfiguration()
     {
         var html = HtmlReportGenerator.Generate(FixedResult());
 
-        Assert.Contains("mermaid@10.9.4", html);
-        Assert.Contains("integrity=\"sha384-", html);
+        Assert.Contains("mermaid@12.2.0", html);
+        Assert.Contains(
+            "integrity=\"sha384-8xUhuLNMjW/cI2Dacg3DR4WliYznvIg0LVG1stctThKD/YVrJFI9TNCFxft5NYgp\"",
+            html);
         Assert.Contains("crossorigin=\"anonymous\"", html);
+        Assert.Contains("startOnLoad: false", html);
+        Assert.Contains("theme: 'default'", html);
+        Assert.Contains("look: 'classic'", html);
+        Assert.Contains("layout: 'elk'", html);
+        Assert.Contains("maxTextSize: 50000", html);
+        Assert.Contains("maxEdges: 500", html);
+        Assert.Contains("securityLevel: 'strict'", html);
+        Assert.Contains("suppressErrorRendering: true", html);
+        Assert.Contains("mermaid.render", html);
+        Assert.Contains("showSource", html);
+        Assert.Contains("This diagram could not be rendered", html);
+        Assert.Contains("node.replaceWith", html);
+        Assert.Contains("diagram-error", html);
         Assert.Contains("Analysis Diagnostics", html);
+    }
+
+    [Fact]
+    public void Html_SplitsLargeCqrsMapsAndLabelsEveryPart()
+    {
+        var result = new AnalysisResult { RootPath = "/tmp" };
+        for (var i = 0; i < 20; i++)
+            result.Requests.Add(Request($"Command{i:00}", "App"));
+
+        var html = HtmlReportGenerator.Generate(result);
+
+        Assert.Equal(2, Regex.Count(html, "<pre class=\"mermaid\">"));
+        Assert.Contains("<h3>App — 10 of 20 requests (part 1 of 2)</h3>", html);
+        Assert.Contains("<h3>App — 10 of 20 requests (part 2 of 2)</h3>", html);
+        Assert.Contains("20 requests across 1 project.", html);
+        Assert.Contains("every request appears exactly once", html);
+        Assert.Contains("Command00", html);
+        Assert.Contains("Command19", html);
+    }
+
+    [Fact]
+    public void Markdown_SplitsLargeCqrsMapsAndLabelsEveryPart()
+    {
+        var result = new AnalysisResult { RootPath = "/tmp" };
+        for (var i = 0; i < 20; i++)
+            result.Requests.Add(Request($"Command{i:00}", "App"));
+
+        var markdown = ReportGenerator.Generate(result);
+
+        Assert.Contains("### App — 10 of 20 requests (part 1 of 2)", markdown);
+        Assert.Contains("### App — 10 of 20 requests (part 2 of 2)", markdown);
+        Assert.Contains("20 requests across 1 project.", markdown);
+        Assert.Contains("every request appears exactly once", markdown);
+        Assert.Contains("| Command00 |", markdown);
+        Assert.Contains("| Command19 |", markdown);
+    }
+
+    [Fact]
+    public void CqrsMapSections_LabelUnassignedSplits()
+    {
+        var result = new AnalysisResult { RootPath = "/tmp" };
+        for (var i = 0; i < 20; i++)
+        {
+            result.Requests.Add(new CqrsRequest
+            {
+                Name = $"Command{i:00}",
+                Namespace = "Demo",
+                ResponseType = "Unit",
+            });
+        }
+
+        var sections = DiagramBuilder.CqrsMapSections(result);
+
+        Assert.Equal(2, sections.Count);
+        Assert.Equal("CQRS Map — 10 of 20 requests (part 1 of 2)", sections[0].Heading);
+        Assert.Equal("CQRS Map — 10 of 20 requests (part 2 of 2)", sections[1].Heading);
+    }
+
+    [Fact]
+    public void CqrsMapSections_SplitLargeMapsIntoBoundedCoverage()
+    {
+        var result = new AnalysisResult { RootPath = "/tmp" };
+        for (var i = 0; i < 44; i++)
+            result.Requests.Add(Request($"Command{i:00}", "App"));
+
+        var sections = DiagramBuilder.CqrsMapSections(result);
+
+        Assert.Equal(3, sections.Count);
+        Assert.Equal(new[] { 15, 15, 14 }, sections.Select(s => s.Requests.Count));
+        Assert.Equal(new[] { 1, 2, 3 }, sections.Select(s => s.Part));
+        Assert.All(sections, s => Assert.Equal(3, s.PartCount));
+        Assert.All(sections, s => Assert.True(DiagramBuilder.IsWithinMermaidLimits(s.Source)));
+        Assert.Equal(
+            result.Requests.OrderBy(r => r.FullName, StringComparer.Ordinal).Select(r => r.FullName),
+            sections.SelectMany(s => s.Requests).Select(r => r.FullName).OrderBy(n => n, StringComparer.Ordinal));
+        Assert.All(sections, s => Assert.Contains("subgraph prj_App", s.Source));
+    }
+
+    [Fact]
+    public void CqrsMapSections_GroupByProjectAndCoverEveryRequestOnce()
+    {
+        var result = new AnalysisResult { RootPath = "/tmp" };
+        for (var i = 0; i < 30; i++)
+            result.Requests.Add(Request($"ACommand{i:00}", "A"));
+        for (var i = 0; i < 14; i++)
+            result.Requests.Add(Request($"BCommand{i:00}", "B"));
+
+        var sections = DiagramBuilder.CqrsMapSections(result);
+
+        Assert.Equal(3, sections.Count);
+        Assert.Equal(new[] { "A", "A", "B" }, sections.Select(s => s.ProjectName));
+        Assert.Equal(new[] { 15, 15, 14 }, sections.Select(s => s.Requests.Count));
+        Assert.Equal(44, sections.Sum(s => s.Requests.Count));
+        Assert.Equal(
+            result.Requests.Select(r => r.FullName).OrderBy(n => n, StringComparer.Ordinal),
+            sections.SelectMany(s => s.Requests).Select(r => r.FullName).OrderBy(n => n, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void CqrsMapSections_ApplyFindingStylesOnlyWhenTheChecksExist()
+    {
+        var result = new AnalysisResult { RootPath = "/tmp" };
+        result.Requests.Add(Request("PingCommand", "App"));
+
+        var map = Assert.Single(DiagramBuilder.CqrsMapSections(result)).Source;
+        Assert.Contains(":::clsCommand", map);
+        Assert.DoesNotContain("MissingHandler", map);
+        Assert.DoesNotContain("CommandWithoutValidator", map);
+
+        result.Checks.Add(new CheckFinding(
+            CheckSeverity.Error,
+            ArchitectureChecker.MissingHandlerCode,
+            "No handler.",
+            Target: "Demo.PingCommand"));
+        map = Assert.Single(DiagramBuilder.CqrsMapSections(result)).Source;
+        Assert.Contains(":::clsMissingHandler", map);
+        Assert.Contains("classDef clsMissingHandler", map);
+
+        var noValidator = new AnalysisResult { RootPath = "/tmp" };
+        noValidator.Requests.Add(Request("PingCommand", "App"));
+        noValidator.Checks.Add(new CheckFinding(
+            CheckSeverity.Warning,
+            ArchitectureChecker.CommandWithoutValidatorCode,
+            "No validator.",
+            Target: "Demo.PingCommand"));
+        map = Assert.Single(DiagramBuilder.CqrsMapSections(noValidator)).Source;
+        Assert.Contains(":::clsCommandNoValidator", map);
+        Assert.Contains("classDef clsCommandNoValidator", map);
+        Assert.DoesNotContain("MissingHandler", map);
+    }
+
+    [Fact]
+    public void ProjectGraph_AppliesViolationStylesOnlyWhenTheFindingExists()
+    {
+        var result = new AnalysisResult { RootPath = "/tmp" };
+        var api = new ProjectInfo
+        {
+            Name = "Shop.Api", FilePath = "/tmp/Shop.Api.csproj", DirectoryPath = "/tmp/Shop.Api",
+            Layer = "Api",
+        };
+        var domain = new ProjectInfo
+        {
+            Name = "Shop.Domain", FilePath = "/tmp/Shop.Domain.csproj", DirectoryPath = "/tmp/Shop.Domain",
+            Layer = "Domain",
+        };
+        api.ReferenceNames.Add("Shop.Domain");
+        result.Projects.Add(api);
+        result.Projects.Add(domain);
+
+        var plain = DiagramBuilder.ProjectGraph(result);
+        Assert.NotNull(plain);
+        Assert.Contains("prj_Shop_Api --> prj_Shop_Domain", plain);
+        Assert.DoesNotContain("violates", plain);
+        Assert.DoesNotContain("linkStyle", plain);
+
+        result.Checks.Add(new CheckFinding(
+            CheckSeverity.Error,
+            ArchitectureChecker.LayerViolationCode,
+            "Api references Domain.",
+            Target: "Shop.Api -> Shop.Domain"));
+        var styled = DiagramBuilder.ProjectGraph(result);
+        Assert.NotNull(styled);
+        Assert.Contains("prj_Shop_Api -->|violates| prj_Shop_Domain", styled);
+        Assert.Contains("linkStyle 0 stroke:#dc2626", styled);
     }
 
     [Fact]
@@ -157,4 +395,13 @@ public class ReportHardeningTests
         Assert.Contains("Bad &lt;label&gt; &amp; value", html);
         Assert.Contains("A&lt;B&gt;.cs", html);
     }
+
+    private static CqrsRequest Request(string name, string project)
+        => new()
+        {
+            Name = name,
+            Namespace = "Demo",
+            ProjectName = project,
+            ResponseType = "Unit",
+        };
 }

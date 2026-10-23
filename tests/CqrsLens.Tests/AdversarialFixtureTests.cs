@@ -50,20 +50,26 @@ public class AdversarialFixtureTests
         var expectedPath = Path.Combine(
             root, "expected-cqrs.mmd");
 
-        var actual = Normalize(DiagramBuilder.CqrsMap(result)!);
+        var sections = DiagramBuilder.CqrsMapSections(result);
+        var section = Assert.Single(sections);
+        var actual = Normalize(section.Source);
         var expected = Normalize(File.ReadAllText(expectedPath));
 
         Assert.Equal(expected, actual);
+        Assert.Equal(2, section.Requests.Count);
+        Assert.All(sections, s => Assert.True(DiagramBuilder.IsWithinMermaidLimits(s.Source)));
     }
 
     [Fact]
     public void TextAndRoslyn_ProduceTheSameCqrsMap()
     {
         var root = FixtureRoot();
-        var text = DiagramBuilder.CqrsMap(Analyzer.Analyze(root));
-        var roslyn = DiagramBuilder.CqrsMap(Analyzer.Analyze(root, AnalysisMode.Roslyn));
+        var text = DiagramBuilder.CqrsMapSections(Analyzer.Analyze(root));
+        var roslyn = DiagramBuilder.CqrsMapSections(Analyzer.Analyze(root, AnalysisMode.Roslyn));
 
-        Assert.Equal(Normalize(text!), Normalize(roslyn!));
+        Assert.Equal(
+            text.Select(s => Normalize(s.Source)),
+            roslyn.Select(s => Normalize(s.Source)));
     }
 
     [Fact]
@@ -72,9 +78,9 @@ public class AdversarialFixtureTests
         var graph = DiagramBuilder.ProjectGraph(Analyzer.Analyze(FixtureRoot()));
 
         Assert.NotNull(graph);
-        Assert.Contains("Foo_Bar[\"Foo-Bar\"]", graph);
-        Assert.Contains("Foo_Bar_2[\"Foo.Bar\"]", graph);
-        Assert.Contains("Foo_Bar_2 --> Foo_Bar", graph);
+        Assert.Contains("prj_Foo_Bar[\"Foo-Bar\"]", graph);
+        Assert.Contains("prj_Foo_Bar_2[\"Foo.Bar\"]", graph);
+        Assert.Contains("prj_Foo_Bar_2 --> prj_Foo_Bar", graph);
     }
 
     private static string FixtureRoot()

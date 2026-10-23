@@ -55,8 +55,8 @@ public class AnalyzerAndReportTests
 
             var report = ReportGenerator.Generate(result);
             Assert.Contains("```mermaid", report);
-            Assert.Contains("CreateOrderCommand --> CreateOrderCommandHandler", report);
-            Assert.Contains("CreateOrderCommandValidator -.-> CreateOrderCommand", report);
+            Assert.Contains("req_CreateOrderCommand --> hdl_CreateOrderCommandHandler", report);
+            Assert.Contains("val_CreateOrderCommandValidator -.->|validates| req_CreateOrderCommand", report);
             Assert.Contains("| CreateOrderCommand | Command | Guid |", report);
         }
         finally

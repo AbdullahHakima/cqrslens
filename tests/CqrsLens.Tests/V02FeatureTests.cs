@@ -291,8 +291,9 @@ public class V02FeatureTests : IDisposable
         var html = HtmlReportGenerator.Generate(SampleResult());
 
         Assert.Contains("<pre class=\"mermaid\">", html);
-        Assert.Contains("mermaid@10", html);
+        Assert.Contains("mermaid@12.2.0", html);
         Assert.Contains("mermaid.initialize", html);
+        Assert.Contains("layout: 'elk'", html);
         // Stat card for the single project / request.
         Assert.Contains("<div class=\"card-value\">1</div>", html);
         // Response types are HTML-escaped in the table.
