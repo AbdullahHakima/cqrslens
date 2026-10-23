@@ -90,7 +90,10 @@ public static partial class CSharpScanner
     }
 
     // Matches: class|record|struct Name<...> (primary-ctor) [: base list] { or ;
-    [GeneratedRegex(@"(?:class|record(?:\s+class|\s+struct)?|struct)\s+(\w+)(?:<([^>]*)>)?\s*(?:\([^{};]*\))?\s*(?:(?!where\b)\s*:\s*([^{;]+?))?\s*(?:\s*where\s+\w+\s*:[^{;]+)?[{;]",
+    // The primary-constructor parameter list may not run past a ") :" sequence:
+    // that colon opens the base list (DbContext(options) is the first base entry
+    // of a primary-constructor class, not part of its parameter list).
+    [GeneratedRegex(@"(?:class|record(?:\s+class|\s+struct)?|struct)\s+(\w+)(?:<([^>]*)>)?\s*(?:\((?:(?!\)\s*:)[^{};])*\))?\s*(?:(?!where\b)\s*:\s*([^{;]+?))?\s*(?:\s*where\s+\w+\s*:[^{;]+)?[{;]",
         RegexOptions.Singleline)]
     private static partial Regex DeclarationRegex();
 
@@ -201,12 +204,17 @@ public static partial class CSharpScanner
     /// <summary>
     /// Splits a type reference into its name and top-level generic arguments:
     /// <c>App.IHandler&lt;Foo, Bar&lt;int&gt;&gt;</c> → name + ["Foo", "Bar&lt;int&gt;"].
+    /// A primary-constructor base specification carries a base-call argument list
+    /// (<c>DbContext(options)</c>, <c>IdentityDbContext&lt;TUser&gt;(options)</c>);
+    /// that suffix is not part of the type name and is stripped first.
     /// </summary>
     public static (string Name, List<string> Arguments) ParseTypeReference(string typeReference)
     {
         var text = typeReference.Trim();
         if (text.StartsWith("global::", StringComparison.Ordinal))
             text = text[8..];
+
+        text = StripTrailingArgumentList(text);
 
         var angle = text.IndexOf('<');
         if (angle < 0)
@@ -226,6 +234,31 @@ public static partial class CSharpScanner
             }
         }
         return (name, new List<string>());
+    }
+
+    /// <summary>
+    /// Removes a trailing parenthesized argument list from a type reference, e.g.
+    /// <c>DbContext(options)</c> → <c>DbContext</c> and
+    /// <c>IdentityDbContext&lt;AppUser&gt;(options)</c> → <c>IdentityDbContext&lt;AppUser&gt;</c>.
+    /// A reference that is itself a tuple type (<c>(int, string)</c>) is left alone:
+    /// its opening parenthesis has no type name in front of it.
+    /// </summary>
+    private static string StripTrailingArgumentList(string text)
+    {
+        if (!text.EndsWith(")", StringComparison.Ordinal)) return text;
+
+        var depth = 0;
+        for (var i = text.Length - 1; i >= 0; i--)
+        {
+            if (text[i] == ')') depth++;
+            else if (text[i] == '(')
+            {
+                depth--;
+                if (depth != 0) continue;
+                return i == 0 ? text : text[..i].Trim();
+            }
+        }
+        return text;
     }
 
     /// <summary>
@@ -494,7 +527,8 @@ public static partial class CSharpScanner
     /// <summary>
     /// Recognizes DbContext base types by their final type name. Fully-qualified
     /// <c>Microsoft.EntityFrameworkCore.DbContext</c> and custom <c>*DbContext</c> bases
-    /// count; interface-like <c>IDbContext</c>/<c>IShopDbContext</c> names do not.
+    /// count, including primary-constructor base calls such as <c>DbContext(options)</c>;
+    /// interface-like <c>IDbContext</c>/<c>IShopDbContext</c> names do not.
     /// </summary>
     public static bool IsDbContextBase(string baseList)
     {
@@ -561,8 +595,11 @@ public static partial class CSharpScanner
         var current = "";
         foreach (var c in inner)
         {
-            if (c == '<') depth++;
-            if (c == '>') depth--;
+            // Parentheses and brackets nest too: a primary-constructor base call
+            // (DbContext(options, flag)) or a tuple/array type argument must not
+            // be split at its inner commas.
+            if (c is '<' or '(' or '[') depth++;
+            if (c is '>' or ')' or ']') depth--;
             if (c == ',' && depth == 0)
             {
                 parts.Add(current.Trim());

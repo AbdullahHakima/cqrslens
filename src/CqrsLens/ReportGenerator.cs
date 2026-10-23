@@ -5,7 +5,27 @@ namespace CqrsLens;
 public static class ReportGenerator
 {
     /// <summary>Makes a Mermaid-safe node id from an arbitrary name.</summary>
-    public static string MermaidId(string name) => DiagramBuilder.MermaidId(name);
+    public static string MermaidId(string? name) => DiagramBuilder.MermaidId(name);
+
+    private static string LayerLegend(AnalysisResult result)
+    {
+        var text = "**Layer colors:** green = Domain · blue = Application · amber = Infrastructure · " +
+                   "purple = Api/Web/UI · gray = Tests/other.";
+        if (result.Checks.Any(c => c.Code == ArchitectureChecker.LayerViolationCode))
+            text += " Red dashed edges mark `LayerViolation` findings.";
+        return text;
+    }
+
+    private static string CqrsLegend(AnalysisResult result)
+    {
+        var text = "**Legend:** blue = command · teal = query · violet = other request · " +
+                   "gray stadium = handler · amber = validator.";
+        if (result.Checks.Any(c => c.Code == ArchitectureChecker.MissingHandlerCode))
+            text += " Red dashed request = `MissingHandler` finding.";
+        if (result.Checks.Any(c => c.Code == ArchitectureChecker.CommandWithoutValidatorCode))
+            text += " Amber dashed request = `CommandWithoutValidator` finding.";
+        return text;
+    }
 
     /// <summary>Collapses user-derived text that must stay on one report line.</summary>
     internal static string InlineText(string? value)
@@ -14,9 +34,20 @@ public static class ReportGenerator
             .Replace('\r', ' ')
             .Replace('\n', ' ');
 
+    /// <summary>
+    /// Escapes text that Markdown must not interpret as HTML. GitHub renderers
+    /// treat a raw &lt; or &gt; as markup, which silently truncates generic types
+    /// such as List&lt;ProductDto&gt; in table cells.
+    /// </summary>
+    internal static string MarkdownText(string? value)
+        => InlineText(value)
+            .Replace("&", "&amp;", StringComparison.Ordinal)
+            .Replace("<", "&lt;", StringComparison.Ordinal)
+            .Replace(">", "&gt;", StringComparison.Ordinal);
+
     /// <summary>Escapes a value used in a Markdown table cell.</summary>
     internal static string TableCell(string? value)
-        => InlineText(value).Replace("|", "\\|", StringComparison.Ordinal);
+        => MarkdownText(value).Replace("|", "\\|", StringComparison.Ordinal);
 
     /// <summary>Renders a Markdown code span, widening the fence when needed.</summary>
     internal static string CodeSpan(string? value)
@@ -62,9 +93,17 @@ public static class ReportGenerator
         }
         else
         {
-            md.AppendLine("```mermaid");
-            md.AppendLine(projectGraph);
-            md.AppendLine("```");
+            AppendDiagramOrLimitNote(md, projectGraph, "project graph");
+            md.AppendLine();
+            if (result.Projects
+                .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+                .Any(g => g.Count() > 1))
+            {
+                md.AppendLine("_Project references are drawn only when the target name resolves to a single " +
+                              "project; ambiguous duplicate names are reported under Architecture Checks._");
+                md.AppendLine();
+            }
+            md.AppendLine(LayerLegend(result));
         }
         md.AppendLine();
 
@@ -78,29 +117,67 @@ public static class ReportGenerator
         }
         else
         {
-            md.AppendLine("```mermaid");
-            md.AppendLine(layerGraph);
-            md.AppendLine("```");
+            AppendDiagramOrLimitNote(md, layerGraph, "layer graph");
             md.AppendLine();
-            md.AppendLine("Projects are grouped by Clean Architecture naming convention " +
-                          "(Domain / Application / Infrastructure / Api / Web / UI); " +
-                          "projects matching no convention are grouped by their top-level folder.");
+            md.AppendLine("_Dashed boundaries group projects into layers. Projects are grouped by Clean " +
+                          "Architecture naming convention (Domain / Application / Infrastructure / Api / " +
+                          "Web / UI); projects matching no convention are grouped by their top-level folder._");
         }
         md.AppendLine();
 
         // ---- CQRS map --------------------------------------------------------
         md.AppendLine("## CQRS Map");
         md.AppendLine();
-        var cqrsMap = DiagramBuilder.CqrsMap(result);
-        if (cqrsMap is null)
+        var cqrsSections = DiagramBuilder.CqrsMapSections(result);
+        if (cqrsSections.Count == 0)
         {
             md.AppendLine("_No MediatR requests found._");
         }
         else
         {
-            md.AppendLine("```mermaid");
-            md.AppendLine(cqrsMap);
-            md.AppendLine("```");
+            md.AppendLine(CqrsLegend(result));
+            md.AppendLine();
+            md.AppendLine("_Requests are grouped by declaring project. Handler and validator nodes are shown " +
+                          "where linked and may be declared in a different project._");
+            md.AppendLine();
+
+            if (cqrsSections.Count > 1)
+            {
+                var projectCount = result.Requests
+                    .Select(r => string.IsNullOrEmpty(r.ProjectName) ? "(unassigned)" : r.ProjectName)
+                    .Distinct(StringComparer.Ordinal)
+                    .Count();
+                var projectText = projectCount == 1 ? "1 project" : $"{projectCount} projects";
+                md.AppendLine($"_{result.Requests.Count} requests across {projectText}. " +
+                              "Diagrams are split by project and balanced so each stays within GitHub's " +
+                              "rendering limits; every request appears exactly once._");
+                md.AppendLine();
+            }
+
+            foreach (var section in cqrsSections)
+            {
+                if (cqrsSections.Count > 1)
+                {
+                    md.AppendLine($"### {MarkdownText(section.Heading)}");
+                    md.AppendLine();
+                }
+
+                if (!DiagramBuilder.IsWithinMermaidLimits(section.Source))
+                {
+                    md.AppendLine($"_Diagram omitted: {section.Requests.Count} requests exceed the CqrsLens " +
+                                  "safety limit (45,000 characters / 400 edges). The Requests table below " +
+                                  "lists every request._");
+                }
+                else
+                {
+                    AppendMermaid(md, section.Source);
+                    md.AppendLine();
+                    md.AppendLine($"_{MarkdownText(section.Caption)}_");
+                }
+                md.AppendLine();
+            }
+
+            md.AppendLine("### Requests");
             md.AppendLine();
             md.AppendLine("| Request | Type | Response | Handler | Validators | Project |");
             md.AppendLine("| --- | --- | --- | --- | --- | --- |");
@@ -179,6 +256,25 @@ public static class ReportGenerator
         md.AppendLine("_Report generated by [CqrsLens](https://github.com/AbdullahHakima/cqrslens) — static analysis only; the target solution was not built._");
 
         return md.ToString();
+    }
+
+    private static void AppendMermaid(StringBuilder md, string source)
+    {
+        md.AppendLine("```mermaid");
+        md.AppendLine(source);
+        md.AppendLine("```");
+    }
+
+    private static void AppendDiagramOrLimitNote(StringBuilder md, string source, string label)
+    {
+        if (!DiagramBuilder.IsWithinMermaidLimits(source))
+        {
+            md.AppendLine($"_Diagram omitted: the {label} exceeds the CqrsLens safety limit " +
+                          "(45,000 characters / 400 edges)._");
+            return;
+        }
+
+        AppendMermaid(md, source);
     }
 
     internal static void AppendDiagnosticsMarkdown(

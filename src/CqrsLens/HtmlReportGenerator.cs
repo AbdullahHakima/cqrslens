@@ -10,6 +10,10 @@ namespace CqrsLens;
 /// </summary>
 public static class HtmlReportGenerator
 {
+    private const string MermaidVersion = "12.2.0";
+    private const string MermaidIntegrity =
+        "sha384-8xUhuLNMjW/cI2Dacg3DR4WliYznvIg0LVG1stctThKD/YVrJFI9TNCFxft5NYgp";
+
     private static string E(string? value) => WebUtility.HtmlEncode(value ?? "");
 
     public static string Generate(AnalysisResult result)
@@ -49,13 +53,27 @@ public static class HtmlReportGenerator
         // ---- Diagrams ----------------------------------------------------------
         AppendDiagram(html, "Project Dependency Graph", DiagramBuilder.ProjectGraph(result),
             "No projects found.");
+        if (result.Projects.Count > 0)
+            AppendLayerLegend(html, result);
+        if (result.Projects
+            .GroupBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+            .Any(g => g.Count() > 1))
+        {
+            html.AppendLine("<p class=\"note\">Project references are drawn only when the target name " +
+                            "resolves to a single project; ambiguous duplicate names are reported under " +
+                            "Architecture Checks.</p>");
+        }
+
         AppendDiagram(html, "Layers", DiagramBuilder.LayerGraph(result),
             "No projects found.");
-        html.AppendLine("<p class=\"note\">Projects are grouped by Clean Architecture naming convention " +
-                        "(Domain / Application / Infrastructure / Api / Web / UI); projects matching no " +
-                        "convention are grouped by their top-level folder.</p>");
-        AppendDiagram(html, "CQRS Map", DiagramBuilder.CqrsMap(result),
-            "No MediatR requests found.");
+        if (result.Projects.Count > 0)
+        {
+            html.AppendLine("<p class=\"note\">Dashed boundaries group projects into layers. Projects are " +
+                            "grouped by Clean Architecture naming convention (Domain / Application / " +
+                            "Infrastructure / Api / Web / UI); projects matching no convention are grouped by " +
+                            "their top-level folder.</p>");
+        }
+        AppendCqrs(html, result);
         // ---- Requests table ------------------------------------------------------
         html.AppendLine("<h2>Requests</h2>");
         if (result.Requests.Count == 0)
@@ -221,10 +239,63 @@ public static class HtmlReportGenerator
 
         html.AppendLine("</main>");
         html.AppendLine(
-            "<script src=\"https://cdn.jsdelivr.net/npm/mermaid@10.9.4/dist/mermaid.min.js\" " +
-            "integrity=\"sha384-fGOpyux4znQZ+n4tUrYReB2Ulu6K1MtBxIkbHauU09YM1hvCyA5oX9JUc1hRkDEr\" " +
-            "crossorigin=\"anonymous\"></script>");
-        html.AppendLine("<script>mermaid.initialize({ startOnLoad: true });</script>");
+            $"<script src=\"https://cdn.jsdelivr.net/npm/mermaid@{MermaidVersion}/dist/mermaid.min.js\" " +
+            $"integrity=\"{MermaidIntegrity}\" crossorigin=\"anonymous\"></script>");
+        html.AppendLine("<script>");
+        html.AppendLine("""
+            (async () => {
+              const nodes = [...document.querySelectorAll('pre.mermaid')];
+              const showSource = (node, message) => {
+                const error = document.createElement('p');
+                error.className = 'diagram-error';
+                error.textContent = message;
+                const details = document.createElement('details');
+                const summary = document.createElement('summary');
+                summary.textContent = 'Show diagram source';
+                const pre = document.createElement('pre');
+                pre.textContent = node.textContent ?? '';
+                details.append(summary, pre);
+                node.replaceWith(error, details);
+              };
+              if (typeof mermaid === 'undefined') {
+                nodes.forEach((node) =>
+                  showSource(node, 'Mermaid could not be loaded. The diagram source is shown below.'));
+                return;
+              }
+              try {
+                mermaid.initialize({
+                  startOnLoad: false,
+                  theme: 'default',
+                  look: 'classic',
+                  layout: 'elk',
+                  maxTextSize: 50000,
+                  maxEdges: 500,
+                  securityLevel: 'strict',
+                  suppressErrorRendering: true,
+                  themeVariables: {
+                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+                  }
+                });
+              } catch (error) {
+                nodes.forEach((node) =>
+                  showSource(node, 'Mermaid could not be initialized. ' +
+                    (error && error.message ? error.message : String(error))));
+                return;
+              }
+              for (let i = 0; i < nodes.length; i++) {
+                const node = nodes[i];
+                const source = node.textContent ?? '';
+                try {
+                  const { svg } = await mermaid.render('cqrslens-diagram-' + i, source);
+                  node.innerHTML = svg;
+                } catch (error) {
+                  showSource(node, 'This diagram could not be rendered. ' +
+                    (error && error.message ? error.message : String(error)));
+                }
+              }
+            })();
+            """);
+        html.AppendLine("</script>");
         html.AppendLine("</body>");
         html.AppendLine("</html>");
 
@@ -257,20 +328,106 @@ public static class HtmlReportGenerator
         if (diagram is null)
         {
             html.AppendLine($"<p><em>{E(emptyText)}</em></p>");
+            return;
         }
-        else
+
+        if (!DiagramBuilder.IsWithinMermaidLimits(diagram))
         {
-            html.AppendLine(RenderDiagram(diagram));
+            html.AppendLine("<p class=\"note\"><em>Diagram omitted: the source exceeds the CqrsLens " +
+                            "safety limit (45,000 characters / 400 edges).</em></p>");
+            return;
+        }
+
+        html.AppendLine("<figure class=\"diagram\">");
+        html.AppendLine(RenderDiagram(diagram));
+        html.AppendLine("</figure>");
+    }
+
+    private static void AppendCqrs(StringBuilder html, AnalysisResult result)
+    {
+        html.AppendLine("<h2>CQRS Map</h2>");
+        var sections = DiagramBuilder.CqrsMapSections(result);
+        if (sections.Count == 0)
+        {
+            html.AppendLine("<p><em>No MediatR requests found.</em></p>");
+            return;
+        }
+
+        AppendCqrsLegend(html, result);
+        html.AppendLine("<p class=\"note\">Requests are grouped by declaring project. Handler and validator " +
+                        "nodes are shown where linked and may be declared in a different project.</p>");
+
+        if (sections.Count > 1)
+        {
+            var projectCount = result.Requests
+                .Select(r => string.IsNullOrEmpty(r.ProjectName) ? "(unassigned)" : r.ProjectName)
+                .Distinct(StringComparer.Ordinal)
+                .Count();
+            var projectText = projectCount == 1 ? "1 project" : $"{projectCount} projects";
+            html.AppendLine($"<p class=\"note\">{result.Requests.Count} requests across {projectText}. " +
+                            "Diagrams are split by project and balanced so each stays within GitHub's " +
+                            "rendering limits; every request appears exactly once.</p>");
+        }
+
+        foreach (var section in sections)
+        {
+            if (sections.Count > 1)
+                html.AppendLine($"<h3>{E(section.Heading)}</h3>");
+
+            if (!DiagramBuilder.IsWithinMermaidLimits(section.Source))
+            {
+                html.AppendLine($"<p class=\"note\"><em>Diagram omitted: {section.Requests.Count} requests exceed " +
+                                "the CqrsLens safety limit (45,000 characters / 400 edges). The Requests table " +
+                                "below lists every request.</em></p>");
+                continue;
+            }
+
+            html.AppendLine("<figure class=\"diagram\">");
+            html.AppendLine(RenderDiagram(section.Source));
+            html.AppendLine($"<figcaption>{E(section.Caption)}</figcaption>");
+            html.AppendLine("</figure>");
         }
     }
+
+    private static void AppendCqrsLegend(StringBuilder html, AnalysisResult result)
+    {
+        html.AppendLine("<ul class=\"legend\" aria-label=\"CQRS map legend\">");
+        AppendLegendItem(html, "command", "Command");
+        AppendLegendItem(html, "query", "Query");
+        AppendLegendItem(html, "request", "Other request");
+        AppendLegendItem(html, "handler", "Handler");
+        AppendLegendItem(html, "validator", "Validator");
+        if (result.Checks.Any(c => c.Code == ArchitectureChecker.MissingHandlerCode))
+            AppendLegendItem(html, "missing", "Missing handler");
+        if (result.Checks.Any(c => c.Code == ArchitectureChecker.CommandWithoutValidatorCode))
+            AppendLegendItem(html, "no-validator", "Command without validator");
+        html.AppendLine("</ul>");
+    }
+
+    private static void AppendLayerLegend(StringBuilder html, AnalysisResult result)
+    {
+        html.AppendLine("<ul class=\"legend\" aria-label=\"Layer colors\">");
+        AppendLegendItem(html, "domain", "Domain");
+        AppendLegendItem(html, "application", "Application");
+        AppendLegendItem(html, "infrastructure", "Infrastructure");
+        AppendLegendItem(html, "api", "Api / Web / UI");
+        AppendLegendItem(html, "tests", "Tests / other");
+        if (result.Checks.Any(c => c.Code == ArchitectureChecker.LayerViolationCode))
+            AppendLegendItem(html, "violation", "Layer violation");
+        html.AppendLine("</ul>");
+    }
+
+    private static void AppendLegendItem(StringBuilder html, string swatch, string label)
+        => html.AppendLine(
+            $"<li><span class=\"swatch {E(swatch)}\" aria-hidden=\"true\"></span>{E(label)}</li>");
 
     /// <summary>
     /// RENDERING SEAM: turns a Mermaid diagram source into its HTML representation.
     /// Today this emits a &lt;pre class="mermaid"&gt; block rendered in the browser by
     /// Mermaid.js (see the script tags at the end of the page). A future pre-rendered
-    /// mode (--render svg, using an AOT Mermaid-&gt;SVG compiler such as Ondine) only
-    /// has to replace this method's body to produce zero-JS reports — nothing else
-    /// in the generator changes.
+    /// mode (--render svg, using a deterministic .NET renderer) only has to replace
+    /// this method's body to produce zero-JS reports — nothing else in the generator
+    /// changes.
     /// </summary>
     public static string RenderDiagram(string mermaidCode)
         => $"<pre class=\"mermaid\">{E(mermaidCode)}</pre>";
@@ -283,12 +440,34 @@ public static class HtmlReportGenerator
         main { max-width: 1080px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
         h1 { font-size: 1.8rem; margin: 0 0 .25rem; }
         h2 { font-size: 1.25rem; margin: 2rem 0 .75rem; border-bottom: 1px solid #d6d9de; padding-bottom: .35rem; }
+        h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
         .meta, .footer, .note { color: #5a6068; font-size: .9rem; }
         .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin: 1.25rem 0 .5rem; }
         .card { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; padding: 1rem; text-align: center; }
         .card-value { font-size: 1.9rem; font-weight: 700; line-height: 1.1; }
         .card-label { color: #5a6068; font-size: .85rem; margin-top: .25rem; }
+        figure.diagram { margin: 0 0 1.25rem; }
+        figure.diagram figcaption { color: #5a6068; font-size: .85rem; margin-top: .5rem; }
         pre.mermaid { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; padding: 1rem; overflow-x: auto; }
+        ul.legend { display: flex; flex-wrap: wrap; gap: .35rem 1rem; list-style: none; padding: 0; margin: .5rem 0 1rem; font-size: .88rem; }
+        ul.legend li { display: flex; align-items: center; gap: .4rem; }
+        .swatch { display: inline-block; width: 1rem; height: 1rem; border-radius: 4px; border: 2px solid; }
+        .swatch.command { background: #e8f1ff; border-color: #2563eb; }
+        .swatch.query { background: #e6fffa; border-color: #0f766e; }
+        .swatch.request { background: #f5f3ff; border-color: #6d28d9; }
+        .swatch.handler { background: #f8fafc; border-color: #475569; }
+        .swatch.validator { background: #fff7ed; border-color: #c2410c; }
+        .swatch.missing { background: #fef2f2; border-color: #dc2626; border-style: dashed; }
+        .swatch.no-validator { background: #e8f1ff; border-color: #d97706; border-style: dashed; }
+        .swatch.domain { background: #ecfdf5; border-color: #059669; }
+        .swatch.application { background: #eff6ff; border-color: #2563eb; }
+        .swatch.infrastructure { background: #fff7ed; border-color: #c2410c; }
+        .swatch.api { background: #f5f3ff; border-color: #7c3aed; }
+        .swatch.tests { background: #f8fafc; border-color: #64748b; }
+        .swatch.violation { background: transparent; border-color: #dc2626; border-style: dashed; }
+        .diagram-error { background: #fdecec; border: 1px solid #f0b4b4; border-radius: 8px; padding: .7rem; color: #7f1d1d; }
+        details { margin: .35rem 0 1rem; }
+        details pre { background: #eceef1; padding: .7rem; border-radius: 6px; overflow: auto; }
         table { border-collapse: collapse; width: 100%; background: #ffffff; }
         th, td { border: 1px solid #d6d9de; padding: .45rem .6rem; text-align: left; font-size: .92rem; }
         th { background: #eceef1; }
@@ -310,7 +489,9 @@ public static class HtmlReportGenerator
           ul.checks li.error { background: #3a2226; }
           ul.checks li.warning { background: #38331c; }
           ul.checks li.info { background: #1d2b3f; }
-          .meta, .footer, .note, .card-label { color: #9aa0a8; }
+          .meta, .footer, .note, .card-label, figure.diagram figcaption { color: #9aa0a8; }
+          .diagram-error { background: #3a2226; border-color: #7f1d1d; color: #fecaca; }
+          details pre { background: #26292f; }
           hr { border-color: #3a3e45; }
         }
         """;
