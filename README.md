@@ -48,7 +48,7 @@ cqrslens <path> --format html
 
 A single portable `ARCHITECTURE.html`: summary stat cards, the same diagrams and
 tables as the Markdown report, and Mermaid rendered in the browser. Mermaid is
-pinned to `10.9.4` and loaded with a SHA-384 SRI check from jsDelivr; the first
+pinned to `12.2.0` and loaded with a SHA-384 SRI check from jsDelivr; the first
 view needs network access, while the Mermaid source blocks remain readable
 offline. (A `.html` path passed to `-o` also implies HTML.)
 
@@ -212,6 +212,8 @@ scans a pinned public MediatR / Clean Architecture corpus and publishes counts,
 diagnostics, reports and SARIF. The current snapshot and known static-analysis
 limitations are in [`docs/validation.md`](docs/validation.md); run the same
 corpus locally with `bash scripts/validate-real-world.sh` after a Release build.
+A separate non-gating workflow parses and renders the generated Mermaid with
+Mermaid `12.2.0` in Chromium; see [`docs/validation.md`](docs/validation.md#render-check).
 
 ## What you get
 
@@ -224,15 +226,23 @@ Parsed from every `.csproj`'s `ProjectReference`s:
 
 ```mermaid
 flowchart TD
-    SampleShop_Api["SampleShop.Api"]
-    SampleShop_Application["SampleShop.Application"]
-    SampleShop_Domain["SampleShop.Domain"]
-    SampleShop_Infrastructure["SampleShop.Infrastructure"]
-    SampleShop_Api --> SampleShop_Application
-    SampleShop_Api --> SampleShop_Infrastructure
-    SampleShop_Application --> SampleShop_Domain
-    SampleShop_Infrastructure --> SampleShop_Application
-    SampleShop_Infrastructure --> SampleShop_Domain
+    accTitle: Project dependency graph
+    accDescr: 4 projects, 5 references.
+    prj_SampleShop_Api["SampleShop.Api"]:::clsLayerApi
+    prj_SampleShop_Application["SampleShop.Application"]:::clsLayerApplication
+    prj_SampleShop_Domain["SampleShop.Domain"]:::clsLayerDomain
+    prj_SampleShop_Infrastructure["SampleShop.Infrastructure"]:::clsLayerInfrastructure
+    prj_SampleShop_Api --> prj_SampleShop_Application
+    prj_SampleShop_Api --> prj_SampleShop_Infrastructure
+    prj_SampleShop_Application --> prj_SampleShop_Domain
+    prj_SampleShop_Infrastructure --> prj_SampleShop_Application
+    prj_SampleShop_Infrastructure --> prj_SampleShop_Domain
+    classDef clsLayerDomain fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#064e3b
+    classDef clsLayerApplication fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef clsLayerInfrastructure fill:#fff7ed,stroke:#c2410c,stroke-width:2px,color:#431407
+    classDef clsLayerApi fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+    classDef clsLayerTests fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#1e293b
+    classDef clsLayerOther fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#1e293b
 ```
 
 ### Layers
@@ -243,49 +253,78 @@ their top-level folder:
 
 ```mermaid
 flowchart TD
-    subgraph layer_Api["Api"]
-        SampleShop_Api["SampleShop.Api"]
+    accTitle: Layer diagram
+    accDescr: 4 projects, 4 layers, 5 references.
+    subgraph lyr_Api["Api"]
+        prj_SampleShop_Api["SampleShop.Api"]:::clsLayerApi
     end
-    subgraph layer_Application["Application"]
-        SampleShop_Application["SampleShop.Application"]
+    subgraph lyr_Application["Application"]
+        prj_SampleShop_Application["SampleShop.Application"]:::clsLayerApplication
     end
-    subgraph layer_Infrastructure["Infrastructure"]
-        SampleShop_Infrastructure["SampleShop.Infrastructure"]
+    subgraph lyr_Infrastructure["Infrastructure"]
+        prj_SampleShop_Infrastructure["SampleShop.Infrastructure"]:::clsLayerInfrastructure
     end
-    subgraph layer_Domain["Domain"]
-        SampleShop_Domain["SampleShop.Domain"]
+    subgraph lyr_Domain["Domain"]
+        prj_SampleShop_Domain["SampleShop.Domain"]:::clsLayerDomain
     end
-    SampleShop_Api --> SampleShop_Application
-    SampleShop_Api --> SampleShop_Infrastructure
-    SampleShop_Application --> SampleShop_Domain
-    SampleShop_Infrastructure --> SampleShop_Application
-    SampleShop_Infrastructure --> SampleShop_Domain
+    prj_SampleShop_Api --> prj_SampleShop_Application
+    prj_SampleShop_Api --> prj_SampleShop_Infrastructure
+    prj_SampleShop_Application --> prj_SampleShop_Domain
+    prj_SampleShop_Infrastructure --> prj_SampleShop_Application
+    prj_SampleShop_Infrastructure --> prj_SampleShop_Domain
+    style lyr_Api fill:none,stroke:#94a3b8,stroke-dasharray:4 3
+    style lyr_Application fill:none,stroke:#94a3b8,stroke-dasharray:4 3
+    style lyr_Infrastructure fill:none,stroke:#94a3b8,stroke-dasharray:4 3
+    style lyr_Domain fill:none,stroke:#94a3b8,stroke-dasharray:4 3
+    classDef clsLayerDomain fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#064e3b
+    classDef clsLayerApplication fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
+    classDef clsLayerInfrastructure fill:#fff7ed,stroke:#c2410c,stroke-width:2px,color:#431407
+    classDef clsLayerApi fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#2e1065
+    classDef clsLayerTests fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#1e293b
+    classDef clsLayerOther fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#1e293b
 ```
 
 ### CQRS map
 
-Every request, the handler that answers it, and the validators guarding it
-(dashed = validation):
+Every request, the handler that answers it, and the validators guarding it.
+The dashed boundary contains only the requests declared in that project; handlers
+and validators stay outside and are shown where linked:
 
 ```mermaid
 flowchart LR
-    CreateOrderCommand["CreateOrderCommand"]
-    CreateOrderCommandHandler(["CreateOrderCommandHandler"])
-    CreateOrderCommandValidator{"CreateOrderCommandValidator"}
-    DeleteOrderCommand["DeleteOrderCommand"]
-    DeleteOrderCommandHandler(["DeleteOrderCommandHandler"])
-    DeleteOrderCommandValidator{"DeleteOrderCommandValidator"}
-    GetOrderDetailsQuery["GetOrderDetailsQuery"]
-    GetOrderDetailsQueryHandler(["GetOrderDetailsQueryHandler"])
-    GetProductListQuery["GetProductListQuery"]
-    GetProductListQueryHandler(["GetProductListQueryHandler"])
-    CreateOrderCommand --> CreateOrderCommandHandler
-    CreateOrderCommandValidator -.-> CreateOrderCommand
-    DeleteOrderCommand --> DeleteOrderCommandHandler
-    DeleteOrderCommandValidator -.-> DeleteOrderCommand
-    GetOrderDetailsQuery --> GetOrderDetailsQueryHandler
-    GetProductListQuery --> GetProductListQueryHandler
+    accTitle: CQRS map
+    accDescr: 4 requests, 4 handlers, 2 validators.
+    subgraph prj_SampleShop_Application["Requests in SampleShop.Application"]
+        req_CreateOrderCommand["CreateOrderCommand"]:::clsCommand
+        req_DeleteOrderCommand["DeleteOrderCommand"]:::clsCommand
+        req_GetOrderDetailsQuery["GetOrderDetailsQuery"]:::clsQuery
+        req_GetProductListQuery["GetProductListQuery"]:::clsQuery
+    end
+    hdl_CreateOrderCommandHandler(["CreateOrderCommandHandler"]):::clsHandler
+    hdl_DeleteOrderCommandHandler(["DeleteOrderCommandHandler"]):::clsHandler
+    hdl_GetOrderDetailsQueryHandler(["GetOrderDetailsQueryHandler"]):::clsHandler
+    hdl_GetProductListQueryHandler(["GetProductListQueryHandler"]):::clsHandler
+    val_CreateOrderCommandValidator["CreateOrderCommandValidator"]:::clsValidator
+    val_DeleteOrderCommandValidator["DeleteOrderCommandValidator"]:::clsValidator
+    req_CreateOrderCommand --> hdl_CreateOrderCommandHandler
+    val_CreateOrderCommandValidator -.->|validates| req_CreateOrderCommand
+    req_DeleteOrderCommand --> hdl_DeleteOrderCommandHandler
+    val_DeleteOrderCommandValidator -.->|validates| req_DeleteOrderCommand
+    req_GetOrderDetailsQuery --> hdl_GetOrderDetailsQueryHandler
+    req_GetProductListQuery --> hdl_GetProductListQueryHandler
+    style prj_SampleShop_Application fill:none,stroke:#94a3b8,stroke-dasharray:4 3
+    classDef clsCommand fill:#e8f1ff,stroke:#2563eb,stroke-width:2px,color:#102a43
+    classDef clsQuery fill:#e6fffa,stroke:#0f766e,stroke-width:2px,color:#0f2e2e
+    classDef clsRequest fill:#f5f3ff,stroke:#6d28d9,stroke-width:2px,color:#2e1065
+    classDef clsHandler fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#1e293b
+    classDef clsValidator fill:#fff7ed,stroke:#c2410c,stroke-width:1.5px,color:#431407
 ```
+
+Red dashed request borders mark `MissingHandler` findings; amber dashed borders
+mark `CommandWithoutValidator` findings. Both styles are added only when the
+corresponding check is enabled and has a finding. Large solutions are split by
+project and balanced into parts of at most 15 requests, so each diagram stays
+readable and every request appears exactly once.
 
 …plus the same information as a table:
 
@@ -294,7 +333,7 @@ flowchart LR
 | CreateOrderCommand | Command | Guid | CreateOrderCommandHandler | CreateOrderCommandValidator | SampleShop.Application |
 | DeleteOrderCommand | Command | — | DeleteOrderCommandHandler | DeleteOrderCommandValidator | SampleShop.Application |
 | GetOrderDetailsQuery | Query | OrderDetailsDto | GetOrderDetailsQueryHandler | — | SampleShop.Application |
-| GetProductListQuery | Query | List<ProductDto> | GetProductListQueryHandler | — | SampleShop.Application |
+| GetProductListQuery | Query | List&lt;ProductDto&gt; | GetProductListQueryHandler | — | SampleShop.Application |
 
 ### …and the rest of the report
 

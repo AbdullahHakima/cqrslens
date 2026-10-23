@@ -1,6 +1,9 @@
 ## .NET
 bin/
 obj/
+
+## Node dependencies for the non-gating Mermaid render check
+node_modules/
 artifacts/
 [Dd]ebug/
 [Rr]elease/

@@ -8,19 +8,21 @@ so an external repository changing or disappearing cannot block a release.
 
 ## Latest snapshot
 
-CqrsLens `0.5.0`, text analysis, 2026-10-22:
+CqrsLens `0.5.0`, text analysis, 2026-10-23:
 
 | Repository | Commit | Path | Markers | Handler markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 1607 ms |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | `ICommandHandler,IQueryHandler` | 22 | 23 | 23 | 21 | 0/13 | 0/0/0 | 842 ms |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 1133 ms |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 296 ms |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | `ICommandHandler,IQueryHandler` | 22 | 23 | 23 | 21 | 0/13 | 0/0/0 | 392 ms |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 497 ms |
 
 Timings are machine-dependent; counts and commits are the reproducible part.
-Full Markdown reports, SARIF, logs and `results.tsv` come from the workflow
-artifact. The pinned refs live in [`validation/corpus.tsv`](../validation/corpus.tsv).
-The released `0.4.0` snapshot predates these scanner changes and linked far fewer
-shapes; this table is the `0.5.0` release snapshot.
+The 2026-10-23 rerun kept the scanner counts unchanged while regenerating the
+reports with the visualization hardening. Full Markdown reports, SARIF, logs and
+`results.tsv` come from the workflow artifact. The pinned refs live in
+[`validation/corpus.tsv`](../validation/corpus.tsv). The released `0.4.0`
+snapshot predates these scanner changes and linked far fewer shapes; this table
+is the `0.5.0` release snapshot.
 
 ### What this snapshot says
 
@@ -60,6 +62,45 @@ shapes; this table is the `0.5.0` release snapshot.
   informational, appear in Markdown, the CI summary and SARIF, and do not disable
   strict confidence on their own.
 
+## Diagram rendering
+
+Reports must work in GitHub's Markdown renderer as well as in the generated
+HTML. The visualization hardening adds explicit bounds instead of assuming the
+renderer will cope:
+
+- Diagram ids are role-prefixed (`req_`, `hdl_`, `val_`, `prj_`, `lyr_`).
+  Reserved Mermaid words and duplicate sanitized names are disambiguated.
+- Labels use Mermaid-native entities (`#quot;`, `#lt;`, `#gt;`, `#124;`,
+  `#38;`, `#35;`). GitHub HTML-decodes standard entities such as `&quot;`
+  before Mermaid sees the source, so the report never emits those in labels.
+- Markdown table cells escape `&`, `<`, `>` and `|`. This keeps generic response
+  types such as `List<ProductDto>` visible instead of truncating the cell.
+- A CQRS map contains at most 15 requests. Larger solutions are grouped by
+  project and balanced into parts; project boundaries contain request nodes
+  only, with handlers and validators outside. Every request appears exactly
+  once across the sections.
+- Any diagram source over 45,000 characters or 400 edges is omitted with a
+  visible note rather than being silently truncated. Mermaid's GitHub limits are
+  50,000 characters and 500 edges.
+- HTML reports pin Mermaid `12.2.0` with a SHA-384 SRI and use the same
+  `theme`, `look`, `layout` and size limits as GitHub. Each diagram falls back to
+  a readable source block if Mermaid fails to load or render.
+
+Measured on 2026-10-23:
+
+- `samples/SampleShop` has one 4-request CQRS map and measures about 515 px tall
+  on GitHub.
+- The 105-request modular report is split into 13 CQRS sections covering all 105
+  requests. The tallest measured GitHub render is about 1,406 px (part 7; about
+  1,495 px in a 1,100-wide screenshot), versus about 7,183 px for the previous
+  single map. Fifteen-request parts measure roughly 1,372/1,357 px.
+- All 13 modular sections parse and render with Mermaid 12.2.0.
+
+The non-gating render workflow regenerates the sample and adversarial reports,
+rejects standard HTML entities in Mermaid source, and parses/renders every
+diagram with Mermaid 12.2.0 in Chromium. It runs weekly and on manual dispatch,
+not on pull requests.
+
 ## Known limitations
 
 These are user-facing limits, not promises that the current corpus can fix:
@@ -92,6 +133,9 @@ These are user-facing limits, not promises that the current corpus can fix:
 7. **Sample/test projects are scanned.** The corpus scans whole repositories
    where practical, so templates and test helpers can contribute counts. Use
    `include` / `exclude` (or a narrower `path`) for production-only scans.
+8. **Diagram rendering has explicit safety bounds.** A diagram over 45,000
+   characters or 400 edges is omitted with a note; CQRS maps split at 15
+   requests. These are readability and renderer guards, not scanner limits.
 
 ## Run it locally
 
@@ -120,12 +164,32 @@ bash scripts/validate-real-world.sh
 `CQRSLENS_VALIDATION_TOOL` selects another built `cqrslens.dll`; keep it from the
 same source revision when comparing runs. Clones are removed by default.
 
+### Render check
+
+The optional Mermaid check uses Node 20+, Mermaid `12.2.0` and a headless
+Chromium. It rejects standard HTML entities in Mermaid source and parses/renders
+every diagram with GitHub-compatible limits and layout:
+
+```bash
+(cd scripts/mermaid-render-check && npm ci && npx playwright install chromium)
+node scripts/mermaid-render-check/check.mjs docs/sample-output/ARCHITECTURE.md
+```
+
+Generate fresh reports with `cqrslens` and pass their paths to check the current
+branch rather than the checked-in sample. This check is informational; it is not
+part of the PR or release gates.
+
 ## Workflow
 
 [`real-world-validation.yml`](../.github/workflows/real-world-validation.yml)
 runs nightly and on `workflow_dispatch`. It publishes the table to the job
 summary and uploads the reports/SARIF/logs for 30 days. It is not triggered by
 pull requests and is not a required check.
+
+[`mermaid-render-check.yml`](../.github/workflows/mermaid-render-check.yml) runs
+weekly and on `workflow_dispatch`. It generates the sample and adversarial
+reports, then parses and renders every Mermaid block with Mermaid 12.2.0 in
+Chromium. It is separate from PR checks and is not required.
 
 ## Adding a repository
 

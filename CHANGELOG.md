@@ -2,6 +2,45 @@
 
 All notable changes to CqrsLens are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- **Visualization hardening for GitHub**: diagram ids now carry role prefixes
+  (`req_`, `hdl_`, `val_`, `prj_`, `lyr_`), and reserved Mermaid words or
+  duplicate sanitized names no longer collide. Labels use Mermaid-native
+  entities (`#quot;`, `#lt;`, `#gt;`, `#124;`, `#38;`, `#35;`) so GitHub does
+  not decode them before rendering. Markdown table cells escape `&`, `<`, `>`
+  and `|`, fixing generic response types such as `List<ProductDto>`.
+- **Bounded CQRS maps**: up to 15 requests per diagram; larger reports split by
+  project and are balanced into parts. Project boundaries contain only the
+  requests declared in that project, while handlers and validators stay
+  outside. Every request appears exactly once. A 45,000-character / 400-edge
+  guard omits an unsafe diagram with a visible note instead of risking a
+  failed render.
+- **Semantic styling**: requests, handlers and validators have distinct shapes
+  and colors; layers have stable colors; layer violations use red dashed edges;
+  missing-handler and no-validator findings use dedicated dashed styles only
+  when those checks produce findings. Legends and section captions explain the
+  visible styles.
+- **HTML rendering**: Mermaid is pinned to `12.2.0` with a SHA-384 SRI and
+  GitHub-compatible theme, layout and size limits. Each diagram has its own
+  render/source fallback, and large CQRS reports show every split section.
+- Added a non-gating Mermaid 12.2 parser/render workflow that rejects standard
+  HTML entities in Mermaid source and exercises generated sample and adversarial
+  reports.
+
+### Fixed
+
+- GitHub “Unable to render rich display” failures caused by oversized CQRS maps
+  and raw `<` / `>` characters in Markdown table cells.
+
+### Validation
+
+- Scanner counts are unchanged on the pinned corpus (11/23/105 requests). The
+  105-request modular report is now 13 CQRS sections; the tallest measured
+  GitHub render is about 1,406 px instead of the previous ~7,183 px single map.
+
 ## [0.5.0] - 2026-10-22
 
 ### Added
