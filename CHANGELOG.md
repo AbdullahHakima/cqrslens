@@ -4,6 +4,19 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **EF Core ER diagrams (#6)**: each discovered `DbContext` now builds an entity-relationship
+  model (`DbContextInfo.Entities` and `DbContextInfo.Relationships`) in both `text` and
+  `roslyn` modes and renders a Mermaid `erDiagram` in the Markdown and HTML reports.
+  `DbSet<T>` types act as roots; classes reached through navigation properties join the
+  model when a key can be established (`Id`, `<Entity>Id`, `[Key]`, or Fluent `HasKey`),
+  keeping value objects out of the diagram. Supports `[ForeignKey]`, `[InverseProperty]`,
+  `[Required]`, `[NotMapped]`/`[Ignore]`, and Fluent API calls (`HasKey`, `HasOne`/`HasMany`,
+  `WithOne`/`WithMany`, `HasForeignKey`, `IsRequired`) in `OnModelCreating` and
+  `IEntityTypeConfiguration<T>.Configure`. Ambiguous inverse navigations are reported as
+  `EfNavigationUnresolved` diagnostics instead of being paired by guesswork.
+
 ### Changed
 
 - **Visualization hardening for GitHub**: diagram ids now carry role prefixes

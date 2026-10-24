@@ -55,6 +55,15 @@ public static partial class CSharpScanner
         /// <summary>Span of the class body in the source text (for DbSet attribution).</summary>
         public required (int Start, int End) BodySpan { get; init; }
 
+        /// <summary>Index of the declaration keyword in the source file.</summary>
+        public int DeclarationIndex { get; init; }
+
+        /// <summary>Primary-constructor parameter list, when the declaration has one.</summary>
+        public string? PrimaryConstructorParameters { get; init; }
+
+        /// <summary>Properties used by the EF Core ER model; parsed best-effort from source.</summary>
+        public List<PropertyDecl> Properties { get; } = new();
+
         public string FullName
         {
             get
@@ -63,6 +72,26 @@ public static partial class CSharpScanner
                 return string.IsNullOrEmpty(Namespace) ? typePath : $"{Namespace}.{typePath}";
             }
         }
+    }
+
+    /// <summary>
+    /// A property or record primary-constructor parameter. Text mode uses this for
+    /// EF Core entity discovery; it intentionally captures only shapes that map
+    /// safely without a semantic model.
+    /// </summary>
+    public sealed class PropertyDecl
+    {
+        public required string Name { get; init; }
+        public required string Type { get; init; }
+        public bool IsNullable { get; init; }
+        public bool HasSetter { get; init; }
+        public bool IsPublic { get; init; }
+        public bool IsStatic { get; init; }
+        public bool IsPrimaryConstructorParameter { get; init; }
+        public int SourceIndex { get; init; }
+
+        /// <summary>Raw attribute text, including the surrounding brackets.</summary>
+        public List<string> Attributes { get; } = new();
     }
 
     /// <summary>An interface declaration, including its raw base list for generic substitution.</summary>
@@ -90,9 +119,14 @@ public static partial class CSharpScanner
     }
 
     // Matches: class|record|struct Name<...> (primary-ctor) [: base list] { or ;
-    [GeneratedRegex(@"(?:class|record(?:\s+class|\s+struct)?|struct)\s+(\w+)(?:<([^>]*)>)?\s*(?:\([^{};]*\))?\s*(?:(?!where\b)\s*:\s*([^{;]+?))?\s*(?:\s*where\s+\w+\s*:[^{;]+)?[{;]",
+    [GeneratedRegex(@"(?:class|record(?:\s+class|\s+struct)?|struct)\s+(?<name>\w+)(?:<(?<typeparams>[^>]*)>)?\s*(?:\((?<params>[^{};]*)\))?\s*(?:(?!where\b)\s*:\s*(?<base>[^{;]+?))?\s*(?:\s*where\s+\w+\s*:[^{;]+)?[{;]",
         RegexOptions.Singleline)]
     private static partial Regex DeclarationRegex();
+
+    // Best-effort property match. The accessor block keeps this from matching
+    // methods and fields; attributes/modifiers are kept for EF annotations.
+    [GeneratedRegex(@"(?<attrs>(?:\[\s*[^\[\]]*\]\s*)*)(?<mods>(?:(?:public|private|protected|internal|static|virtual|override|sealed|required|new|readonly|abstract|unsafe|partial|extern)\s+)*)(?!\b(?:class|record|struct|interface|enum|namespace|return)\b)(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*(?:\s*<[^;{}()=]*>)?(?:\s*\[\s*\]\s*)*\??)\s+(?<name>[A-Za-z_]\w*)\s*(?<rest>\{\s*(?:(?:public|private|protected|internal)\s+)?(?:get|set|init)\b[^{}]*\})", RegexOptions.Singleline)]
+    private static partial Regex PropertyRegex();
 
     // Matches: interface Name<...> [: base list] { or ;
     [GeneratedRegex(@"\binterface\s+(\w+)(?:<([^>]*)>)?\s*(?:(?!where\b)\s*:\s*([^{;]+?))?\s*(?:\s*where\s+\w+\s*:[^{;]+)?[{;]",
@@ -276,8 +310,8 @@ public static partial class CSharpScanner
         foreach (Match m in DeclarationRegex().Matches(code))
         {
             if (!mask.IsCode(m.Index)) continue;
-            var typeName = m.Groups[1].Value;
-            var baseList = m.Groups[3].Value;
+            var typeName = m.Groups["name"].Value;
+            var baseList = m.Groups["base"].Value;
             // The match ends with the declaration's '{' (class with body) or ';'
             // (primary-constructor record/struct without a body).
             var openBrace = m.Value.EndsWith('{') ? m.Index + m.Length - 1 : -1;
@@ -289,14 +323,19 @@ public static partial class CSharpScanner
                 BaseList = baseList,
                 BaseTypeNames = ExtractBaseTypeNames(baseList),
                 BaseRawNames = ExtractBaseRawNames(baseList),
-                TypeParameters = ParseTypeParameters(m.Groups[2].Value),
+                TypeParameters = ParseTypeParameters(m.Groups["typeparams"].Value),
                 Usings = scan.Usings,
                 IsAbstract = IsAbstractDeclaration(code, m.Index),
                 BodySpan = span,
+                DeclarationIndex = m.Index,
+                PrimaryConstructorParameters = m.Groups["params"].Success
+                    ? m.Groups["params"].Value
+                    : null,
             });
         }
 
         PopulateContainingTypes(scan);
+        PopulateProperties(scan, code, mask);
         return scan;
     }
 
@@ -321,6 +360,144 @@ public static partial class CSharpScanner
             container.Path.Add(parent.Name);
         }
     }
+
+    private static void PopulateProperties(FileScan scan, string code, SourceMask mask)
+    {
+        foreach (var decl in scan.Classes)
+        {
+            if (decl.BodySpan.End <= decl.BodySpan.Start)
+            {
+                AddPrimaryConstructorProperties(decl);
+                continue;
+            }
+
+            var bodyOpen = code.IndexOf('{', decl.BodySpan.Start);
+            if (bodyOpen < 0 || bodyOpen >= decl.BodySpan.End)
+            {
+                AddPrimaryConstructorProperties(decl);
+                continue;
+            }
+
+            foreach (Match m in PropertyRegex().Matches(code, bodyOpen + 1))
+            {
+                if (m.Index >= decl.BodySpan.End) break;
+                if (!mask.IsCode(m.Index)) continue;
+
+                // A property inside a nested type belongs to the innermost type,
+                // not to every containing class.
+                var owner = InnermostClass(scan.Classes, m.Index);
+                if (!ReferenceEquals(owner, decl)) continue;
+
+                var modifiers = m.Groups["mods"].Value;
+                var name = m.Groups["name"].Value;
+                if (name == "this") continue;
+
+                var rawType = m.Groups["type"].Value.Trim();
+                var rest = m.Groups["rest"].Value;
+                var hasSetter = Regex.IsMatch(rest, @"\b(?:set|init)\b");
+                if (!hasSetter) continue;
+                if (Regex.IsMatch(modifiers, @"\b(?:static|const)\b")) continue;
+
+                var property = new PropertyDecl
+                {
+                    Name = name,
+                    Type = NormalizeTypeSpacing(rawType),
+                    IsNullable = EfAnnotations.IsNullable(rawType),
+                    HasSetter = true,
+                    IsPublic = Regex.IsMatch(modifiers, @"\bpublic\b"),
+                    IsStatic = false,
+                    SourceIndex = m.Index,
+                };
+                foreach (Match attribute in Regex.Matches(
+                             m.Groups["attrs"].Value, @"\[[^\[\]]*\]"))
+                    property.Attributes.Add(attribute.Value);
+                decl.Properties.Add(property);
+            }
+
+            AddPrimaryConstructorProperties(decl);
+        }
+    }
+
+    private static ClassDecl? InnermostClass(IReadOnlyList<ClassDecl> classes, int index)
+    {
+        ClassDecl? owner = null;
+        foreach (var candidate in classes)
+        {
+            if (index < candidate.BodySpan.Start || index >= candidate.BodySpan.End)
+                continue;
+            if (owner is null || candidate.BodySpan.Start > owner.BodySpan.Start)
+                owner = candidate;
+        }
+        return owner;
+    }
+
+    private static void AddPrimaryConstructorProperties(ClassDecl decl)
+    {
+        if (string.IsNullOrWhiteSpace(decl.PrimaryConstructorParameters)) return;
+
+        foreach (var rawParameter in SplitTopLevel(decl.PrimaryConstructorParameters))
+        {
+            var parameter = rawParameter.Trim();
+            if (parameter.Length == 0) continue;
+
+            var attributes = new List<string>();
+            while (parameter.StartsWith('['))
+            {
+                var close = parameter.IndexOf(']');
+                if (close < 0) break;
+                attributes.Add(parameter[..(close + 1)]);
+                parameter = parameter[(close + 1)..].TrimStart();
+            }
+
+            // Default values are not part of the mapped property shape.
+            var equals = TopLevelIndexOf(parameter, '=');
+            if (equals >= 0) parameter = parameter[..equals].TrimEnd();
+
+            parameter = Regex.Replace(
+                parameter, @"^(?:(?:params|in|ref|out|this)\s+)+", "").Trim();
+            var match = Regex.Match(parameter, @"^(?<type>.+?)\s+(?<name>@?[A-Za-z_]\w*)$");
+            if (!match.Success) continue;
+
+            var name = match.Groups["name"].Value.TrimStart('@');
+            if (decl.Properties.Any(p => p.Name == name)) continue;
+
+            var property = new PropertyDecl
+            {
+                Name = name,
+                Type = NormalizeTypeSpacing(match.Groups["type"].Value.Trim()),
+                IsNullable = EfAnnotations.IsNullable(match.Groups["type"].Value),
+                HasSetter = true,
+                IsPublic = true,
+                IsStatic = false,
+                IsPrimaryConstructorParameter = true,
+                SourceIndex = decl.DeclarationIndex,
+            };
+            property.Attributes.AddRange(attributes);
+            decl.Properties.Add(property);
+        }
+    }
+
+    private static int TopLevelIndexOf(string value, char target)
+    {
+        var angle = 0;
+        var paren = 0;
+        for (var i = 0; i < value.Length; i++)
+        {
+            switch (value[i])
+            {
+                case '<': angle++; break;
+                case '>': if (angle > 0) angle--; break;
+                case '(': paren++; break;
+                case ')': if (paren > 0) paren--; break;
+                case var c when c == target && angle == 0 && paren == 0:
+                    return i;
+            }
+        }
+        return -1;
+    }
+
+    private static string NormalizeTypeSpacing(string type)
+        => Regex.Replace(type, @"\s*([.<>\[\],?])\s*", "$1").Trim();
 
     /// <summary>
     /// Finds the span covered by a type declaration: from its start to the matching
@@ -524,7 +701,13 @@ public static partial class CSharpScanner
         string? projectName,
         AnalysisResult result,
         string? filePath = null)
-        => ApplyScan(ScanText(code), code, projectName, result, filePath);
+    {
+        var scan = ScanText(code);
+        ApplyScan(scan, code, projectName, result, filePath);
+        var file = new SourceFile(filePath ?? "", code, projectName);
+        var hierarchy = new TypeHierarchy(scan.Classes, scan.InterfaceDecls);
+        EfCoreTextModelBuilder.Build(new[] { (file, scan) }, hierarchy, result);
+    }
 
     public static void ScanFile(string path, string? projectName, AnalysisResult result)
         => ScanText(File.ReadAllText(path), projectName, result, path);

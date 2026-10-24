@@ -43,6 +43,9 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         AnalysisResult result)
     {
         var allFiles = files.ToList();
+        List<(SourceFile File, SyntaxTree Tree)>? parsed = null;
+        Compilation? compilation = null;
+
         foreach (var project in allFiles.GroupBy(
                      f => f.ProjectName ?? "",
                      StringComparer.OrdinalIgnoreCase))
@@ -50,8 +53,18 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             var ownFiles = project.ToList();
             try
             {
+                parsed ??= allFiles
+                    .Select(file => (
+                        File: file,
+                        Tree: CSharpSyntaxTree.ParseText(
+                            file.Code,
+                            ParseOptions,
+                            file.Path)))
+                    .ToList();
+                compilation ??= CreateCompilation(parsed.Select(p => p.Tree));
+
                 ScanProject(
-                    ownFiles, allFiles, markers, handlerMarkers, result, ProjectLabel(project.Key));
+                    ownFiles, compilation, parsed, markers, handlerMarkers, result, ProjectLabel(project.Key));
             }
             catch (Exception ex)
             {
@@ -67,26 +80,20 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                     ProjectLabel(project.Key)));
             }
         }
+
+        if (compilation is not null && parsed is not null && result.DbContexts.Count > 0)
+            EfCoreRoslynModelBuilder.Build(compilation, parsed, result);
     }
 
     private static void ScanProject(
         IReadOnlyList<SourceFile> ownFiles,
-        IReadOnlyList<SourceFile> allFiles,
+        Compilation compilation,
+        IReadOnlyList<(SourceFile File, SyntaxTree Tree)> parsed,
         IReadOnlySet<string> markers,
         IReadOnlySet<string> handlerMarkers,
         AnalysisResult result,
         string projectLabel)
     {
-        var parsed = allFiles
-            .Select(file => (
-                File: file,
-                Tree: CSharpSyntaxTree.ParseText(
-                    file.Code,
-                    ParseOptions,
-                    file.Path)))
-            .ToList();
-
-        var compilation = CreateCompilation(parsed.Select(p => p.Tree));
         var ownPaths = ownFiles
             .Select(f => f.Path)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -415,12 +422,21 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
         var ef = new List<string>();
         if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContext") is null)
-            ef.Add("public class DbContext { protected DbContext() { } protected DbContext(object? options) { } }");
+            ef.Add("public class DbContext { protected DbContext() { } protected DbContext(object? options) { } protected virtual void OnModelCreating(ModelBuilder modelBuilder) { } }");
         if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbSet`1") is null)
             ef.Add("public abstract class DbSet<TEntity> where TEntity : class { }");
         if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContextOptions`1") is null)
             ef.Add("public class DbContextOptions<TContext> where TContext : DbContext { }");
+        if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.ModelBuilder") is null)
+            ef.Add("public class ModelBuilder { }");
+        if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.IEntityTypeConfiguration`1") is null)
+            ef.Add("public interface IEntityTypeConfiguration<TEntity> where TEntity : class { void Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity> builder); }");
         AppendNamespace(sb, "Microsoft.EntityFrameworkCore", ef);
+
+        var efBuilders = new List<string>();
+        if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder`1") is null)
+            efBuilders.Add("public class EntityTypeBuilder<TEntity> where TEntity : class { }");
+        AppendNamespace(sb, "Microsoft.EntityFrameworkCore.Metadata.Builders", efBuilders);
 
         var identity = new List<string>();
         if (probe.GetTypeByMetadataName("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityDbContext") is null)
@@ -542,18 +558,18 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
     private static string NamespaceOf(ITypeSymbol symbol)
         => symbol is INamedTypeSymbol named ? NamespaceOf(named) : "";
 
-    private static string NamespaceOf(INamedTypeSymbol symbol)
+    internal static string NamespaceOf(INamedTypeSymbol symbol)
         => symbol.ContainingNamespace is { IsGlobalNamespace: false } ns
             ? ns.ToDisplayString()
             : "";
 
-    private static SourceLocation? LocationOf(ISymbol symbol, string rootPath)
+    internal static SourceLocation? LocationOf(ISymbol symbol, string rootPath)
     {
         var location = symbol.Locations.FirstOrDefault(l => l.IsInSource);
         return location is null ? null : LocationOf(location, rootPath);
     }
 
-    private static SourceLocation? LocationOf(Location location, string rootPath)
+    internal static SourceLocation? LocationOf(Location location, string rootPath)
     {
         var lineSpan = location.GetLineSpan();
         return SourceLocation.FromLine(
@@ -566,7 +582,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
     private static string ProjectLabel(string project)
         => string.IsNullOrEmpty(project) ? "(no project)" : project;
 
-    private static string FullName(INamedTypeSymbol symbol)
+    internal static string FullName(INamedTypeSymbol symbol)
     {
         var typeNames = ContainingTypeNames(symbol).Concat(new[] { symbol.Name });
         var path = string.Join(".", typeNames);
@@ -574,7 +590,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         return string.IsNullOrEmpty(ns) ? path : $"{ns}.{path}";
     }
 
-    private static List<string> ContainingTypeNames(INamedTypeSymbol symbol)
+    internal static List<string> ContainingTypeNames(INamedTypeSymbol symbol)
     {
         var names = new List<string>();
         for (var current = symbol.ContainingType; current is not null; current = current.ContainingType)
@@ -582,7 +598,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         return names;
     }
 
-    private static string DisplayType(ITypeSymbol symbol)
+    internal static string DisplayType(ITypeSymbol symbol)
         => symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 
     private static IReadOnlyList<MetadataReference> CreateRuntimeReferences()

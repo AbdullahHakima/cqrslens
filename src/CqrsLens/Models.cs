@@ -183,7 +183,95 @@ public sealed class BehaviorInfo
     public SourceLocation? Location { get; set; }
 }
 
-public sealed record DbSetInfo(string Entity, string Property);
+public sealed record DbSetInfo(string Entity, string Property)
+{
+    /// <summary>
+    /// Full source name of the entity when it resolves to a scanned class. This is
+    /// informational: <see cref="Entity"/> remains the type name as written in
+    /// the DbSet so existing consumers keep their current behavior.
+    /// </summary>
+    public string? EntityFullName { get; set; }
+}
+
+/// <summary>
+/// One property on an EF Core entity. Scalar properties become ER attributes;
+/// navigation properties become relationships and are omitted from attributes.
+/// </summary>
+public sealed class EntityPropertyInfo
+{
+    public required string Name { get; init; }
+
+    /// <summary>The property type as written (generics preserved for navigations).</summary>
+    public required string Type { get; init; }
+
+    /// <summary>True for a primary-key property (including one part of a composite key).</summary>
+    public bool IsKey { get; set; }
+
+    /// <summary>True when the property is used as a foreign key by a resolved relationship.</summary>
+    public bool IsForeignKey { get; set; }
+
+    public bool IsNavigation { get; init; }
+    public bool IsCollection { get; init; }
+
+    /// <summary>Full source name of the navigation target, when it resolves.</summary>
+    public string? TargetEntity { get; init; }
+
+    /// <summary>
+    /// EF requiredness when it can be established from a value type, a data
+    /// annotation or explicit configuration. Reference navigation requiredness is
+    /// never guessed from naming alone.
+    /// </summary>
+    public bool IsRequired { get; set; }
+
+    public SourceLocation? Location { get; init; }
+
+    /// <summary>Raw data-annotation payloads used during model construction.</summary>
+    internal List<string> Attributes { get; } = new();
+}
+
+/// <summary>An entity class in one EF Core model.</summary>
+public sealed class EntityInfo
+{
+    public required string Name { get; init; }
+    public string Namespace { get; set; } = "";
+    public List<string> ContainingTypes { get; } = new();
+    public string? ProjectName { get; set; }
+    public SourceLocation? Location { get; set; }
+
+    public string FullName
+    {
+        get
+        {
+            var typePath = ContainingTypes.Count == 0 ? Name : string.Join(".", ContainingTypes) + "." + Name;
+            return string.IsNullOrEmpty(Namespace) ? typePath : $"{Namespace}.{typePath}";
+        }
+    }
+
+    public List<EntityPropertyInfo> Properties { get; } = new();
+}
+
+public enum EntityRelationshipKind
+{
+    OneToOne,
+    OneToMany,
+    ManyToMany,
+}
+
+/// <summary>
+/// A relationship between two entities. For one-to-many, <see cref="PrincipalEntity"/>
+/// is the "one" side and <see cref="DependentEntity"/> is the "many" side. For
+/// one-to-one the principal/dependent orientation comes from the configured or
+/// conventional foreign key; many-to-many has no meaningful dependent side.
+/// </summary>
+public sealed record EntityRelationshipInfo(
+    string PrincipalEntity,
+    string DependentEntity,
+    string? PrincipalNavigation,
+    string? DependentNavigation,
+    string? ForeignKey,
+    bool IsRequired,
+    EntityRelationshipKind Kind,
+    string? ConfiguredBy = null);
 
 public sealed class DbContextInfo
 {
@@ -193,6 +281,12 @@ public sealed class DbContextInfo
     public string? ProjectName { get; set; }
     public SourceLocation? Location { get; set; }
     public List<DbSetInfo> DbSets { get; } = new();
+
+    /// <summary>Entities reachable from this context's DbSets through navigations.</summary>
+    public List<EntityInfo> Entities { get; } = new();
+
+    /// <summary>Relationships discovered for <see cref="Entities"/>.</summary>
+    public List<EntityRelationshipInfo> Relationships { get; } = new();
 }
 
 public enum CheckSeverity
@@ -270,6 +364,15 @@ public sealed class AnalysisResult
     /// Informational only; external handler wrappers are tracked by #54.
     /// </summary>
     public const string UnresolvedContractCode = "UnresolvedContract";
+
+    /// <summary>A DbSet entity type could not be resolved to scanned source.</summary>
+    public const string EfEntityUnresolvedCode = "EfEntityUnresolved";
+
+    /// <summary>A navigation points at a type that cannot safely be modeled as an entity.</summary>
+    public const string EfNavigationUnresolvedCode = "EfNavigationUnresolved";
+
+    /// <summary>An explicit EF Core configuration could not be associated with an entity.</summary>
+    public const string EfConfigurationUnresolvedCode = "EfConfigurationUnresolved";
 
     /// <summary>Source files discovered before any read/scan failures.</summary>
     public int DiscoveredFileCount { get; set; }
