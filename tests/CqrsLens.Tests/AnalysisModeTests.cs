@@ -204,5 +204,24 @@ public sealed class AnalysisModeTests : IDisposable
         => $"{context.Namespace}.{context.Name}|{context.ProjectName}|" +
            string.Join(",", context.DbSets
                .OrderBy(s => s.Property)
-               .Select(s => $"{s.Property}:{s.Entity}"));
+               .Select(s => $"{s.Property}:{s.Entity}:{s.EntityFullName}")) + "|" +
+           string.Join(";", context.Entities
+               .OrderBy(e => e.FullName, StringComparer.Ordinal)
+               .Select(EntitySignature)) + "|" +
+           string.Join(";", context.Relationships
+               .Select(RelationshipSignature));
+
+    private static string EntitySignature(EntityInfo entity)
+        => $"{entity.FullName}[{string.Join(",", entity.Properties.Select(PropertySignature))}]";
+
+    private static string PropertySignature(EntityPropertyInfo property)
+        => $"{property.Name}:{property.Type}:key={property.IsKey}:fk={property.IsForeignKey}:" +
+           $"nav={property.IsNavigation}:col={property.IsCollection}:target={property.TargetEntity}:" +
+           $"req={property.IsRequired}";
+
+    private static string RelationshipSignature(EntityRelationshipInfo relationship)
+        => $"{relationship.PrincipalEntity}->{relationship.DependentEntity}:" +
+           $"{relationship.PrincipalNavigation}/{relationship.DependentNavigation}:" +
+           $"fk={relationship.ForeignKey}:req={relationship.IsRequired}:" +
+           $"kind={relationship.Kind}:by={relationship.ConfiguredBy}";
 }

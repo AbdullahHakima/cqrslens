@@ -85,6 +85,8 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             DiscoverMarkerRequests(scan, file, hierarchy, interfaceMap, markers, result);
             DiscoverIndirectShapes(scan, file, hierarchy, handlerRoots, result);
         }
+
+        EfCoreTextModelBuilder.Build(ordered, hierarchy, result);
     }
 
     private static void ApplyProjectGlobalUsings(

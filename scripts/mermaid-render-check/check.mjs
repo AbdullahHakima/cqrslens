@@ -32,7 +32,14 @@ function decodeHtmlOnce(value) {
 function countEdges(source) {
   return source
     .split(/\r?\n/)
-    .filter((line) => line.includes("-->") || line.includes("-.->")).length;
+    .filter(
+      (line) =>
+        line.includes("-->") ||
+        line.includes("-.->") ||
+        line.includes("||--") ||
+        line.includes("|o--") ||
+        line.includes("}o--"),
+    ).length;
 }
 
 const browser = await chromium.launch();

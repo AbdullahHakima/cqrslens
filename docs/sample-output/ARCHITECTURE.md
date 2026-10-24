@@ -132,6 +132,39 @@ _4 requests · 4 handlers · 2 validators_
 | --- | --- | --- |
 | ShopDbContext | SampleShop.Infrastructure | Orders → Order, Products → Product, Customers → Customer |
 
+### ShopDbContext ER Diagram
+
+```mermaid
+erDiagram
+    accTitle: ShopDbContext ER diagram
+    accDescr: 4 entities, 3 relationships.
+    ent_Customer["Customer"] {
+        int Id PK
+        string Email
+        string Name
+    }
+    ent_Order["Order"] {
+        Guid Id PK
+        int CustomerId FK
+        string Status
+    }
+    ent_OrderLine["OrderLine"] {
+        int Id PK
+        Guid OrderId FK
+        int ProductId FK
+        int Quantity
+        decimal UnitPrice
+    }
+    ent_Product["Product"] {
+        int Id PK
+        string Name
+        decimal Price
+    }
+    ent_Customer ||--o{ ent_Order : "Orders / Customer"
+    ent_Order ||--o{ ent_OrderLine : "Lines / Order"
+    ent_Product ||--o{ ent_OrderLine : "Product"
+```
+
 ## Analysis Diagnostics
 
 No scan diagnostics.

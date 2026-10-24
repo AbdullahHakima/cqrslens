@@ -335,12 +335,52 @@ readable and every request appears exactly once.
 | GetOrderDetailsQuery | Query | OrderDetailsDto | GetOrderDetailsQueryHandler | — | SampleShop.Application |
 | GetProductListQuery | Query | List&lt;ProductDto&gt; | GetProductListQueryHandler | — | SampleShop.Application |
 
+### Data access and EF Core ER diagram
+
+Every `DbContext` is listed with its `DbSet<T>` properties, followed by a Mermaid
+`erDiagram` built from root `DbSet<T>` entities, transitive keyed entities reached
+through navigation properties, primary/foreign keys, data annotations (`[Key]`,
+`[ForeignKey]`, `[InverseProperty]`, `[Required]`, `[NotMapped]`), and common
+Fluent API calls (`HasKey`, `HasOne`/`HasMany`, `WithOne`/`WithMany`,
+`HasForeignKey`, `IsRequired`) in `OnModelCreating` or `IEntityTypeConfiguration<T>`:
+
+```mermaid
+erDiagram
+    accTitle: ShopDbContext ER diagram
+    accDescr: 4 entities, 3 relationships.
+    ent_Customer["Customer"] {
+        int Id PK
+        string Email
+        string Name
+    }
+    ent_Order["Order"] {
+        Guid Id PK
+        int CustomerId FK
+        string Status
+    }
+    ent_OrderLine["OrderLine"] {
+        int Id PK
+        Guid OrderId FK
+        int ProductId FK
+        int Quantity
+        decimal UnitPrice
+    }
+    ent_Product["Product"] {
+        int Id PK
+        string Name
+        decimal Price
+    }
+    ent_Customer ||--o{ ent_Order : "Orders / Customer"
+    ent_Order ||--o{ ent_OrderLine : "Lines / Order"
+    ent_Product ||--o{ ent_OrderLine : "Product"
+```
+
 ### …and the rest of the report
 
 - **Pipeline behaviors** — every `IPipelineBehavior<...>` implementation, listed by project.
 - **Data access** — every `DbContext` with its `DbSet<T>` properties mapped to their entities
-  (e.g. `ShopDbContext`: Orders → Order, Products → Product, Customers → Customer).
-  Several contexts in one file are attributed per class.
+  (e.g. `ShopDbContext`: Orders → Order, Products → Product, Customers → Customer) and its
+  ER diagram. Several contexts in one file are attributed per class.
 - **Architecture checks** — missing handlers, layer violations, and commands without
   validators (see below), plus a timing footer with the scan duration and file count.
 
@@ -387,7 +427,7 @@ The whole scan took 145 ms.
 | Handlers | `IRequestHandler<TRequest>` / `IRequestHandler<TRequest, TResponse>`, including source-declared wrappers and external wrappers named with `--handler-markers`; generic and non-generic overloads are resolved by arity |
 | Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation) and `Validator<T>` (FastEndpoints), including source-declared wrappers |
 | Pipeline behaviors | `IPipelineBehavior<...>` implementations |
-| DbContexts | classes deriving from `DbContext` (incl. `IdentityDbContext`), with their `DbSet<T>`s attributed per class |
+| DbContexts | classes deriving from `DbContext` (incl. `IdentityDbContext`), with their `DbSet<T>`s attributed per class, plus entity properties, keys (`Id`, `<Entity>Id`, `[Key]`, `HasKey`) and relationships (`[ForeignKey]`, `[InverseProperty]`, navigation properties, `OnModelCreating`, `IEntityTypeConfiguration<T>`) |
 
 ## How it works / limitations
 
@@ -423,7 +463,6 @@ the source:
 Short version (full list in [ROADMAP.md](ROADMAP.md)):
 
 - Finish Roslyn project/reference resolution and parity work (#1)
-- EF Core ER diagrams (relationships, keys)
 - Pre-rendered SVG diagrams, so HTML reports need no JavaScript
 - `--format json` output
 - A GitHub Action that comments the architecture diff on pull requests
