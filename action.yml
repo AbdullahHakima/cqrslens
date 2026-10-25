@@ -3,7 +3,7 @@ description: >-
   Statically scan a .NET solution (no build required) and generate an
   architecture report — project graph, Clean Architecture layers, CQRS map
   (requests, handlers, validators), pipeline behaviors, DbContexts, and
-  architecture checks — as Markdown or HTML with Mermaid or pre-rendered SVG diagrams.
+  architecture checks — as Markdown, HTML (Mermaid or pre-rendered SVG), or JSON.
 author: Abdullah Hakim
 branding:
   icon: search
@@ -19,7 +19,7 @@ inputs:
     required: false
     default: 'ARCHITECTURE.md'
   format:
-    description: 'Report format: md or html.'
+    description: 'Report format: md, html, or json.'
     required: false
     default: 'md'
   render:

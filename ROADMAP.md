@@ -5,7 +5,7 @@ where they exist; the dates are not promises.
 
 ## In progress
 
-**Visualization quality, Roslyn hardening, and zero-JS SVG reports**
+**Visualization quality, Roslyn hardening, zero-JS SVG reports, and JSON output**
 
 - Bounded, role-prefixed Mermaid diagrams with GitHub-safe entities and escaped
   table cells; CQRS maps split at 15 requests and balanced by project
@@ -23,6 +23,10 @@ where they exist; the dates are not promises.
 - **Pre-rendered SVG diagrams**: `--render svg` and `"render": "svg"` compile
   every flowchart and ER diagram to deterministic inline `<svg>` ahead of time
   so HTML reports require zero JavaScript and work completely offline
+- **`--format json` output**: schema-versioned, deterministic JSON report of
+  projects, requests, handlers, validators, behaviors, DbContexts (with entities
+  and relationships), checks, and diagnostics for external dashboards and custom
+  tooling
 
 ## Done
 
@@ -89,12 +93,11 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- `--format json` output for external dashboards and custom tooling
 - Colored console output and a progress line while scanning
+- More mediators: Mediator (martinothamar) and Wolverine conventions
 
 ## After that
 
-- More mediators: Mediator (martinothamar) and Wolverine conventions
 - GitHub Action mode that comments the architecture diff on a pull request
 
 ## Ideas, not planned yet

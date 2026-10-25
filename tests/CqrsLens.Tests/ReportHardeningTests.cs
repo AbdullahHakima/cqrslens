@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using CqrsLens;
 using Xunit;
@@ -521,6 +522,58 @@ public class ReportHardeningTests
 
         Assert.DoesNotContain("<script>", html, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("A&lt;B&gt;&amp;&quot;C&quot;#quot;&lt;script&gt;", html);
+    }
+
+    [Fact]
+    public void Json_GeneratesDeterministicMachineReadableArchitectureReport()
+    {
+        var result = FixedResult("PlaceOrderCommand");
+        result.Behaviors.Add(new BehaviorInfo
+        {
+            Name = "LoggingBehavior",
+            ProjectName = "Foo.Bar",
+            Location = new SourceLocation("LoggingBehavior.cs", 10, 4),
+        });
+        result.Checks.Add(new CheckFinding(
+            CheckSeverity.Warning,
+            ArchitectureChecker.CommandWithoutValidatorCode,
+            "Command has no validator.",
+            Target: "Demo.PlaceOrderCommand",
+            ProjectName: "Foo.Bar",
+            Location: new SourceLocation("PlaceOrderCommand.cs", 3, 1)));
+        result.Diagnostics.Add(new AnalysisDiagnostic(
+            AnalysisResult.UnresolvedContractCode,
+            AnalysisDiagnosticSeverity.Info,
+            "Contract could not be resolved.",
+            new SourceLocation("PlaceOrderCommand.cs", 3, 1),
+            "Foo.Bar"));
+
+        var first = JsonReportGenerator.Generate(result);
+        var second = JsonReportGenerator.Generate(result);
+
+        Assert.Equal(first, second);
+
+        using var doc = JsonDocument.Parse(first);
+        var root = doc.RootElement;
+        Assert.Equal(JsonReportGenerator.CurrentSchemaVersion, root.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(ToolInfo.Version, root.GetProperty("toolVersion").GetString());
+        Assert.Equal("text", root.GetProperty("scanner").GetString());
+        Assert.Equal("2026-02-03T04:05:06.0000000Z", root.GetProperty("generatedAt").GetString());
+
+        var summary = root.GetProperty("summary");
+        Assert.Equal(1, summary.GetProperty("projects").GetInt32());
+        Assert.Equal(1, summary.GetProperty("requests").GetInt32());
+        Assert.Equal(1, summary.GetProperty("handlers").GetInt32());
+        Assert.Equal(1, summary.GetProperty("validators").GetInt32());
+        Assert.Equal(1, summary.GetProperty("behaviors").GetInt32());
+        Assert.Equal(0, summary.GetProperty("errors").GetInt32());
+        Assert.Equal(1, summary.GetProperty("warnings").GetInt32());
+        Assert.Equal(1, summary.GetProperty("diagnostics").GetInt32());
+
+        var req = Assert.Single(root.GetProperty("requests").EnumerateArray());
+        Assert.Equal("Demo.PlaceOrderCommand", req.GetProperty("fullName").GetString());
+        Assert.Equal("Command", req.GetProperty("kind").GetString());
+        Assert.Equal("A|B", req.GetProperty("responseType").GetString());
     }
 
     private static CqrsRequest Request(string name, string project)
