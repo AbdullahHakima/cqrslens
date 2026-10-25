@@ -159,4 +159,93 @@ public sealed class MediatorConventionTests : IDisposable
         Assert.Contains("Conventions: Wolverine", ReportGenerator.Generate(result));
         Assert.Contains("\"conventions\"", JsonReportGenerator.Generate(result));
     }
+
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void Mediator_MultiProjectSameNamedRequestsAndBehaviors_LinkPerProject(AnalysisMode mode)
+    {
+        WriteFile("ConsoleA/ConsoleA.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="Mediator.Abstractions" Version="3.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        WriteFile("ConsoleA/Program.cs", """
+            using Mediator;
+
+            public sealed record Ping : IRequest<string>;
+            public sealed class PingHandler : IRequestHandler<Ping, string>
+            {
+                public ValueTask<string> Handle(Ping request, CancellationToken ct) => new("a");
+            }
+            public sealed class LoggingBehavior<TMessage, TResponse> : IPipelineBehavior<TMessage, TResponse>
+                where TMessage : notnull, IMessage
+            {
+            }
+            """);
+
+        WriteFile("StreamingB/StreamingB.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="Mediator.Abstractions" Version="3.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        WriteFile("StreamingB/Program.cs", """
+            using Mediator;
+
+            public sealed record StreamPing : IStreamRequest<string>;
+            public sealed class PingHandler : IStreamRequestHandler<StreamPing, string>
+            {
+            }
+            """);
+
+        WriteFile("InternalMessages.Domain/InternalMessages.Domain.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="Mediator.Abstractions" Version="3.0.0" />
+              </ItemGroup>
+            </Project>
+            """);
+        WriteFile("InternalMessages.Domain/Ping.cs", """
+            using Mediator;
+            namespace InternalMessages.Domain;
+            public sealed record Ping : IRequest<string>;
+            """);
+
+        WriteFile("InternalMessages.Application/InternalMessages.Application.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <ProjectReference Include="../InternalMessages.Domain/InternalMessages.Domain.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        WriteFile("InternalMessages.Application/PingHandler.cs", """
+            using InternalMessages.Domain;
+            using Mediator;
+            namespace InternalMessages.Application;
+            public sealed class PingHandler : IRequestHandler<Ping, string>
+            {
+                public ValueTask<string> Handle(Ping request, CancellationToken ct) => new("domain");
+            }
+            """);
+
+        var result = Analyzer.Analyze(_root, mode);
+
+        Assert.Equal(3, result.Requests.Count);
+        Assert.Equal(3, result.Handlers.Count);
+        Assert.Single(result.Behaviors);
+        Assert.Empty(result.Diagnostics);
+
+        var domainPing = Assert.Single(result.Requests, r => r.FullName == "InternalMessages.Domain.Ping");
+        Assert.Contains("InternalMessages.Application.PingHandler", domainPing.Handlers);
+
+        var consolePing = Assert.Single(result.Requests, r => r.FullName == "Ping" && r.ProjectName == "ConsoleA");
+        Assert.Contains("PingHandler", consolePing.Handlers);
+
+        var streamPing = Assert.Single(result.Requests, r => r.FullName == "StreamPing" && r.ProjectName == "StreamingB");
+        Assert.Contains("PingHandler", streamPing.Handlers);
+    }
 }

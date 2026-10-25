@@ -209,6 +209,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                             !result.Handlers.Any(h =>
                                 h.Namespace == decl.Namespace &&
                                 h.Name == decl.Name &&
+                                h.ProjectName == file.ProjectName &&
                                 h.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
                                 h.RequestName == requestName))
                         {
@@ -253,6 +254,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                             !result.Validators.Any(v =>
                                 v.Namespace == decl.Namespace &&
                                 v.Name == decl.Name &&
+                                v.ProjectName == file.ProjectName &&
                                 v.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
                                 v.TargetType == targetName))
                         {
@@ -363,6 +365,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
 
             if (result.Requests.Any(r =>
                     r.Name == decl.Name &&
+                    r.ProjectName == file.ProjectName &&
                     r.Namespace == decl.Namespace &&
                     r.ContainingTypes.SequenceEqual(decl.ContainingTypes)))
                 continue;

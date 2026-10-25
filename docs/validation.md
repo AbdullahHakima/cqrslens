@@ -8,13 +8,14 @@ so an external repository changing or disappearing cannot block a release.
 
 ## Latest snapshot
 
-CqrsLens `0.5.0`, text analysis, 2026-10-23:
+CqrsLens `0.6.0`, `text` and `roslyn` analysis, 2026-10-25:
 
-| Repository | Commit | Path | Markers | Handler markers | Projects | Requests | Handlers | Validators | Checks (E/W) | Diagnostics (E/W/I) | Time |
-| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 0/3 | 0/0/0 | 296 ms |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | `ICommandHandler,IQueryHandler` | 22 | 23 | 23 | 21 | 0/13 | 0/0/0 | 392 ms |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0/71 | 0/0/0 | 497 ms |
+| Repository | Commit | Path | Markers | Handler markers | Projects | Requests | Handlers | Validators | Behaviors | DbContexts | Checks (E/W) | Diagnostics (text / roslyn) |
+| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 4 | 1 | 0/3 | 0/0/0 · 0/1/0 |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `-` (auto `Mediator`) | `-` (auto `Mediator`) | 22 | 23 | 23 | 21 | 3 | 3 | 0/13 | 0/0/0 · 0/0/0 |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0 | 4 | 0/71 | 0/0/0 · 0/0/0 |
+| [martinothamar/Mediator](https://github.com/martinothamar/Mediator) | `8b87a0ed7474` | `samples` | `-` (auto `Mediator`) | `-` (auto `Mediator`) | 24 | 15 | 15 | 1 | 9 | 0 | 0/3 | 0/0/0 · 0/0/0 |
 
 Timings are machine-dependent; counts and commits are the reproducible part.
 The 2026-10-23 rerun kept the scanner counts unchanged while regenerating the

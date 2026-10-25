@@ -167,21 +167,40 @@ public static class Analyzer
     /// </summary>
     private static void Link(AnalysisResult result)
     {
-        var byFullName = new Dictionary<string, CqrsRequest>(StringComparer.Ordinal);
+        var byFullName = new Dictionary<string, List<CqrsRequest>>(StringComparer.Ordinal);
         var bySimpleName = new Dictionary<string, List<CqrsRequest>>(StringComparer.Ordinal);
         foreach (var request in result.Requests)
         {
-            byFullName.TryAdd(request.FullName, request);
+            if (!byFullName.TryGetValue(request.FullName, out var fullList))
+                byFullName[request.FullName] = fullList = new List<CqrsRequest>();
+            fullList.Add(request);
+
             if (!bySimpleName.TryGetValue(request.Name, out var list))
                 bySimpleName[request.Name] = list = new List<CqrsRequest>();
             list.Add(request);
+        }
+
+        static CqrsRequest? PickHit(List<CqrsRequest> hits, string? ownerProject)
+        {
+            if (hits.Count == 1)
+                return hits[0];
+            if (!string.IsNullOrEmpty(ownerProject))
+            {
+                var sameProject = hits
+                    .Where(r => string.Equals(r.ProjectName, ownerProject, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (sameProject.Count == 1)
+                    return sameProject[0];
+            }
+            return hits[0];
         }
 
         CqrsRequest? Resolve(
             string simpleName,
             string? writtenNs,
             string? fallbackNs,
-            IReadOnlyList<string> importedNamespaces)
+            IReadOnlyList<string> importedNamespaces,
+            string? ownerProject)
         {
             // A handler may write a type as `Outer.Inner`, `Ns.Outer.Inner`, or just
             // `Inner`; try the nested-type path and the handler's own namespace.
@@ -194,12 +213,13 @@ public static class Analyzer
             }
             if (!string.IsNullOrEmpty(fallbackNs))
                 candidates.Add($"{fallbackNs}.{simpleName}");
-            candidates.Add(simpleName);
+            else
+                candidates.Add(simpleName);
 
             foreach (var candidate in candidates)
             {
-                if (byFullName.TryGetValue(candidate, out var hit))
-                    return hit;
+                if (byFullName.TryGetValue(candidate, out var hits))
+                    return PickHit(hits, ownerProject);
             }
 
             // An unqualified request name is often imported by a using in the
@@ -208,15 +228,24 @@ public static class Analyzer
             var importedMatches = new List<CqrsRequest>();
             foreach (var ns in importedNamespaces.Distinct(StringComparer.Ordinal))
             {
-                if (byFullName.TryGetValue($"{ns}.{simpleName}", out var hit) &&
-                    !importedMatches.Contains(hit))
-                    importedMatches.Add(hit);
+                if (byFullName.TryGetValue($"{ns}.{simpleName}", out var hits))
+                {
+                    var picked = PickHit(hits, ownerProject);
+                    if (picked is not null && !importedMatches.Contains(picked))
+                        importedMatches.Add(picked);
+                }
             }
 
             if (importedMatches.Count == 1)
                 return importedMatches[0];
             if (importedMatches.Count > 1)
                 return null;
+
+            if (!string.IsNullOrEmpty(fallbackNs) &&
+                byFullName.TryGetValue(simpleName, out var globalHits))
+            {
+                return PickHit(globalHits, ownerProject);
+            }
 
             return bySimpleName.TryGetValue(simpleName, out var matches) && matches.Count == 1
                 ? matches[0]
@@ -250,7 +279,8 @@ public static class Analyzer
                 handler.RequestName,
                 handler.RequestNamespace,
                 handler.Namespace,
-                handler.ImportedNamespaces);
+                handler.ImportedNamespaces,
+                handler.ProjectName);
             if (request is null)
             {
                 RecordAmbiguousLink(
@@ -276,7 +306,8 @@ public static class Analyzer
                 validator.TargetType,
                 validator.TargetNamespace,
                 validator.Namespace,
-                validator.ImportedNamespaces);
+                validator.ImportedNamespaces,
+                validator.ProjectName);
             if (request is null)
             {
                 RecordAmbiguousLink(

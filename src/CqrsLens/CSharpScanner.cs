@@ -608,6 +608,7 @@ public static partial class CSharpScanner
                 if (result.Handlers.Any(h =>
                         h.Namespace == decl.Namespace &&
                         h.Name == decl.Name &&
+                        h.ProjectName == projectName &&
                         h.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
                         h.RequestName == UnqualifiedTypeName(requestType)))
                     continue;
@@ -638,6 +639,7 @@ public static partial class CSharpScanner
                 if (result.Validators.Any(v =>
                         v.Namespace == decl.Namespace &&
                         v.Name == decl.Name &&
+                        v.ProjectName == projectName &&
                         v.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
                         v.TargetType == UnqualifiedTypeName(validatorTarget)))
                     continue;
