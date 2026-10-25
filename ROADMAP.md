@@ -3,15 +3,10 @@
 What is planned, in the order I expect to work on it. Issues are linked
 where they exist; the dates are not promises.
 
-## In progress
+## Done
 
-**Visualization quality, Roslyn hardening, zero-JS SVG reports, JSON output, and Console ASCII artwork**
+**0.6.0** (October 2026)
 
-- Bounded, role-prefixed Mermaid diagrams with GitHub-safe entities and escaped
-  table cells; CQRS maps split at 15 requests and balanced by project
-- Semantic styling, layer colors and legends driven by enabled checks
-- Mermaid 12.2.0 HTML pin with GitHub-compatible layout and per-diagram
-  render/source fallbacks
 - **EF Core ER diagram** (#6): entity attributes, primary/foreign keys and
   1:1 / 1:N / M:N relationships from navigation properties, data annotations
   and common Fluent API calls in both text and Roslyn modes
@@ -31,8 +26,6 @@ where they exist; the dates are not promises.
   24-bit ANSI TrueColor ASCII banner, live progress bar, Unicode box-drawing
   summary card, and custom `--watermark` block ASCII art stamps in console and
   Markdown/HTML/JSON reports
-
-## Done
 
 **0.5.1** (October 2026)
 

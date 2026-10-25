@@ -4,6 +4,8 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-25
+
 ### Added
 
 - **EF Core ER diagrams (#6)**: each discovered `DbContext` now builds an entity-relationship
