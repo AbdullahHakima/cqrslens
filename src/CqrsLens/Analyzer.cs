@@ -134,6 +134,7 @@ public static class Analyzer
 
         options.Progress?.Invoke(new ScanProgress("Linking CQRS & checks", 3, 4, $"{result.Requests.Count} request(s)"));
         Link(result);
+        DeepSliceAnalyzer.Analyze(sourceFiles, result);
         result.Checks.AddRange(ArchitectureChecker.ApplyRuleSeverities(
             ArchitectureChecker.RunChecks(result),
             options.RuleSeverities));

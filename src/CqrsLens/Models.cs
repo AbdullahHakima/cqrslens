@@ -133,6 +133,28 @@ public sealed class CqrsRequest
 
     public List<string> Handlers { get; } = new();
     public List<string> Validators { get; } = new();
+    public List<RequestPropertyInfo> Properties { get; } = new();
+    public List<string> Entrypoints { get; } = new();
+    public List<string> TouchedEntities { get; } = new();
+    public List<string> PublishedNotifications { get; } = new();
+    public List<string> DispatchedRequests { get; } = new();
+}
+
+public sealed record RequestPropertyInfo(string Name, string Type);
+
+public sealed class EndpointInfo
+{
+    public required string Name { get; init; }
+    public required string HttpMethod { get; init; }
+    public required string Route { get; init; }
+    public required string TargetRequestName { get; init; }
+    public string? TargetRequestNamespace { get; set; }
+    public string? ProjectName { get; set; }
+    public SourceLocation? Location { get; set; }
+
+    public string DisplayLabel => string.IsNullOrEmpty(Route)
+        ? $"{HttpMethod} ({Name})"
+        : $"{HttpMethod} {Route}";
 }
 
 public sealed class CqrsNotification
@@ -199,6 +221,10 @@ public sealed class HandlerInfo
         }
     }
     public required string RequestName { get; init; }
+    public List<string> Dependencies { get; } = new();
+    public List<string> TouchedEntities { get; } = new();
+    public List<string> PublishedNotifications { get; } = new();
+    public List<string> DispatchedRequests { get; } = new();
 
     // Set when the request name in IRequestHandler<...> could be resolved to a namespace.
     public string? RequestNamespace { get; set; }
@@ -383,6 +409,7 @@ public sealed class AnalysisResult
     public List<DbContextInfo> DbContexts { get; } = new();
     public List<CqrsNotification> Notifications { get; } = new();
     public List<NotificationHandlerInfo> NotificationHandlers { get; } = new();
+    public List<EndpointInfo> Endpoints { get; } = new();
 
     public List<CheckFinding> Checks { get; } = new();
 

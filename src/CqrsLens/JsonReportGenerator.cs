@@ -70,6 +70,7 @@ public static class JsonReportGenerator
                 DbContexts = result.DbContexts.Count,
                 Notifications = result.Notifications.Count,
                 NotificationHandlers = result.NotificationHandlers.Count,
+                Endpoints = result.Endpoints.Count,
                 Errors = errorCount,
                 Warnings = warningCount,
                 KnownFindings = knownCount,
@@ -104,6 +105,13 @@ public static class JsonReportGenerator
                     Project = r.ProjectName,
                     Handlers = r.Handlers.ToList(),
                     Validators = r.Validators.ToList(),
+                    Properties = r.Properties.Count > 0
+                        ? r.Properties.Select(p => new JsonRequestProperty { Name = p.Name, Type = p.Type }).ToList()
+                        : null,
+                    Entrypoints = r.Entrypoints.Count > 0 ? r.Entrypoints.ToList() : null,
+                    TouchedEntities = r.TouchedEntities.Count > 0 ? r.TouchedEntities.ToList() : null,
+                    PublishedNotifications = r.PublishedNotifications.Count > 0 ? r.PublishedNotifications.ToList() : null,
+                    DispatchedRequests = r.DispatchedRequests.Count > 0 ? r.DispatchedRequests.ToList() : null,
                     Location = ToJsonLocation(r.Location),
                 })
                 .ToList(),
@@ -116,6 +124,10 @@ public static class JsonReportGenerator
                     Namespace = EmptyToNull(h.Namespace),
                     FullName = h.FullName,
                     RequestName = h.RequestName,
+                    Dependencies = h.Dependencies.Count > 0 ? h.Dependencies.ToList() : null,
+                    TouchedEntities = h.TouchedEntities.Count > 0 ? h.TouchedEntities.ToList() : null,
+                    PublishedNotifications = h.PublishedNotifications.Count > 0 ? h.PublishedNotifications.ToList() : null,
+                    DispatchedRequests = h.DispatchedRequests.Count > 0 ? h.DispatchedRequests.ToList() : null,
                     Project = h.ProjectName,
                     Location = ToJsonLocation(h.Location),
                 })
@@ -262,6 +274,19 @@ public static class JsonReportGenerator
                     Location = ToJsonLocation(h.Location),
                 })
                 .ToList(),
+            Endpoints = result.Endpoints.Count > 0
+                ? result.Endpoints
+                    .Select(e => new JsonEndpoint
+                    {
+                        Name = e.Name,
+                        HttpMethod = e.HttpMethod,
+                        Route = e.Route,
+                        TargetRequest = e.TargetRequestName,
+                        Project = e.ProjectName,
+                        Location = ToJsonLocation(e.Location),
+                    })
+                    .ToList()
+                : null,
         };
     }
 
@@ -380,6 +405,7 @@ public static class JsonReportGenerator
         public List<string> SkippedFiles { get; set; } = new();
         public List<JsonNotification> Notifications { get; set; } = new();
         public List<JsonNotificationHandler> NotificationHandlers { get; set; } = new();
+        public List<JsonEndpoint>? Endpoints { get; set; }
     }
 
     internal sealed class JsonSummary
@@ -392,6 +418,7 @@ public static class JsonReportGenerator
         public int DbContexts { get; set; }
         public int Notifications { get; set; }
         public int NotificationHandlers { get; set; }
+        public int Endpoints { get; set; }
         public int Errors { get; set; }
         public int Warnings { get; set; }
         public int KnownFindings { get; set; }
@@ -417,6 +444,11 @@ public static class JsonReportGenerator
         public string? Project { get; set; }
         public List<string> Handlers { get; set; } = new();
         public List<string> Validators { get; set; } = new();
+        public List<JsonRequestProperty>? Properties { get; set; }
+        public List<string>? Entrypoints { get; set; }
+        public List<string>? TouchedEntities { get; set; }
+        public List<string>? PublishedNotifications { get; set; }
+        public List<string>? DispatchedRequests { get; set; }
         public JsonLocation? Location { get; set; }
     }
 
@@ -426,6 +458,10 @@ public static class JsonReportGenerator
         public string? Namespace { get; set; }
         public string FullName { get; set; } = "";
         public string RequestName { get; set; } = "";
+        public List<string>? Dependencies { get; set; }
+        public List<string>? TouchedEntities { get; set; }
+        public List<string>? PublishedNotifications { get; set; }
+        public List<string>? DispatchedRequests { get; set; }
         public string? Project { get; set; }
         public JsonLocation? Location { get; set; }
     }
@@ -544,6 +580,22 @@ public static class JsonReportGenerator
         public string? Namespace { get; set; }
         public string FullName { get; set; } = "";
         public string NotificationName { get; set; } = "";
+        public string? Project { get; set; }
+        public JsonLocation? Location { get; set; }
+    }
+
+    internal sealed class JsonRequestProperty
+    {
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+    }
+
+    internal sealed class JsonEndpoint
+    {
+        public string Name { get; set; } = "";
+        public string HttpMethod { get; set; } = "";
+        public string Route { get; set; } = "";
+        public string TargetRequest { get; set; } = "";
         public string? Project { get; set; }
         public JsonLocation? Location { get; set; }
     }

@@ -6,6 +6,10 @@ All notable changes to CqrsLens are documented here.
 
 ### Added
 
+- **Deep Vertical Slice Tracing & AI Agent Mode (`--format agent`, `--slice <filter>`)**:
+  - `DeepSliceAnalyzer` traces end-to-end vertical slices across ASP.NET Core Controllers, Minimal APIs (`MapGet`/`MapPost`/`MapPut`/`MapDelete`/`MapPatch` + `MapGroup`), and FastEndpoints (`Endpoint<TRequest, TResponse>`) → Request payload properties → Validators → Handlers (constructor/primary-constructor DI dependencies) → touched EF Core `DbSet`s/entities + published Domain Events/Notifications (`INotification` / `IDomainEvent`) in both `text` and `roslyn` modes.
+  - `AgentReportGenerator` (`--format agent`, default `ARCHITECTURE.agent.md`) generates a token-optimized, Mermaid-free architectural map with synthesized **Architectural DNA & Conventions** (layer topology, co-located vs. separate handler layout, active pipeline behaviors) and full vertical slice causal chains with `File:Line` source locations.
+  - `--slice <filter>` queries and streams matching vertical slices directly to `stdout` when `-o` is omitted, enabling AI coding agents to inspect any feature slice in milliseconds with minimal token usage.
 - **Domain events & notifications (`INotification` / `IDomainEvent`)**:
   - Discovers notifications and domain events (`INotification`, `IDomainEvent`, and
     source-declared wrapper interfaces/base classes) along with their 1-to-many

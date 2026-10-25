@@ -7,6 +7,7 @@ public sealed class CliOptions
     public string? Path { get; set; }
     public string? Output { get; set; }
     public string? Format { get; set; }
+    public string? SliceFilter { get; set; }
     public DiagramRenderMode RenderMode { get; set; } = DiagramRenderMode.Mermaid;
     public bool RenderModeSpecified { get; set; }
     public string? ConfigPath { get; set; }
@@ -73,8 +74,16 @@ public static class CliParser
                     break;
                 case "--format":
                     if (i + 1 >= args.Length)
-                        return Error("error: --format needs a value: md, html or json");
+                        return Error("error: --format needs a value: md, html, json or agent");
                     options.Format = args[++i].ToLowerInvariant();
+                    break;
+                case "--slice":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --slice needs a filter value, e.g. --slice Order");
+                    var slice = args[++i].Trim();
+                    if (string.IsNullOrEmpty(slice))
+                        return Error("error: --slice filter cannot be empty.");
+                    options.SliceFilter = slice;
                     break;
                 case "--render":
                     if (i + 1 >= args.Length)
@@ -203,9 +212,10 @@ public static class CliParser
         if (options.Format is not null &&
             options.Format != "md" &&
             options.Format != "html" &&
-            options.Format != "json")
+            options.Format != "json" &&
+            options.Format != "agent")
         {
-            return Error($"error: unknown format '{options.Format}' - use md, html or json.");
+            return Error($"error: unknown format '{options.Format}' - use md, html, json or agent.");
         }
 
         if (options.BaselinePath is not null && options.WriteBaselinePath is not null)
@@ -325,9 +335,18 @@ public static class CliRunner
             ? options.Watermark
             : settings.Watermark;
 
+
+
+
+
+
+
+        var streamSliceToStdout = options.SliceFilter is not null && options.Output is null && options.Format is null;
         var useColor = ConsoleArtwork.ShouldUseColor(stdout, options.Color);
-        var showBanner = ConsoleArtwork.ShouldShowBanner(stdout, options.Banner, options.GitHubAnnotations);
-        var isInteractiveConsole = ReferenceEquals(stdout, Console.Out) &&
+        var showBanner = !streamSliceToStdout &&
+                         ConsoleArtwork.ShouldShowBanner(stdout, options.Banner, options.GitHubAnnotations);
+        var isInteractiveConsole = !streamSliceToStdout &&
+                                   ReferenceEquals(stdout, Console.Out) &&
                                    !Console.IsOutputRedirected &&
                                    !options.GitHubAnnotations;
 
@@ -378,6 +397,12 @@ public static class CliRunner
 
         var result = Analyzer.Analyze(path, analysisMode, analysisOptions);
 
+        if (streamSliceToStdout)
+        {
+            stdout.Write(AgentReportGenerator.Generate(result, options.SliceFilter));
+            return ExitCodes.Success;
+        }
+
         if (isInteractiveConsole && lastProgressLen > 0)
         {
             stdout.Write("\r" + new string(' ', lastProgressLen) + "\r");
@@ -392,12 +417,20 @@ public static class CliRunner
                      (options.Format is null &&
                       options.Output is not null &&
                       options.Output.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
+        var isAgent = options.Format == "agent" ||
+                      options.SliceFilter is not null ||
+                      (options.Format is null &&
+                       options.Output is not null &&
+                       options.Output.EndsWith(".agent.md", StringComparison.OrdinalIgnoreCase));
 
         var defaultFileName = isHtml
             ? "ARCHITECTURE.html"
             : isJson
                 ? "ARCHITECTURE.json"
-                : "ARCHITECTURE.md";
+                : isAgent
+                    ? "ARCHITECTURE.agent.md" : "ARCHITECTURE.md";
+    
+
         var output = options.Output ?? Path.Combine(
             Directory.GetCurrentDirectory(), defaultFileName);
         var fullOutput = Path.GetFullPath(output);
@@ -486,7 +519,10 @@ public static class CliRunner
             ? HtmlReportGenerator.Generate(result, renderMode)
             : isJson
                 ? JsonReportGenerator.Generate(result)
-                : ReportGenerator.Generate(result);
+                : isAgent
+                    ? AgentReportGenerator.Generate(result, options.SliceFilter) : ReportGenerator.Generate(result);
+    
+
 
         var outputDirectory = Path.GetDirectoryName(fullOutput);
         if (!string.IsNullOrEmpty(outputDirectory))
@@ -593,13 +629,15 @@ public static class CliRunner
 
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--watermark TEXT] [--banner|--no-banner] [--color|--no-color] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html|json|agent] [--slice FILTER] [--render mermaid|svg] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--watermark TEXT] [--banner|--no-banner] [--color|--no-color] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (.html or .json) in the current directory.");
         writer.WriteLine("  --config      Config file. Default: <path>/.cqrslens.json when present.");
         writer.WriteLine("                Settings: analysis, render, watermark, markers, handlerMarkers, include/exclude globs, layers, rules.");
-        writer.WriteLine("  --format      Report format: md (default), html, or json. A .html or .json -o path implies that format.");
+        writer.WriteLine("  --format      Report format: md (default), html, json, or agent. A .html, .json, or .agent.md -o path implies that format.");
+        writer.WriteLine("  --slice       Filter and trace vertical slices matching FILTER (endpoint, request, handler, entity, or event).");
+        writer.WriteLine("                Streams directly to stdout when -o is omitted.");
         writer.WriteLine("  --render      HTML diagram rendering: mermaid (default) or svg (zero-JS inline SVG).");
         writer.WriteLine("  --analysis    Analysis backend: text (default) or roslyn (opt-in).");
         writer.WriteLine("  --generated-at  Fixed ISO-8601 timestamp for reproducible reports (tests/CI);");

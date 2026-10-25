@@ -585,6 +585,14 @@ public static class HtmlReportGenerator
             html.AppendLine($"<dt>Response</dt><dd><code>{E(r.ResponseType ?? "void")}</code></dd>");
             html.AppendLine($"<dt>Project</dt><dd>{E(r.ProjectName ?? "—")}</dd>");
             html.AppendLine($"<dt>Source file</dt><dd>{FormatLocationHtml(r.Location)}</dd>");
+            if (r.Entrypoints.Count > 0)
+                html.AppendLine($"<dt>Entrypoints</dt><dd>{string.Join(", ", r.Entrypoints.Select(e => $"<code>{E(e)}</code>"))}</dd>");
+            if (r.Properties.Count > 0)
+                html.AppendLine($"<dt>Payload</dt><dd>{string.Join(", ", r.Properties.Select(p => $"<code>{E(p.Name)}: {E(p.Type)}</code>"))}</dd>");
+            if (r.TouchedEntities.Count > 0)
+                html.AppendLine($"<dt>DbSets</dt><dd>{string.Join(", ", r.TouchedEntities.Select(e => $"<code>{E(e)}</code>"))}</dd>");
+            if (r.PublishedNotifications.Count > 0)
+                html.AppendLine($"<dt>Events</dt><dd>{string.Join(", ", r.PublishedNotifications.Select(n => $"<code>{E(CSharpScanner.SimpleName(n))}</code>"))}</dd>");
             html.AppendLine("</dl>");
             html.AppendLine("</div>");
 
@@ -603,8 +611,14 @@ public static class HtmlReportGenerator
                     var hInfo = ResolveHandler(handlerName, handlersByFullName, handlersBySimpleName);
                     var hDisplay = CSharpScanner.SimpleName(handlerName);
                     var hLoc = hInfo?.Location is not null ? $" · {FormatLocationHtml(hInfo.Location)}" : "";
+
+
+
                     var hProj = !string.IsNullOrEmpty(hInfo?.ProjectName) ? $" <span class=\"meta-sub\">({E(hInfo!.ProjectName)})</span>" : "";
-                    html.AppendLine($"<li><strong>{E(hDisplay)}</strong>{hProj}<br><span class=\"meta-sub\"><code>{E(hInfo?.FullName ?? handlerName)}</code>{hLoc}</span></li>");
+                    var hDeps = hInfo is { Dependencies.Count: > 0 } ? $"<br><span class=\"meta-sub\">Deps: <code>{E(string.Join(", ", hInfo.Dependencies))}</code></span>" : "";
+                    html.AppendLine($"<li><strong>{E(hDisplay)}</strong>{hProj}<br><span class=\"meta-sub\"><code>{E(hInfo?.FullName ?? handlerName)}</code>{hLoc}</span>{hDeps}</li>");
+
+
                 }
                 html.AppendLine("</ul>");
             }
@@ -662,6 +676,15 @@ public static class HtmlReportGenerator
           .Append(r.ResponseType).Append(' ')
           .Append(r.ProjectName).Append(' ')
           .Append(r.Location?.File).Append(' ');
+
+        foreach (var ep in r.Entrypoints)
+            sb.Append(ep).Append(' ');
+        foreach (var prop in r.Properties)
+            sb.Append(prop.Name).Append(' ').Append(prop.Type).Append(' ');
+        foreach (var entity in r.TouchedEntities)
+            sb.Append(entity).Append(' ');
+        foreach (var notif in r.PublishedNotifications)
+            sb.Append(notif).Append(' ');
 
         foreach (var h in r.Handlers)
         {
