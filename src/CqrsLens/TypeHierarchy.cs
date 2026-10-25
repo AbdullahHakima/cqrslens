@@ -426,6 +426,25 @@ internal sealed class TypeHierarchy
             _interfacesBySimple,
             out ambiguousCandidates);
 
+    /// <summary>
+    /// Resolves a written class reference using the same namespace/using rules as
+    /// contract linking. Entity discovery uses this instead of a simple-name guess.
+    /// </summary>
+    public CSharpScanner.ClassDecl? TryResolveClass(
+        string name,
+        string currentNamespace,
+        IReadOnlyList<UsingDirective> usings,
+        IReadOnlyList<string> containingTypes,
+        int arity,
+        out IReadOnlyList<string> ambiguousCandidates)
+        => ResolveClass(
+            name,
+            currentNamespace,
+            usings,
+            containingTypes,
+            arity,
+            out ambiguousCandidates);
+
     private CSharpScanner.ClassDecl? ResolveClass(
         string name,
         string currentNamespace,

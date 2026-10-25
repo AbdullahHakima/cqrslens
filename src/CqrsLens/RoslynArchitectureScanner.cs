@@ -5,8 +5,8 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace CqrsLens;
 
-// First Roslyn slice for #1. It emits CQRS request/handler/validator shapes
-// from source symbols and is intentionally not wired as the default scanner.
+// Roslyn backend for #1. It emits CQRS request/handler/validator/behavior and
+// EF Core shapes from source symbols while text mode remains the default.
 internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 {
     private static readonly CSharpParseOptions ParseOptions = new(LanguageVersion.Latest);
@@ -43,6 +43,34 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         AnalysisResult result)
     {
         var allFiles = files.ToList();
+        var ordered = new List<(SourceFile File, CSharpScanner.FileScan Scan)>(allFiles.Count);
+        foreach (var file in allFiles.OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase))
+        {
+            try
+            {
+                ordered.Add((file, CSharpScanner.ScanText(file.Code)));
+            }
+            catch
+            {
+                // Ignore text-scan fallback failure here; Roslyn will scan the file directly.
+            }
+        }
+
+        var injectedByPath = TextArchitectureScanner.ApplyProjectGlobalUsings(ordered, result.Projects);
+        var hierarchy = new TypeHierarchy(
+            ordered.SelectMany(o => o.Scan.Classes),
+            ordered.SelectMany(o => o.Scan.InterfaceDecls));
+        _ = TextArchitectureScanner.BuildInterfaceMap(ordered, hierarchy, result);
+        var scansByPath = ordered.ToDictionary(
+            o => o.File.Path,
+            o => o.Scan,
+            StringComparer.OrdinalIgnoreCase);
+
+        var handlerRoots = TextArchitectureScanner.BuildHandlerRoots(handlerMarkers);
+
+        List<(SourceFile File, SyntaxTree Tree)>? parsed = null;
+        Compilation? compilation = null;
+
         foreach (var project in allFiles.GroupBy(
                      f => f.ProjectName ?? "",
                      StringComparer.OrdinalIgnoreCase))
@@ -50,8 +78,24 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             var ownFiles = project.ToList();
             try
             {
+                parsed ??= allFiles
+                    .Select(file => (
+                        File: file,
+                        Tree: ParseSourceFile(file, injectedByPath)))
+                    .ToList();
+                compilation ??= CreateCompilation(parsed.Select(p => p.Tree));
+
                 ScanProject(
-                    ownFiles, allFiles, markers, handlerMarkers, result, ProjectLabel(project.Key));
+                    ownFiles,
+                    compilation,
+                    parsed,
+                    scansByPath,
+                    hierarchy,
+                    markers,
+                    handlerMarkers,
+                    handlerRoots,
+                    result,
+                    ProjectLabel(project.Key));
             }
             catch (Exception ex)
             {
@@ -67,26 +111,39 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                     ProjectLabel(project.Key)));
             }
         }
+
+        if (compilation is not null && parsed is not null && result.DbContexts.Count > 0)
+            EfCoreRoslynModelBuilder.Build(compilation, parsed, ordered, hierarchy, result);
+    }
+
+    private static SyntaxTree ParseSourceFile(
+        SourceFile file,
+        IReadOnlyDictionary<string, List<UsingDirective>> injectedByPath)
+    {
+        var code = UsingDirectiveParser.StripGlobalUsingKeywords(file.Code);
+        if (injectedByPath.TryGetValue(file.Path, out var injected) && injected.Count > 0)
+        {
+            if (code.Length > 0 && code[0] == '\uFEFF')
+                code = code[1..];
+            var preamble = string.Join("\n", injected.Select(u => u.ToUsingDeclaration())) + "\n#line 1\n";
+            code = preamble + code;
+        }
+
+        return CSharpSyntaxTree.ParseText(code, ParseOptions, file.Path);
     }
 
     private static void ScanProject(
         IReadOnlyList<SourceFile> ownFiles,
-        IReadOnlyList<SourceFile> allFiles,
+        Compilation compilation,
+        IReadOnlyList<(SourceFile File, SyntaxTree Tree)> parsed,
+        IReadOnlyDictionary<string, CSharpScanner.FileScan> scansByPath,
+        TypeHierarchy hierarchy,
         IReadOnlySet<string> markers,
         IReadOnlySet<string> handlerMarkers,
+        IReadOnlySet<string> handlerRoots,
         AnalysisResult result,
         string projectLabel)
     {
-        var parsed = allFiles
-            .Select(file => (
-                File: file,
-                Tree: CSharpSyntaxTree.ParseText(
-                    file.Code,
-                    ParseOptions,
-                    file.Path)))
-            .ToList();
-
-        var compilation = CreateCompilation(parsed.Select(p => p.Tree));
         var ownPaths = ownFiles
             .Select(f => f.Path)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -97,7 +154,17 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         {
             try
             {
-                ProcessTree(compilation, tree, file, markers, handlerMarkers, result);
+                scansByPath.TryGetValue(file.Path, out var fileScan);
+                ProcessTree(
+                    compilation,
+                    tree,
+                    file,
+                    fileScan,
+                    hierarchy,
+                    markers,
+                    handlerMarkers,
+                    handlerRoots,
+                    result);
             }
             catch (Exception ex)
             {
@@ -161,8 +228,11 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         Compilation compilation,
         SyntaxTree tree,
         SourceFile file,
+        CSharpScanner.FileScan? fileScan,
+        TypeHierarchy hierarchy,
         IReadOnlySet<string> markers,
         IReadOnlySet<string> handlerMarkers,
+        IReadOnlySet<string> handlerRoots,
         AnalysisResult result)
     {
         var model = compilation.GetSemanticModel(tree, ignoreAccessibility: true);
@@ -176,18 +246,160 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             if (model.GetDeclaredSymbol(declaration) is not INamedTypeSymbol symbol)
                 continue;
 
-            AddRequest(symbol, file.ProjectName, markers, result);
-            AddHandlers(symbol, file.ProjectName, handlerMarkers, result);
-            AddValidators(symbol, file.ProjectName, result);
+            var ns = NamespaceOf(symbol);
+            var containingTypes = ContainingTypeNames(symbol);
+            var classDecl = fileScan?.Classes.FirstOrDefault(c =>
+                c.Name == symbol.Name &&
+                c.Namespace == ns &&
+                c.ContainingTypes.SequenceEqual(containingTypes));
+            var usings = classDecl?.Usings ?? fileScan?.Usings;
+
+            AddRequest(symbol, declaration, model, classDecl, file.ProjectName, markers, hierarchy, result);
+            AddHandlers(symbol, declaration, model, usings, file.ProjectName, handlerMarkers, hierarchy, result);
+            AddValidators(symbol, usings, file.ProjectName, result);
             AddBehavior(symbol, file.ProjectName, result);
             AddDbContext(symbol, file.ProjectName, result);
+
+            if (!symbol.IsAbstract &&
+                classDecl is not null &&
+                HasErrorBaseType(symbol, declaration, model) &&
+                !HasUnresolvedBuiltInContract(declaration, model))
+            {
+                RecordUnboundContractDiagnostics(
+                    file,
+                    classDecl,
+                    hierarchy,
+                    markers,
+                    handlerRoots,
+                    result);
+            }
         }
+    }
+
+    private static void RecordUnboundContractDiagnostics(
+        SourceFile file,
+        CSharpScanner.ClassDecl decl,
+        TypeHierarchy hierarchy,
+        IReadOnlySet<string> markers,
+        IReadOnlySet<string> handlerRoots,
+        AnalysisResult result)
+    {
+        var isRequest = result.Requests.Any(r =>
+            r.Name == decl.Name &&
+            r.Namespace == decl.Namespace &&
+            r.ContainingTypes.SequenceEqual(decl.ContainingTypes));
+        var isHandler = result.Handlers.Any(h =>
+            h.Name == decl.Name &&
+            h.Namespace == decl.Namespace &&
+            h.ContainingTypes.SequenceEqual(decl.ContainingTypes));
+        var isValidator = result.Validators.Any(v =>
+            v.Name == decl.Name &&
+            v.Namespace == decl.Namespace &&
+            v.ContainingTypes.SequenceEqual(decl.ContainingTypes));
+
+        var directAmbiguity = false;
+        foreach (var part in CSharpScanner.SplitTopLevel(decl.BaseList))
+        {
+            var (name, args) = CSharpScanner.ParseTypeReference(part);
+            var simple = CSharpScanner.SimpleName(name);
+            if (simple is "DbContext" or "IdentityDbContext" or "IPipelineBehavior")
+                continue;
+
+            if (!isHandler && simple != "IRequestHandler")
+            {
+                var resolvedHandler = hierarchy.TryResolveShapeTarget(
+                    decl.Namespace,
+                    part,
+                    handlerRoots,
+                    decl.Usings,
+                    decl.ContainingTypes,
+                    out _,
+                    out var handlerAmbiguity);
+                if (!resolvedHandler &&
+                    (handlerRoots.Contains(simple) || TextArchitectureScanner.LooksLikeHandlerContract(simple)))
+                {
+                    TextArchitectureScanner.RecordShapeResolutionGap(
+                        result, file, decl.BodySpan.Start, decl.Name, simple,
+                        hierarchy, handlerAmbiguity, "handler");
+                }
+            }
+
+            if (!isValidator && simple is not ("AbstractValidator" or "IValidator"))
+            {
+                var resolvedValidator = hierarchy.TryResolveShapeTarget(
+                    decl.Namespace,
+                    part,
+                    TextArchitectureScanner.ValidatorRoots,
+                    decl.Usings,
+                    decl.ContainingTypes,
+                    out _,
+                    out var validatorAmbiguity);
+                if (!resolvedValidator && TextArchitectureScanner.LooksLikeValidatorContract(simple))
+                {
+                    TextArchitectureScanner.RecordShapeResolutionGap(
+                        result, file, decl.BodySpan.Start, decl.Name, simple,
+                        hierarchy, validatorAmbiguity, "validator");
+                }
+            }
+
+            if (!isRequest)
+            {
+                var resolved = hierarchy.ResolveInterfaceReference(
+                    name,
+                    decl.Namespace,
+                    decl.Usings,
+                    decl.ContainingTypes,
+                    args.Count,
+                    out var ambiguous);
+                if (resolved is null && (markers.Contains(simple) || simple is "IRequest"))
+                {
+                    directAmbiguity = true;
+                    TextArchitectureScanner.RecordAmbiguousContract(
+                        result, file, decl.BodySpan.Start, decl.Name, name, ambiguous, "request marker");
+                }
+            }
+        }
+
+        if (!isRequest && !directAmbiguity)
+        {
+            var shape = hierarchy.ResolveRequestShape(decl, markers);
+            if (shape.Roots.Count == 0)
+            {
+                TextArchitectureScanner.RecordRequestResolutionGap(
+                    result, file, decl.BodySpan.Start, decl.Name, shape);
+            }
+        }
+    }
+
+    private static bool HasUnresolvedBuiltInContract(
+        TypeDeclarationSyntax declaration,
+        SemanticModel model)
+    {
+        if (declaration.BaseList is null)
+            return false;
+
+        foreach (var name in declaration.BaseList.DescendantNodes().OfType<SimpleNameSyntax>())
+        {
+            var text = name.Identifier.ValueText;
+            if (!ContractNames.Contains(text))
+                continue;
+
+            var info = model.GetSymbolInfo(name);
+            if (info.Symbol is null && info.CandidateSymbols.Length == 0)
+                return true;
+        }
+
+        return false;
     }
 
     private static void AddRequest(
         INamedTypeSymbol symbol,
+        TypeDeclarationSyntax declaration,
+        SemanticModel model,
+        CSharpScanner.ClassDecl? classDecl,
         string? projectName,
         IReadOnlySet<string> markers,
+        TypeHierarchy hierarchy,
         AnalysisResult result)
     {
         if (symbol.IsAbstract) return;
@@ -197,7 +409,36 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             i.Name == "IRequest" && i.TypeArguments.Length > 0);
         requestInterface ??= interfaces.FirstOrDefault(i => i.Name == "IRequest");
         var markerInterface = interfaces.FirstOrDefault(i => markers.Contains(i.Name));
+
+        INamedTypeSymbol? externalMarker = null;
         if (requestInterface is null && markerInterface is null)
+        {
+            foreach (var errorBase in ErrorBaseTypes(declaration, model))
+            {
+                if (!markers.Contains(errorBase.Name))
+                    continue;
+                if (hierarchy.HasInterface(errorBase.Name))
+                    continue;
+
+                if (classDecl is not null)
+                {
+                    hierarchy.ResolveInterfaceReference(
+                        errorBase.Name,
+                        classDecl.Namespace,
+                        classDecl.Usings,
+                        classDecl.ContainingTypes,
+                        errorBase.TypeArguments.Length,
+                        out var ambiguous);
+                    if (ambiguous.Count >= 2)
+                        continue;
+                }
+
+                externalMarker = errorBase;
+                break;
+            }
+        }
+
+        if (requestInterface is null && markerInterface is null && externalMarker is null)
             return;
 
         var ns = NamespaceOf(symbol);
@@ -207,20 +448,30 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 r.ContainingTypes.SequenceEqual(ContainingTypeNames(symbol))))
             return;
 
-        var viaMarker = markerInterface?.Name;
+        var effectiveMarker = markerInterface ?? externalMarker;
+        var viaMarker = effectiveMarker?.Name;
         if (viaMarker is null && requestInterface is not null)
         {
             viaMarker = symbol.Interfaces
                 .FirstOrDefault(i =>
                     i.Name != "IRequest" &&
                     ImplementedInterfaces(i).Any(x => x.Name == "IRequest"))
-                ?.Name;
+                ?.Name
+                ?? BaseTypes(symbol)
+                    .FirstOrDefault(b =>
+                        b.Name != "Object" &&
+                        ImplementedInterfaces(b).Any(x => x.Name == "IRequest"))
+                    ?.Name;
         }
 
         var response = requestInterface?.TypeArguments.FirstOrDefault();
+        if (response is null && effectiveMarker is { TypeArguments.Length: > 0 })
+        {
+            response = effectiveMarker.TypeArguments[0];
+        }
         if (response is null)
         {
-            response = symbol.Interfaces
+            response = interfaces
                 .FirstOrDefault(i =>
                     i.TypeArguments.Length > 0 &&
                     (markers.Contains(i.Name) ||
@@ -244,8 +495,9 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         {
             request.Kind = MarkerResolver.ClassifyMarkerRequest(
                 request.Name,
-                symbol.Interfaces.Select(i => i.Name)
-                    .Concat(markerInterface is null ? [] : new[] { markerInterface.Name }));
+                interfaces.Select(i => i.Name)
+                    .Concat(BaseTypes(symbol).Select(b => b.Name))
+                    .Concat(effectiveMarker is null ? [] : new[] { effectiveMarker.Name }));
         }
 
         result.Requests.Add(request);
@@ -253,15 +505,32 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
     private static void AddHandlers(
         INamedTypeSymbol symbol,
+        TypeDeclarationSyntax declaration,
+        SemanticModel model,
+        IReadOnlyList<UsingDirective>? usings,
         string? projectName,
         IReadOnlySet<string> handlerMarkers,
+        TypeHierarchy hierarchy,
         AnalysisResult result)
     {
         if (symbol.IsAbstract) return;
 
-        foreach (var handlerInterface in ImplementedInterfaces(symbol)
-                     .Where(i => (i.Name == "IRequestHandler" || handlerMarkers.Contains(i.Name)) &&
-                                 i.TypeArguments.Length >= 1))
+        var candidateInterfaces = ImplementedInterfaces(symbol)
+            .Where(i => (i.Name == "IRequestHandler" || handlerMarkers.Contains(i.Name)) &&
+                        i.TypeArguments.Length >= 1)
+            .ToList();
+
+        foreach (var errorBase in ErrorBaseTypes(declaration, model))
+        {
+            if (handlerMarkers.Contains(errorBase.Name) &&
+                errorBase.TypeArguments.Length >= 1 &&
+                !hierarchy.HasInterface(errorBase.Name))
+            {
+                candidateInterfaces.Add(errorBase);
+            }
+        }
+
+        foreach (var handlerInterface in candidateInterfaces)
         {
             var target = handlerInterface.TypeArguments[0];
             if (target.TypeKind == TypeKind.TypeParameter)
@@ -269,12 +538,13 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
             var targetName = TypeName(target);
             var targetNamespace = NamespaceOf(target);
+            var normalizedNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace;
             var fullName = FullName(symbol);
 
             if (result.Handlers.Any(h =>
                     h.FullName == fullName &&
                     h.RequestName == targetName &&
-                    h.RequestNamespace == targetNamespace))
+                    h.RequestNamespace == normalizedNamespace))
                 continue;
 
             var handler = new HandlerInfo
@@ -282,17 +552,20 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 Name = symbol.Name,
                 Namespace = NamespaceOf(symbol),
                 RequestName = targetName,
-                RequestNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace,
+                RequestNamespace = normalizedNamespace,
                 ProjectName = projectName,
                 Location = LocationOf(symbol, result.RootPath),
             };
             handler.ContainingTypes.AddRange(ContainingTypeNames(symbol));
+            if (usings is not null)
+                CSharpScanner.AddImportedNamespaces(usings, handler.ImportedNamespaces);
             result.Handlers.Add(handler);
         }
     }
 
     private static void AddValidators(
         INamedTypeSymbol symbol,
+        IReadOnlyList<UsingDirective>? usings,
         string? projectName,
         AnalysisResult result)
     {
@@ -315,12 +588,13 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         {
             var targetName = TypeName(target);
             var targetNamespace = NamespaceOf(target);
+            var normalizedNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace;
             var fullName = FullName(symbol);
 
             if (result.Validators.Any(v =>
                     v.FullName == fullName &&
                     v.TargetType == targetName &&
-                    v.TargetNamespace == targetNamespace))
+                    v.TargetNamespace == normalizedNamespace))
                 continue;
 
             var validator = new ValidatorInfo
@@ -328,11 +602,13 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 Name = symbol.Name,
                 Namespace = NamespaceOf(symbol),
                 TargetType = targetName,
-                TargetNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace,
+                TargetNamespace = normalizedNamespace,
                 ProjectName = projectName,
                 Location = LocationOf(symbol, result.RootPath),
             };
             validator.ContainingTypes.AddRange(ContainingTypeNames(symbol));
+            if (usings is not null)
+                CSharpScanner.AddImportedNamespaces(usings, validator.ImportedNamespaces);
             result.Validators.Add(validator);
         }
     }
@@ -415,12 +691,21 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
         var ef = new List<string>();
         if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContext") is null)
-            ef.Add("public class DbContext { protected DbContext() { } protected DbContext(object? options) { } }");
+            ef.Add("public class DbContext { protected DbContext() { } protected DbContext(object? options) { } protected virtual void OnModelCreating(ModelBuilder modelBuilder) { } }");
         if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbSet`1") is null)
             ef.Add("public abstract class DbSet<TEntity> where TEntity : class { }");
         if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.DbContextOptions`1") is null)
             ef.Add("public class DbContextOptions<TContext> where TContext : DbContext { }");
+        if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.ModelBuilder") is null)
+            ef.Add("public class ModelBuilder { }");
+        if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.IEntityTypeConfiguration`1") is null)
+            ef.Add("public interface IEntityTypeConfiguration<TEntity> where TEntity : class { void Configure(Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder<TEntity> builder); }");
         AppendNamespace(sb, "Microsoft.EntityFrameworkCore", ef);
+
+        var efBuilders = new List<string>();
+        if (probe.GetTypeByMetadataName("Microsoft.EntityFrameworkCore.Metadata.Builders.EntityTypeBuilder`1") is null)
+            efBuilders.Add("public class EntityTypeBuilder<TEntity> where TEntity : class { }");
+        AppendNamespace(sb, "Microsoft.EntityFrameworkCore.Metadata.Builders", efBuilders);
 
         var identity = new List<string>();
         if (probe.GetTypeByMetadataName("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityDbContext") is null)
@@ -526,6 +811,43 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         }
     }
 
+    private static IEnumerable<INamedTypeSymbol> BaseTypes(INamedTypeSymbol symbol)
+    {
+        for (var current = symbol.BaseType; current is not null; current = current.BaseType)
+            yield return current;
+    }
+
+    private static IEnumerable<INamedTypeSymbol> ErrorBaseTypes(
+        TypeDeclarationSyntax declaration,
+        SemanticModel model)
+    {
+        if (declaration.BaseList is null)
+            yield break;
+
+        foreach (var baseType in declaration.BaseList.Types)
+        {
+            if (model.GetTypeInfo(baseType.Type).Type is INamedTypeSymbol { TypeKind: TypeKind.Error } errorType)
+                yield return errorType;
+        }
+    }
+
+    private static bool HasErrorBaseType(
+        INamedTypeSymbol symbol,
+        TypeDeclarationSyntax declaration,
+        SemanticModel model)
+    {
+        if (ErrorBaseTypes(declaration, model).Any())
+            return true;
+
+        for (var current = symbol.BaseType; current is not null; current = current.BaseType)
+        {
+            if (current.TypeKind == TypeKind.Error)
+                return true;
+        }
+
+        return false;
+    }
+
     private static INamedTypeSymbol? FindBaseType(INamedTypeSymbol symbol, string name)
     {
         for (var current = symbol.BaseType; current is not null; current = current.BaseType)
@@ -542,20 +864,20 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
     private static string NamespaceOf(ITypeSymbol symbol)
         => symbol is INamedTypeSymbol named ? NamespaceOf(named) : "";
 
-    private static string NamespaceOf(INamedTypeSymbol symbol)
+    internal static string NamespaceOf(INamedTypeSymbol symbol)
         => symbol.ContainingNamespace is { IsGlobalNamespace: false } ns
             ? ns.ToDisplayString()
             : "";
 
-    private static SourceLocation? LocationOf(ISymbol symbol, string rootPath)
+    internal static SourceLocation? LocationOf(ISymbol symbol, string rootPath)
     {
         var location = symbol.Locations.FirstOrDefault(l => l.IsInSource);
         return location is null ? null : LocationOf(location, rootPath);
     }
 
-    private static SourceLocation? LocationOf(Location location, string rootPath)
+    internal static SourceLocation? LocationOf(Location location, string rootPath)
     {
-        var lineSpan = location.GetLineSpan();
+        var lineSpan = location.GetMappedLineSpan();
         return SourceLocation.FromLine(
             location.SourceTree?.FilePath,
             rootPath,
@@ -566,7 +888,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
     private static string ProjectLabel(string project)
         => string.IsNullOrEmpty(project) ? "(no project)" : project;
 
-    private static string FullName(INamedTypeSymbol symbol)
+    internal static string FullName(INamedTypeSymbol symbol)
     {
         var typeNames = ContainingTypeNames(symbol).Concat(new[] { symbol.Name });
         var path = string.Join(".", typeNames);
@@ -574,7 +896,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         return string.IsNullOrEmpty(ns) ? path : $"{ns}.{path}";
     }
 
-    private static List<string> ContainingTypeNames(INamedTypeSymbol symbol)
+    internal static List<string> ContainingTypeNames(INamedTypeSymbol symbol)
     {
         var names = new List<string>();
         for (var current = symbol.ContainingType; current is not null; current = current.ContainingType)
@@ -582,7 +904,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         return names;
     }
 
-    private static string DisplayType(ITypeSymbol symbol)
+    internal static string DisplayType(ITypeSymbol symbol)
         => symbol.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
 
     private static IReadOnlyList<MetadataReference> CreateRuntimeReferences()

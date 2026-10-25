@@ -70,6 +70,14 @@ public static class ReportGenerator
             $"{InlineText(result.ScannerName)} scanner · Source: {CodeSpan(rootName)}");
         md.AppendLine();
 
+        if (!string.IsNullOrWhiteSpace(result.Watermark))
+        {
+            md.AppendLine("```text");
+            md.AppendLine(ConsoleArtwork.RenderWatermarkStamp(result.Watermark, useColor: false));
+            md.AppendLine("```");
+            md.AppendLine();
+        }
+
         // ---- Overview ------------------------------------------------------
         md.AppendLine("## Overview");
         md.AppendLine();
@@ -214,15 +222,37 @@ public static class ReportGenerator
         }
         else
         {
+            var orderedContexts = result.DbContexts
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(c => c.Namespace, StringComparer.Ordinal)
+                .ToList();
+            var contextNameCounts = orderedContexts
+                .GroupBy(c => c.Name, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
+
             md.AppendLine("| DbContext | Project | DbSets (property → entity) |");
             md.AppendLine("| --- | --- | --- |");
-            foreach (var ctx in result.DbContexts.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            foreach (var ctx in orderedContexts)
             {
                 var sets = ctx.DbSets.Count > 0
                     ? string.Join(", ", ctx.DbSets.Select(s => $"{s.Property} → {s.Entity}"))
                     : "—";
                 md.AppendLine(
                     $"| {TableCell(ctx.Name)} | {TableCell(ctx.ProjectName ?? "—")} | {TableCell(sets)} |");
+            }
+
+            foreach (var ctx in orderedContexts)
+            {
+                var erDiagram = DiagramBuilder.ErDiagram(ctx);
+                if (erDiagram is null) continue;
+
+                var title = contextNameCounts[ctx.Name] > 1 && !string.IsNullOrEmpty(ctx.Namespace)
+                    ? $"{ctx.Namespace}.{ctx.Name}"
+                    : ctx.Name;
+                md.AppendLine();
+                md.AppendLine($"### {MarkdownText(title)} ER Diagram");
+                md.AppendLine();
+                AppendDiagramOrLimitNote(md, erDiagram, $"{InlineText(title)} ER diagram");
             }
         }
         md.AppendLine();

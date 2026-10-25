@@ -20,7 +20,9 @@ public sealed record CqrsLensSettings(
     IReadOnlyList<string> Include,
     IReadOnlyList<string> Exclude,
     IReadOnlyDictionary<string, string> LayerOverrides,
-    IReadOnlyDictionary<string, CheckSeverity?> RuleSeverities)
+    IReadOnlyDictionary<string, CheckSeverity?> RuleSeverities,
+    DiagramRenderMode? RenderMode = null,
+    string? Watermark = null)
 {
     public static readonly CqrsLensSettings Empty = new(
         null,
@@ -30,7 +32,8 @@ public sealed record CqrsLensSettings(
         Array.Empty<string>(),
         Array.Empty<string>(),
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase),
-        new Dictionary<string, CheckSeverity?>(StringComparer.OrdinalIgnoreCase));
+        new Dictionary<string, CheckSeverity?>(StringComparer.OrdinalIgnoreCase),
+        null);
 }
 
 /// <summary>
@@ -123,7 +126,25 @@ public static class ConfigurationLoader
             };
         }
 
+        DiagramRenderMode? render = null;
+        if (!string.IsNullOrWhiteSpace(config.Render))
+        {
+            render = config.Render.Trim().ToLowerInvariant() switch
+            {
+                "mermaid" => DiagramRenderMode.Mermaid,
+                "svg" => DiagramRenderMode.Svg,
+                _ => throw Invalid(path, $"unknown render mode '{config.Render}' - use mermaid or svg"),
+            };
+        }
+
         var markers = ValidateMarkerNames(path, "markers", config.Markers);
+        string? watermark = null;
+        if (config.Watermark is not null)
+        {
+            if (string.IsNullOrWhiteSpace(config.Watermark))
+                throw Invalid(path, "watermark cannot be an empty value");
+            watermark = config.Watermark.Trim();
+        }
         var handlerMarkers = ValidateMarkerNames(path, "handlerMarkers", config.HandlerMarkers);
 
         var include = ValidatePatterns(path, "include", config.Include);
@@ -168,7 +189,9 @@ public static class ConfigurationLoader
             include,
             exclude,
             layers,
-            rules);
+            rules,
+            render,
+            watermark);
     }
 
     private static IReadOnlySet<string> ValidateMarkerNames(
@@ -220,6 +243,8 @@ public static class ConfigurationLoader
         public string? Schema { get; set; }
 
         public string? Analysis { get; set; }
+        public string? Render { get; set; }
+        public string? Watermark { get; set; }
         public List<string>? Markers { get; set; }
         public List<string>? HandlerMarkers { get; set; }
         public List<string>? Include { get; set; }
