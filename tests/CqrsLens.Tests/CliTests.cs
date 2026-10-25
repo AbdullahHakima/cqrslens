@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CqrsLens;
 using Xunit;
 
@@ -73,6 +74,7 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, result.Code);
         Assert.Contains("Usage: cqrslens", result.Stdout);
+        Assert.Contains("--format md|html|json", result.Stdout);
         Assert.Contains("--render", result.Stdout);
         Assert.Contains("--handler-markers", result.Stdout);
         Assert.Contains("--version", result.Stdout);
@@ -168,6 +170,29 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Usage, result.Code);
         Assert.Contains("unknown format 'pdf'", result.Stderr);
+    }
+
+    [Fact]
+    public void JsonFormat_AndJsonExtensionInference_WriteStructuredJsonReport()
+    {
+        WriteValidFixture();
+        var inferredOutput = Path.Combine(_root, "report.json");
+        var explicitOutput = Path.Combine(_root, "explicit.out");
+
+        var inferredResult = Run(new[] { _root, "-o", inferredOutput, "--generated-at", "2026-02-03T04:05:06Z" });
+        var explicitResult = Run(new[] { _root, "-o", explicitOutput, "--format", "json", "--generated-at", "2026-02-03T04:05:06Z" });
+
+        Assert.Equal(ExitCodes.Success, inferredResult.Code);
+        Assert.Equal(ExitCodes.Success, explicitResult.Code);
+
+        var inferredJson = File.ReadAllText(inferredOutput);
+        var explicitJson = File.ReadAllText(explicitOutput);
+        Assert.Equal(inferredJson, explicitJson);
+
+        using var doc = JsonDocument.Parse(inferredJson);
+        Assert.Equal(1, doc.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(1, doc.RootElement.GetProperty("summary").GetProperty("requests").GetInt32());
+        Assert.Equal(1, doc.RootElement.GetProperty("summary").GetProperty("handlers").GetInt32());
     }
 
     [Fact]

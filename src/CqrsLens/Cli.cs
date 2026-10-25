@@ -67,7 +67,7 @@ public static class CliParser
                     break;
                 case "--format":
                     if (i + 1 >= args.Length)
-                        return Error("error: --format needs a value: md or html");
+                        return Error("error: --format needs a value: md, html or json");
                     options.Format = args[++i].ToLowerInvariant();
                     break;
                 case "--render":
@@ -163,8 +163,13 @@ public static class CliParser
         if (options.Path is null)
             return Error("error: pass a folder to scan.", showUsage: true);
 
-        if (options.Format is not null && options.Format != "md" && options.Format != "html")
-            return Error($"error: unknown format '{options.Format}' - use md or html.");
+        if (options.Format is not null &&
+            options.Format != "md" &&
+            options.Format != "html" &&
+            options.Format != "json")
+        {
+            return Error($"error: unknown format '{options.Format}' - use md, html or json.");
+        }
 
         if (options.BaselinePath is not null && options.WriteBaselinePath is not null)
             return Error("error: use either --baseline or --write-baseline, not both.");
@@ -295,9 +300,18 @@ public static class CliRunner
                      (options.Format is null &&
                       options.Output is not null &&
                       options.Output.EndsWith(".html", StringComparison.OrdinalIgnoreCase));
+        var isJson = options.Format == "json" ||
+                     (options.Format is null &&
+                      options.Output is not null &&
+                      options.Output.EndsWith(".json", StringComparison.OrdinalIgnoreCase));
 
+        var defaultFileName = isHtml
+            ? "ARCHITECTURE.html"
+            : isJson
+                ? "ARCHITECTURE.json"
+                : "ARCHITECTURE.md";
         var output = options.Output ?? Path.Combine(
-            Directory.GetCurrentDirectory(), isHtml ? "ARCHITECTURE.html" : "ARCHITECTURE.md");
+            Directory.GetCurrentDirectory(), defaultFileName);
         var fullOutput = Path.GetFullPath(output);
 
         if (IsDirectoryOutput(output, fullOutput))
@@ -321,7 +335,7 @@ public static class CliRunner
         }
 
         var comparison = OperatingSystem.IsWindows()
-        ? StringComparison.OrdinalIgnoreCase
+            ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
         if (fullSarif is not null && string.Equals(fullSarif, fullOutput, comparison))
         {
@@ -350,7 +364,9 @@ public static class CliRunner
 
         var report = isHtml
             ? HtmlReportGenerator.Generate(result, renderMode)
-            : ReportGenerator.Generate(result);
+            : isJson
+                ? JsonReportGenerator.Generate(result)
+                : ReportGenerator.Generate(result);
 
         var outputDirectory = Path.GetDirectoryName(fullOutput);
         if (!string.IsNullOrEmpty(outputDirectory))
@@ -441,13 +457,13 @@ public static class CliRunner
     {
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html] [--render mermaid|svg] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
-        writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (or .html) in the current directory.");
+        writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (.html or .json) in the current directory.");
         writer.WriteLine("  --config      Config file. Default: <path>/.cqrslens.json when present.");
         writer.WriteLine("                Settings: analysis, render, markers, handlerMarkers, include/exclude globs, layers, rules.");
-        writer.WriteLine("  --format      Report format: md (default) or html. A .html -o path implies html.");
+        writer.WriteLine("  --format      Report format: md (default), html, or json. A .html or .json -o path implies that format.");
         writer.WriteLine("  --render      HTML diagram rendering: mermaid (default) or svg (zero-JS inline SVG).");
         writer.WriteLine("  --analysis    Analysis backend: text (default) or roslyn (opt-in).");
         writer.WriteLine("  --generated-at  Fixed ISO-8601 timestamp for reproducible reports (tests/CI);");

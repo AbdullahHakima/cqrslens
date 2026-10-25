@@ -38,6 +38,12 @@ All notable changes to CqrsLens are documented here.
   - `--render mermaid|svg` on the CLI, `"render": "mermaid" | "svg"` in `.cqrslens.json`,
     and the `render` GitHub Action input select between browser-rendered Mermaid (the
     default) and zero-JavaScript, offline-ready inline SVG HTML reports.
+- **JSON architecture report (`--format json`)**:
+  - New `JsonReportGenerator` emits a deterministic, schema-versioned (`schemaVersion: 1`)
+    JSON document containing summary counts, projects, requests, handlers, validators,
+    pipeline behaviors, DbContexts (with entities, properties, and relationships),
+    architecture checks, and diagnostics.
+  - Supported via `--format json` or by passing a `.json` path to `-o`.
 
 ### Changed
 
