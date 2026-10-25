@@ -83,6 +83,15 @@ public sealed class ProjectInfo
 
     // ReferenceIncludes resolved to project names found in the same scan.
     public List<string> ReferenceNames { get; } = new();
+
+    // PackageReference Include values evaluated from Directory.Build.props/targets and .csproj.
+    public List<string> PackageReferences { get; } = new();
+
+    // Global <Using> items evaluated from Directory.Build.props/targets and .csproj.
+    public List<UsingDirective> ProjectUsings { get; } = new();
+
+    // True when <ImplicitUsings> is enable/true in Directory.Build.props/targets or .csproj.
+    public bool ImplicitUsings { get; set; }
 }
 
 public sealed class CqrsRequest

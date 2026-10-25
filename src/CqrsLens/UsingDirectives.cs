@@ -27,6 +27,16 @@ public sealed record UsingDirective(
             yield return $"{ContainerNamespace}.{Target}";
         yield return Target;
     }
+
+    /// <summary>Renders this directive as a file-scoped C# <c>using</c> statement.</summary>
+    public string ToUsingDeclaration()
+    {
+        if (IsStatic)
+            return $"using static {Target};";
+        if (!string.IsNullOrEmpty(Alias))
+            return $"using {Alias} = {Target};";
+        return $"using {Target};";
+    }
 }
 
 /// <summary>
@@ -63,5 +73,30 @@ internal static partial class UsingDirectiveParser
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Replaces the <c>global</c> keyword in <c>global using</c> directives with spaces of
+    /// identical length so the directive becomes file-scoped without shifting any line or
+    /// column offsets in the syntax tree.
+    /// </summary>
+    public static string StripGlobalUsingKeywords(string code)
+    {
+        if (!code.Contains("global", StringComparison.Ordinal))
+            return code;
+
+        var mask = SourceMask.Build(code);
+        char[]? chars = null;
+        foreach (Match match in UsingRegex().Matches(code))
+        {
+            if (!mask.IsCode(match.Index)) continue;
+            var globalGroup = match.Groups["global"];
+            if (!globalGroup.Success) continue;
+
+            chars ??= code.ToCharArray();
+            Array.Fill(chars, ' ', globalGroup.Index, globalGroup.Length);
+        }
+
+        return chars is null ? code : new string(chars);
     }
 }
