@@ -38,6 +38,7 @@ the repository root. It uploads `cqrslens-architecture-report` and
 | `path` | `.` | Folder to scan. |
 | `output` | `ARCHITECTURE.md` | Markdown/HTML report path. |
 | `format` | `md` | `md` or `html`. |
+| `render` | empty | `mermaid` or `svg` for HTML diagrams; empty uses config, then `mermaid`. |
 | `strict` | `false` | Fail on architecture-check errors; with `baseline`, only new errors. |
 | `markers` | empty | Comma-separated custom request markers. |
 | `handler-markers` | empty | Comma-separated handler roots for external wrapper interfaces. |

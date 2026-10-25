@@ -19,7 +19,7 @@ dotnet tool install -g CqrsLens
 ## Usage
 
 ```bash
-cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--strict]
+cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html] [--render mermaid|svg] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--strict]
 ```
 
 - The folder is searched recursively for `.csproj` and `.cs` files (`bin`, `obj`, `.git` are skipped).
@@ -44,13 +44,21 @@ cqrslens samples/SampleShop -o docs/sample-output/ARCHITECTURE.md
 
 ```bash
 cqrslens <path> --format html
+cqrslens <path> --format html --render svg
 ```
 
 A single portable `ARCHITECTURE.html`: summary stat cards, the same diagrams and
-tables as the Markdown report, and Mermaid rendered in the browser. Mermaid is
-pinned to `12.2.0` and loaded with a SHA-384 SRI check from jsDelivr; the first
-view needs network access, while the Mermaid source blocks remain readable
-offline. (A `.html` path passed to `-o` also implies HTML.)
+tables as the Markdown report, and two diagram rendering modes:
+
+- `--render mermaid` (default): emits `<pre class="mermaid">` blocks rendered in
+  the browser by Mermaid `12.2.0` (loaded with a SHA-384 SRI check from jsDelivr;
+  the first view needs network access, while the Mermaid source blocks remain
+  readable offline).
+- `--render svg`: compiles every diagram (`flowchart TD`, `flowchart LR`, and
+  `erDiagram`) to deterministic inline `<svg>` ahead of time and omits all
+  `<script>` tags, producing a 100% zero-JavaScript, offline-ready HTML report.
+
+(A `.html` path passed to `-o` also implies HTML.)
 
 ### Analysis modes
 
@@ -69,12 +77,12 @@ cqrslens <path> --analysis roslyn
 
 Roslyn mode resolves source-defined symbols, aliases and declaration namespaces
 instead of matching declaration text. It compiles all source groups together so
-cross-project request/handler types bind, and injects minimal MediatR,
-FluentValidation and EF Core contracts only when the source does not define them.
-It still does not build or restore the target solution, and it does not evaluate
-the target project's full MSBuild/package reference graph. Text mode remains the
-default and fallback. Parity with text mode is enforced on `samples/SampleShop`
-by the test suite.
+cross-project request/handler types bind, evaluates `.csproj` and ancestor
+`Directory.Build.props`/`targets` `<Using>` directives per project, and injects
+minimal MediatR, FluentValidation and EF Core contracts only when the source does
+not define them. It still does not build or restore the target solution. Text
+mode remains the default and fallback. Parity with text mode is enforced on
+`samples/SampleShop` by the test suite.
 
 Reports record the scanner, a single generation timestamp, source locations and a
 diagnostics section for skipped files, unresolved contracts and ambiguous links.
@@ -90,6 +98,7 @@ root (`--config FILE` selects another file):
 {
   "$schema": "https://raw.githubusercontent.com/AbdullahHakima/cqrslens/main/cqrslens.schema.json",
   "analysis": "text",
+  "render": "mermaid",
   "markers": ["ICommand", "IQuery"],
   "include": ["src/**"],
   "exclude": ["**/Migrations/**", "**/Generated/**"],
@@ -101,9 +110,9 @@ root (`--config FILE` selects another file):
 `include`/`exclude` are case-insensitive root-relative globs (`**`, `*`, `?`).
 `layers` overrides project classification, and `rules` accepts `off`, `warning`
 or `error` for any architecture rule. Unknown keys and invalid values are usage
-errors. Explicit `--analysis`, `--markers` and `--handler-markers` flags override
-the config values. See [`docs/configuration.md`](docs/configuration.md) for the
-full reference.
+errors. Explicit `--analysis`, `--render`, `--markers` and `--handler-markers`
+flags override the config values. See [`docs/configuration.md`](docs/configuration.md)
+for the full reference.
 
 ### Custom marker interfaces
 
@@ -188,6 +197,7 @@ permissions:
     path: src                    # folder to scan (default: .)
     output: ARCHITECTURE.md
     format: md                   # or html
+    render: ''                   # mermaid, svg, or empty to use config/default
     strict: 'true'               # fail on errors (new-only with a baseline)
     config: .cqrslens.json       # optional, or auto-discovered at path
     baseline: cqrslens-baseline.json
@@ -444,11 +454,12 @@ the source:
   the scanned source cannot be continued; that gap is reported as an
   informational diagnostic instead of being guessed.
 - Same-named contracts are resolved from the declaration's namespace and using
-  directives, including global usings and namespace aliases. Generic and
-  non-generic overloads are distinguished by arity. Handlers/validators link by
-  fully-qualified name first, then an imported namespace, then a unique simple
-  name. Genuinely ambiguous or unresolved CQRS contracts are reported as
-  informational diagnostics instead of being guessed.
+  directives, including project-level MSBuild `<Using>` items, `.cs` global
+  usings, and namespace aliases. Generic and non-generic overloads are
+  distinguished by arity. Handlers/validators link by fully-qualified name first,
+  then an imported namespace, then a unique simple name. Genuinely ambiguous or
+  unresolved CQRS contracts are reported as informational diagnostics instead of
+  being guessed.
 - External handler wrappers are opaque by default unless their inheritance is
   present in the scanned source. Name them with `--handler-markers` /
   `handlerMarkers` to link handlers through them. Source-declared wrappers such
@@ -462,9 +473,9 @@ the source:
 
 Short version (full list in [ROADMAP.md](ROADMAP.md)):
 
-- Finish Roslyn project/reference resolution and parity work (#1)
-- Pre-rendered SVG diagrams, so HTML reports need no JavaScript
-- `--format json` output
+- `--format json` output for external dashboards and custom tooling
+- Colored console output and a progress line while scanning
+- More mediators: Mediator (martinothamar) and Wolverine conventions
 - A GitHub Action that comments the architecture diff on pull requests
 
 ## Development

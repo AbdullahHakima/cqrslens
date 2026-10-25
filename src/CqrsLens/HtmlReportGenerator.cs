@@ -5,8 +5,8 @@ namespace CqrsLens;
 
 /// <summary>
 /// Generates a portable HTML architecture report (issue #5) with embedded CSS,
-/// stat cards and Mermaid source blocks. Mermaid itself is loaded from a pinned,
-/// SRI-checked CDN script; diagrams need network access on first view.
+/// stat cards, and either Mermaid source blocks (loaded from a pinned,
+/// SRI-checked CDN script) or pre-rendered inline SVG diagrams (zero-JS mode).
 /// </summary>
 public static class HtmlReportGenerator
 {
@@ -16,7 +16,9 @@ public static class HtmlReportGenerator
 
     private static string E(string? value) => WebUtility.HtmlEncode(value ?? "");
 
-    public static string Generate(AnalysisResult result)
+    public static string Generate(
+        AnalysisResult result,
+        DiagramRenderMode renderMode = DiagramRenderMode.Mermaid)
     {
         var rootName = new DirectoryInfo(result.RootPath).Name;
         var html = new StringBuilder();
@@ -52,7 +54,7 @@ public static class HtmlReportGenerator
 
         // ---- Diagrams ----------------------------------------------------------
         AppendDiagram(html, "Project Dependency Graph", DiagramBuilder.ProjectGraph(result),
-            "No projects found.");
+            "No projects found.", renderMode);
         if (result.Projects.Count > 0)
             AppendLayerLegend(html, result);
         if (result.Projects
@@ -65,7 +67,7 @@ public static class HtmlReportGenerator
         }
 
         AppendDiagram(html, "Layers", DiagramBuilder.LayerGraph(result),
-            "No projects found.");
+            "No projects found.", renderMode);
         if (result.Projects.Count > 0)
         {
             html.AppendLine("<p class=\"note\">Dashed boundaries group projects into layers. Projects are " +
@@ -73,7 +75,7 @@ public static class HtmlReportGenerator
                             "Infrastructure / Api / Web / UI); projects matching no convention are grouped by " +
                             "their top-level folder.</p>");
         }
-        AppendCqrs(html, result);
+        AppendCqrs(html, result, renderMode);
         // ---- Requests table ------------------------------------------------------
         html.AppendLine("<h2>Requests</h2>");
         if (result.Requests.Count == 0)
@@ -163,7 +165,7 @@ public static class HtmlReportGenerator
                 }
 
                 html.AppendLine("<figure class=\"diagram\">");
-                html.AppendLine(RenderDiagram(erDiagram));
+                html.AppendLine(RenderDiagram(erDiagram, renderMode));
                 html.AppendLine("</figure>");
             }
         }
@@ -267,64 +269,67 @@ public static class HtmlReportGenerator
                         "static analysis only; the target solution was not built.</p>");
 
         html.AppendLine("</main>");
-        html.AppendLine(
-            $"<script src=\"https://cdn.jsdelivr.net/npm/mermaid@{MermaidVersion}/dist/mermaid.min.js\" " +
-            $"integrity=\"{MermaidIntegrity}\" crossorigin=\"anonymous\"></script>");
-        html.AppendLine("<script>");
-        html.AppendLine("""
-            (async () => {
-              const nodes = [...document.querySelectorAll('pre.mermaid')];
-              const showSource = (node, message) => {
-                const error = document.createElement('p');
-                error.className = 'diagram-error';
-                error.textContent = message;
-                const details = document.createElement('details');
-                const summary = document.createElement('summary');
-                summary.textContent = 'Show diagram source';
-                const pre = document.createElement('pre');
-                pre.textContent = node.textContent ?? '';
-                details.append(summary, pre);
-                node.replaceWith(error, details);
-              };
-              if (typeof mermaid === 'undefined') {
-                nodes.forEach((node) =>
-                  showSource(node, 'Mermaid could not be loaded. The diagram source is shown below.'));
-                return;
-              }
-              try {
-                mermaid.initialize({
-                  startOnLoad: false,
-                  theme: 'default',
-                  look: 'classic',
-                  layout: 'elk',
-                  maxTextSize: 50000,
-                  maxEdges: 500,
-                  securityLevel: 'strict',
-                  suppressErrorRendering: true,
-                  themeVariables: {
-                    fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+        if (renderMode == DiagramRenderMode.Mermaid)
+        {
+            html.AppendLine(
+                $"<script src=\"https://cdn.jsdelivr.net/npm/mermaid@{MermaidVersion}/dist/mermaid.min.js\" " +
+                $"integrity=\"{MermaidIntegrity}\" crossorigin=\"anonymous\"></script>");
+            html.AppendLine("<script>");
+            html.AppendLine("""
+                (async () => {
+                  const nodes = [...document.querySelectorAll('pre.mermaid')];
+                  const showSource = (node, message) => {
+                    const error = document.createElement('p');
+                    error.className = 'diagram-error';
+                    error.textContent = message;
+                    const details = document.createElement('details');
+                    const summary = document.createElement('summary');
+                    summary.textContent = 'Show diagram source';
+                    const pre = document.createElement('pre');
+                    pre.textContent = node.textContent ?? '';
+                    details.append(summary, pre);
+                    node.replaceWith(error, details);
+                  };
+                  if (typeof mermaid === 'undefined') {
+                    nodes.forEach((node) =>
+                      showSource(node, 'Mermaid could not be loaded. The diagram source is shown below.'));
+                    return;
                   }
-                });
-              } catch (error) {
-                nodes.forEach((node) =>
-                  showSource(node, 'Mermaid could not be initialized. ' +
-                    (error && error.message ? error.message : String(error))));
-                return;
-              }
-              for (let i = 0; i < nodes.length; i++) {
-                const node = nodes[i];
-                const source = node.textContent ?? '';
-                try {
-                  const { svg } = await mermaid.render('cqrslens-diagram-' + i, source);
-                  node.innerHTML = svg;
-                } catch (error) {
-                  showSource(node, 'This diagram could not be rendered. ' +
-                    (error && error.message ? error.message : String(error)));
-                }
-              }
-            })();
-            """);
-        html.AppendLine("</script>");
+                  try {
+                    mermaid.initialize({
+                      startOnLoad: false,
+                      theme: 'default',
+                      look: 'classic',
+                      layout: 'elk',
+                      maxTextSize: 50000,
+                      maxEdges: 500,
+                      securityLevel: 'strict',
+                      suppressErrorRendering: true,
+                      themeVariables: {
+                        fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif'
+                      }
+                    });
+                  } catch (error) {
+                    nodes.forEach((node) =>
+                      showSource(node, 'Mermaid could not be initialized. ' +
+                        (error && error.message ? error.message : String(error))));
+                    return;
+                  }
+                  for (let i = 0; i < nodes.length; i++) {
+                    const node = nodes[i];
+                    const source = node.textContent ?? '';
+                    try {
+                      const { svg } = await mermaid.render('cqrslens-diagram-' + i, source);
+                      node.innerHTML = svg;
+                    } catch (error) {
+                      showSource(node, 'This diagram could not be rendered. ' +
+                        (error && error.message ? error.message : String(error)));
+                    }
+                  }
+                })();
+                """);
+            html.AppendLine("</script>");
+        }
         html.AppendLine("</body>");
         html.AppendLine("</html>");
 
@@ -351,7 +356,12 @@ public static class HtmlReportGenerator
         html.AppendLine($"<div class=\"card\"><div class=\"card-value\">{value}</div><div class=\"card-label\">{E(label)}</div></div>");
     }
 
-    private static void AppendDiagram(StringBuilder html, string title, string? diagram, string emptyText)
+    private static void AppendDiagram(
+        StringBuilder html,
+        string title,
+        string? diagram,
+        string emptyText,
+        DiagramRenderMode renderMode)
     {
         html.AppendLine($"<h2>{E(title)}</h2>");
         if (diagram is null)
@@ -368,11 +378,14 @@ public static class HtmlReportGenerator
         }
 
         html.AppendLine("<figure class=\"diagram\">");
-        html.AppendLine(RenderDiagram(diagram));
+        html.AppendLine(RenderDiagram(diagram, renderMode));
         html.AppendLine("</figure>");
     }
 
-    private static void AppendCqrs(StringBuilder html, AnalysisResult result)
+    private static void AppendCqrs(
+        StringBuilder html,
+        AnalysisResult result,
+        DiagramRenderMode renderMode)
     {
         html.AppendLine("<h2>CQRS Map</h2>");
         var sections = DiagramBuilder.CqrsMapSections(result);
@@ -412,7 +425,7 @@ public static class HtmlReportGenerator
             }
 
             html.AppendLine("<figure class=\"diagram\">");
-            html.AppendLine(RenderDiagram(section.Source));
+            html.AppendLine(RenderDiagram(section.Source, renderMode));
             html.AppendLine($"<figcaption>{E(section.Caption)}</figcaption>");
             html.AppendLine("</figure>");
         }
@@ -452,14 +465,17 @@ public static class HtmlReportGenerator
 
     /// <summary>
     /// RENDERING SEAM: turns a Mermaid diagram source into its HTML representation.
-    /// Today this emits a &lt;pre class="mermaid"&gt; block rendered in the browser by
-    /// Mermaid.js (see the script tags at the end of the page). A future pre-rendered
-    /// mode (--render svg, using a deterministic .NET renderer) only has to replace
-    /// this method's body to produce zero-JS reports — nothing else in the generator
-    /// changes.
+    /// In <see cref="DiagramRenderMode.Mermaid"/> mode this emits a
+    /// <c>&lt;pre class="mermaid"&gt;</c> block rendered in the browser by Mermaid.js.
+    /// In <see cref="DiagramRenderMode.Svg"/> mode this compiles the diagram to
+    /// deterministic inline SVG ahead of time for zero-JS HTML reports.
     /// </summary>
-    public static string RenderDiagram(string mermaidCode)
-        => $"<pre class=\"mermaid\">{E(mermaidCode)}</pre>";
+    public static string RenderDiagram(
+        string mermaidCode,
+        DiagramRenderMode renderMode = DiagramRenderMode.Mermaid)
+        => renderMode == DiagramRenderMode.Svg
+            ? MermaidSvgRenderer.Render(mermaidCode)
+            : $"<pre class=\"mermaid\">{E(mermaidCode)}</pre>";
 
     private const string Css = """
         :root { color-scheme: light dark; }
@@ -477,7 +493,8 @@ public static class HtmlReportGenerator
         .card-label { color: #5a6068; font-size: .85rem; margin-top: .25rem; }
         figure.diagram { margin: 0 0 1.25rem; }
         figure.diagram figcaption { color: #5a6068; font-size: .85rem; margin-top: .5rem; }
-        pre.mermaid { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; padding: 1rem; overflow-x: auto; }
+        pre.mermaid, .svg-diagram { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; padding: 1rem; overflow-x: auto; }
+        .svg-diagram svg { display: block; max-width: 100%; height: auto; margin: 0 auto; }
         ul.legend { display: flex; flex-wrap: wrap; gap: .35rem 1rem; list-style: none; padding: 0; margin: .5rem 0 1rem; font-size: .88rem; }
         ul.legend li { display: flex; align-items: center; gap: .4rem; }
         .swatch { display: inline-block; width: 1rem; height: 1rem; border-radius: 4px; border: 2px solid; }
@@ -510,7 +527,7 @@ public static class HtmlReportGenerator
         a { color: #0b5fff; }
         @media (prefers-color-scheme: dark) {
           body { background: #16181c; color: #e6e8eb; }
-          .card, table, pre.mermaid { background: #1f2227; border-color: #3a3e45; }
+          .card, table, pre.mermaid, .svg-diagram { background: #1f2227; border-color: #3a3e45; }
           th { background: #26292f; }
           th, td { border-color: #3a3e45; }
           h2 { border-color: #3a3e45; }

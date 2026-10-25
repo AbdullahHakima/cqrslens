@@ -15,6 +15,11 @@
       "enum": ["text", "roslyn"],
       "description": "Analysis backend. Text is the default."
     },
+    "render": {
+      "type": "string",
+      "enum": ["mermaid", "svg"],
+      "description": "HTML diagram rendering mode: mermaid (default, browser-rendered via Mermaid.js) or svg (pre-rendered inline SVG, zero JavaScript)."
+    },
     "markers": {
       "type": "array",
       "items": {
