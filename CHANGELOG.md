@@ -4,6 +4,43 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-25
+
+### Added
+
+- **Architecture diffing (`--diff` / `--diff-output`)**:
+  - New `ArchitectureDiffer` compares the current scan against a base
+    `ARCHITECTURE.json` report or a base solution folder (`--diff <PATH_OR_JSON>`).
+  - Tracks added, removed, and modified projects (layers, project references,
+    package references), CQRS requests (kind, response type, project, linked
+    handlers and validators), handlers, validators, pipeline behaviors, EF Core
+    `DbContext`s (`DbSet`s, entities, relationships), and newly introduced vs.
+    resolved architecture check findings (matched with line-independent baseline
+    keys).
+  - `--diff-output <FILE>` emits either a pull-request-ready Markdown diff report
+    (headed by `<!-- cqrslens-architecture-diff -->` and a Mermaid CQRS delta
+    diagram for changed requests) or a deterministic, schema-versioned
+    (`schemaVersion: 1`) JSON diff report when `FILE` ends with `.json`.
+- **GitHub Action pull request diff comments (`action.yml`)**:
+  - Added `comment-pr`, `diff-base`, `diff-output`, and `github-token` inputs plus
+    the `diff-path` output and `cqrslens-architecture-diff` artifact upload.
+  - When `comment-pr: 'true'` runs on a `pull_request` without an explicit
+    `diff-base`, the Action automatically fetches `origin/$GITHUB_BASE_REF` into a
+    temporary worktree, diffs the PR against the base branch, and posts or updates
+    a sticky PR comment in place.
+- **Mediator (martinothamar) conventions**: when a project references
+  `Mediator.Abstractions` / `Mediator.SourceGenerator` or imports the `Mediator`
+  namespace, `ICommand`, `IQuery`, `IStream*` requests and `ICommandHandler`,
+  `IQueryHandler`, `IStream*Handler` handlers are recognised automatically in
+  both text and Roslyn modes, without `--markers` / `--handler-markers`.
+- **Wolverine conventions**: when a project references `WolverineFx` or imports
+  `Wolverine`, classes named `*Handler` / `*Consumer` with `Handle`,
+  `HandleAsync`, `Consume` or `ConsumeAsync` methods are linked to the message
+  type of their first parameter, as long as that message is declared in the
+  scanned source.
+- Detected conventions are listed in the Markdown report header and the JSON
+  report (`conventions`).
+
 ## [0.6.0] - 2026-10-25
 
 ### Added
