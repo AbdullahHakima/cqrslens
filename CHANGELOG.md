@@ -4,6 +4,21 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Mediator (martinothamar) conventions**: when a project references
+  `Mediator.Abstractions` / `Mediator.SourceGenerator` or imports the `Mediator`
+  namespace, `ICommand`, `IQuery`, `IStream*` requests and `ICommandHandler`,
+  `IQueryHandler`, `IStream*Handler` handlers are recognised automatically in
+  both text and Roslyn modes, without `--markers` / `--handler-markers`.
+- **Wolverine conventions**: when a project references `WolverineFx` or imports
+  `Wolverine`, classes named `*Handler` / `*Consumer` with `Handle`,
+  `HandleAsync`, `Consume` or `ConsumeAsync` methods are linked to the message
+  type of their first parameter, as long as that message is declared in the
+  scanned source.
+- Detected conventions are listed in the Markdown report header and the JSON
+  report (`conventions`).
+
 ## [0.6.0] - 2026-10-25
 
 ### Added

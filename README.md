@@ -170,6 +170,18 @@ The first generic argument is treated as the request type, matching MediatR's
 option, an external wrapper remains opaque and is surfaced as an informational
 scan diagnostic instead of being guessed.
 
+### Mediator and Wolverine
+
+CqrsLens is not limited to MediatR. Two other libraries are detected
+automatically from package references or `using` directives — no flags needed:
+
+| Library | Detected by | What is recognised |
+| --- | --- | --- |
+| [Mediator](https://github.com/martinothamar/Mediator) | `Mediator.Abstractions` / `Mediator.SourceGenerator`, `using Mediator;` | `ICommand`, `IQuery`, `IStream*` requests and `ICommandHandler`, `IQueryHandler`, `IStream*Handler` handlers |
+| [Wolverine](https://wolverinefx.net) | `WolverineFx*` packages, `using Wolverine;` | `*Handler` / `*Consumer` classes whose `Handle`, `HandleAsync`, `Consume` or `ConsumeAsync` method takes a message declared in the scanned source |
+
+Detected conventions are listed in the report header and in the JSON report.
+
 ### Architecture checks
 
 Every report ends with an **Architecture Checks** section:

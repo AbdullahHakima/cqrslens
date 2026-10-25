@@ -110,7 +110,13 @@ public static class Analyzer
             .ToList();
 
         options.Progress?.Invoke(new ScanProgress("Analyzing C# shapes", 2, 4, $"{sourceFiles.Count} file(s) · {result.ScannerName}"));
-        scanner.Scan(sourceFiles, markerSet, options.HandlerMarkers, result);
+        result.Conventions.AddRange(MediatorConventions.Detect(result.Projects, sourceFiles));
+        markerSet = MediatorConventions.EffectiveMarkers(markerSet, result.Conventions);
+        var handlerMarkerSet = MediatorConventions.EffectiveHandlerMarkers(options.HandlerMarkers, result.Conventions);
+
+        scanner.Scan(sourceFiles, markerSet, handlerMarkerSet, result);
+        if (result.Conventions.Contains(MediatorConventions.WolverineName))
+            MediatorConventions.ApplyWolverine(sourceFiles, result);
         result.SkippedFiles.Sort(StringComparer.OrdinalIgnoreCase);
         result.FileCount = Math.Max(0, result.DiscoveredFileCount - result.SkippedFiles.Count);
 

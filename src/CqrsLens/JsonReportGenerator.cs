@@ -42,6 +42,7 @@ public static class JsonReportGenerator
             ElapsedMilliseconds = result.ElapsedMilliseconds,
             RootName = rootName,
             Watermark = result.Watermark,
+            Conventions = result.Conventions.Count > 0 ? result.Conventions.ToList() : null,
             DiscoveredFileCount = result.DiscoveredFileCount,
             FileCount = result.FileCount,
             BaselineApplied = result.BaselineApplied,
@@ -250,6 +251,7 @@ public static class JsonReportGenerator
         public int DiscoveredFileCount { get; set; }
         public int FileCount { get; set; }
         public string? Watermark { get; set; }
+        public List<string>? Conventions { get; set; }
         public bool BaselineApplied { get; set; }
         public bool CanRunStrictChecks { get; set; }
         public JsonSummary Summary { get; set; } = new();

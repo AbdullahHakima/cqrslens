@@ -3,6 +3,11 @@
 What is planned, in the order I expect to work on it. Issues are linked
 where they exist; the dates are not promises.
 
+## In progress
+
+- More mediators: Mediator (martinothamar) and Wolverine conventions,
+  detected automatically from package references and using directives
+
 ## Done
 
 **0.6.0** (October 2026)
@@ -95,14 +100,13 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- More mediators: Mediator (martinothamar) and Wolverine conventions
+- GitHub Action mode that comments the architecture diff on a pull request
 
 ## After that
 
-- GitHub Action mode that comments the architecture diff on a pull request
+- Comparing two scans: what changed in the CQRS surface between commits
 
 ## Ideas, not planned yet
 
 - Interactive HTML explorer (click a request, see its handler and files)
-- Comparing two scans: what changed in the CQRS surface between commits
 - F# project support

@@ -348,6 +348,9 @@ public sealed class AnalysisResult
     /// <summary>One timestamp shared by every report artifact.</summary>
     public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Built-in mediator conventions detected in the source (e.g. Mediator, Wolverine).</summary>
+    public List<string> Conventions { get; } = new();
+
     /// <summary>Optional custom watermark stamp rendered in console and generated reports.</summary>
     public string? Watermark { get; set; }
 
