@@ -7,6 +7,14 @@ where they exist; the dates are not promises.
 
 **Unreleased**
 
+- **Domain events & notifications (`INotification` / `IDomainEvent`)**: discover
+  notifications and 1-to-many `INotificationHandler<T>` / `IDomainEventHandler<T>`
+  handlers in both `text` and `roslyn` modes, and render fan-out diagrams and tables
+  in Markdown, HTML (Mermaid and inline SVG), and JSON reports
+- **Expanded architecture rules**: `MultipleHandlers` (error), `ApplicationLayerViolation`
+  (error), `CircularProjectDependency` (error), `OrphanValidator` (warning), and
+  `OrphanNotification` (warning), all configurable in `.cqrslens.json` and emitted to SARIF
+
 - **Interactive HTML explorer**: click any request (in the Requests table, explorer
   cards, or Mermaid CQRS diagram) to inspect its contract, response type, handlers,
   validators, source `File:Line:Col` locations, and per-request architecture check

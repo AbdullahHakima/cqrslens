@@ -135,6 +135,56 @@ public sealed class CqrsRequest
     public List<string> Validators { get; } = new();
 }
 
+public sealed class CqrsNotification
+{
+    public required string Name { get; init; }
+    public string Namespace { get; set; } = "";
+    public List<string> ContainingTypes { get; } = new();
+    public string FullName
+    {
+        get
+        {
+            var typePath = ContainingTypes.Count == 0 ? Name : string.Join(".", ContainingTypes) + "." + Name;
+            return string.IsNullOrEmpty(Namespace) ? typePath : $"{Namespace}.{typePath}";
+        }
+    }
+
+    public string? ProjectName { get; set; }
+    public SourceLocation? Location { get; set; }
+
+    /// <summary>
+    /// Marker interface or base type through which this notification was discovered when it
+    /// does not directly implement INotification (e.g. IDomainEvent or DomainEventBase).
+    /// </summary>
+    public string? ViaMarker { get; set; }
+
+    public List<string> Handlers { get; } = new();
+}
+
+public sealed class NotificationHandlerInfo
+{
+    public required string Name { get; init; }
+    public string Namespace { get; set; } = "";
+    public List<string> ContainingTypes { get; } = new();
+    public string FullName
+    {
+        get
+        {
+            var typePath = ContainingTypes.Count == 0 ? Name : string.Join(".", ContainingTypes) + "." + Name;
+            return string.IsNullOrEmpty(Namespace) ? typePath : $"{Namespace}.{typePath}";
+        }
+    }
+
+    public required string NotificationName { get; init; }
+    public string? NotificationNamespace { get; set; }
+
+    /// <summary>Namespaces imported by the declaring file, used by the linker.</summary>
+    internal List<string> ImportedNamespaces { get; } = new();
+
+    public string? ProjectName { get; set; }
+    public SourceLocation? Location { get; set; }
+}
+
 public sealed class HandlerInfo
 {
     public required string Name { get; init; }
@@ -331,6 +381,8 @@ public sealed class AnalysisResult
     public List<ValidatorInfo> Validators { get; } = new();
     public List<BehaviorInfo> Behaviors { get; } = new();
     public List<DbContextInfo> DbContexts { get; } = new();
+    public List<CqrsNotification> Notifications { get; } = new();
+    public List<NotificationHandlerInfo> NotificationHandlers { get; } = new();
 
     public List<CheckFinding> Checks { get; } = new();
 

@@ -6,6 +6,28 @@ All notable changes to CqrsLens are documented here.
 
 ### Added
 
+- **Domain events & notifications (`INotification` / `IDomainEvent`)**:
+  - Discovers notifications and domain events (`INotification`, `IDomainEvent`, and
+    source-declared wrapper interfaces/base classes) along with their 1-to-many
+    `INotificationHandler<T>` / `IDomainEventHandler<T>` handlers in both `text` and
+    `roslyn` modes.
+  - Renders a **Domain Events & Notifications** `flowchart LR` fan-out diagram and
+    summary table in Markdown and HTML reports (supporting both `--render mermaid`
+    and zero-JS `--render svg` modes) and exports `notifications` /
+    `notificationHandlers` in `--format json`.
+- **Expanded Clean Architecture & CQRS rules (`ArchitectureChecker`)**:
+  - `MultipleHandlers` (`error`): flags requests with more than one linked handler.
+  - `ApplicationLayerViolation` (`error`): flags `Application` projects referencing
+    `Infrastructure`, `Api`, `Web`, or `UI` projects, and highlights violating edges
+    in the project and layer diagrams.
+  - `CircularProjectDependency` (`error`): detects cycles in the `.csproj` dependency
+    graph.
+  - `OrphanValidator` (`warning`): flags validators whose target type does not match
+    any discovered CQRS request.
+  - `OrphanNotification` (`warning`): flags notifications / domain events with no
+    handlers.
+  - All 5 rules are configurable (`off`, `warning`, `error`) in `.cqrslens.json`
+    (`cqrslens.schema.json`) and included in SARIF 2.1.0 output.
 - **Interactive HTML CQRS Explorer (`--format html`)**:
   - `ARCHITECTURE.html` now includes an **Interactive CQRS Explorer** section with
     expandable inspector cards for every request, displaying its contract metadata

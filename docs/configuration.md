@@ -66,8 +66,13 @@ For example, `**/Generated/**` excludes generated source in every folder, while
 ## Rule codes
 
 - `MissingHandler`
+- `MultipleHandlers`
 - `LayerViolation`
+- `ApplicationLayerViolation`
+- `CircularProjectDependency`
 - `CommandWithoutValidator`
+- `OrphanValidator`
+- `OrphanNotification`
 - `AmbiguousProjectName`
 
 Turning a rule `off` removes its findings from the report and from `--strict`

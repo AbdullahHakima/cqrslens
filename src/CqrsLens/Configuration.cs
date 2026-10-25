@@ -56,8 +56,13 @@ public static class ConfigurationLoader
     private static readonly string[] KnownRules =
     {
         ArchitectureChecker.MissingHandlerCode,
+        ArchitectureChecker.MultipleHandlersCode,
         ArchitectureChecker.LayerViolationCode,
+        ArchitectureChecker.ApplicationLayerViolationCode,
+        ArchitectureChecker.CircularProjectDependencyCode,
         ArchitectureChecker.CommandWithoutValidatorCode,
+        ArchitectureChecker.OrphanValidatorCode,
+        ArchitectureChecker.OrphanNotificationCode,
         ArchitectureChecker.AmbiguousProjectNameCode,
     };
 

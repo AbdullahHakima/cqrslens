@@ -46,6 +46,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         {
             CSharpScanner.ApplyScan(scan, file.Code, file.ProjectName, result, file.Path);
             DiscoverMarkerRequests(scan, file, hierarchy, interfaceMap, markers, result);
+            DiscoverMarkerNotifications(scan, file, hierarchy, interfaceMap, result);
             DiscoverIndirectShapes(scan, file, hierarchy, handlerRoots, result);
         }
 
@@ -157,6 +158,18 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
     internal static readonly HashSet<string> HandlerRoots = new(StringComparer.Ordinal)
     {
         "IRequestHandler",
+    };
+
+    internal static readonly HashSet<string> NotificationMarkerRoots = new(StringComparer.Ordinal)
+    {
+        "INotification",
+        "IDomainEvent",
+    };
+
+    internal static readonly HashSet<string> NotificationHandlerRoots = new(StringComparer.Ordinal)
+    {
+        "INotificationHandler",
+        "IDomainEventHandler",
     };
 
     internal static readonly HashSet<string> ValidatorRoots = new(StringComparer.Ordinal)
@@ -281,7 +294,118 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
                             hierarchy, validatorAmbiguity, "validator");
                     }
                 }
+
+                if (simple is not ("INotificationHandler" or "IDomainEventHandler"))
+                {
+                    var resolvedNotificationHandler = hierarchy.TryResolveShapeTarget(
+                        decl.Namespace,
+                        part,
+                        NotificationHandlerRoots,
+                        decl.Usings,
+                        decl.ContainingTypes,
+                        out var notificationTarget,
+                        out _);
+                    if (resolvedNotificationHandler)
+                    {
+                        var targetName = CSharpScanner.UnqualifiedTypeName(notificationTarget);
+                        if (targetName.Length > 0 && !typeParameters.Contains(targetName) &&
+                            !result.NotificationHandlers.Any(h =>
+                                h.Namespace == decl.Namespace &&
+                                h.Name == decl.Name &&
+                                h.ProjectName == file.ProjectName &&
+                                h.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
+                                h.NotificationName == targetName))
+                        {
+                            var notificationHandler = new NotificationHandlerInfo
+                            {
+                                Name = decl.Name,
+                                Namespace = decl.Namespace,
+                                NotificationName = targetName,
+                                NotificationNamespace = CSharpScanner.NamespaceOfType(notificationTarget) is { Length: > 0 } ns
+                                    ? ns
+                                    : null,
+                                ProjectName = file.ProjectName,
+                                Location = location,
+                            };
+                            notificationHandler.ContainingTypes.AddRange(decl.ContainingTypes);
+                            CSharpScanner.AddImportedNamespaces(decl.Usings, notificationHandler.ImportedNamespaces);
+                            result.NotificationHandlers.Add(notificationHandler);
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    private static void DiscoverMarkerNotifications(
+        CSharpScanner.FileScan scan,
+        SourceFile file,
+        TypeHierarchy hierarchy,
+        IReadOnlyDictionary<string, List<string>> interfaceMap,
+        AnalysisResult result)
+    {
+        foreach (var decl in scan.Classes)
+        {
+            if (decl.IsAbstract) continue;
+            if (decl.BaseRawNames.Contains("INotification") ||
+                decl.BaseRawNames.Contains("IDomainEvent") ||
+                decl.BaseRawNames.Contains("INotificationHandler") ||
+                decl.BaseRawNames.Contains("IDomainEventHandler"))
+                continue;
+            if (decl.BaseRawNames.Count == 0) continue;
+
+            if (decl.BaseRawNames.Any(b => b is "DbContext" or "IdentityDbContext" or
+                                                "AbstractValidator" or "IValidator" or
+                                                "Validator" or "IPipelineBehavior" or
+                                                "IRequest" or "IRequestHandler"))
+                continue;
+
+            var directInterfaces = new List<string>();
+            foreach (var part in CSharpScanner.SplitTopLevel(decl.BaseList))
+            {
+                var (name, args) = CSharpScanner.ParseTypeReference(part);
+                var resolved = hierarchy.ResolveInterfaceReference(
+                    name,
+                    decl.Namespace,
+                    decl.Usings,
+                    decl.ContainingTypes,
+                    args.Count,
+                    out _);
+                if (resolved is not null)
+                    directInterfaces.Add(resolved);
+            }
+
+            var reached = MarkerResolver.ReachableMarkers(directInterfaces, interfaceMap, NotificationMarkerRoots)
+                .Where(NotificationMarkerRoots.Contains)
+                .ToList();
+            if (reached.Count == 0)
+            {
+                var shape = hierarchy.ResolveRequestShape(decl, NotificationMarkerRoots);
+                reached = shape.Roots.Where(NotificationMarkerRoots.Contains).ToList();
+            }
+
+            if (reached.Count == 0)
+                continue;
+
+            if (result.Notifications.Any(n =>
+                    n.Name == decl.Name &&
+                    n.ProjectName == file.ProjectName &&
+                    n.Namespace == decl.Namespace &&
+                    n.ContainingTypes.SequenceEqual(decl.ContainingTypes)))
+                continue;
+
+            var via = decl.BaseRawNames.FirstOrDefault(b => b is not "INotification")
+                      ?? reached.FirstOrDefault(m => m != "INotification");
+            var notification = new CqrsNotification
+            {
+                Name = decl.Name,
+                Namespace = decl.Namespace,
+                ProjectName = file.ProjectName,
+                ViaMarker = via,
+                Location = SourceLocation.Create(file.Path, result.RootPath, file.Code, decl.BodySpan.Start),
+            };
+            notification.ContainingTypes.AddRange(decl.ContainingTypes);
+            result.Notifications.Add(notification);
         }
     }
 
@@ -302,7 +426,9 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
 
             if (decl.BaseRawNames.Any(b => b is "DbContext" or "IdentityDbContext" or
                                                 "AbstractValidator" or "IValidator" or
-                                                "Validator" or "IPipelineBehavior"))
+                                                "Validator" or "IPipelineBehavior" or
+                                                "INotification" or "IDomainEvent" or
+                                                "INotificationHandler" or "IDomainEventHandler"))
                 continue;
 
             var location = SourceLocation.Create(

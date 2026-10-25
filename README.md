@@ -221,8 +221,15 @@ Every report ends with an **Architecture Checks** section:
 | Check | Severity | Meaning |
 | --- | --- | --- |
 | `MissingHandler` | error | A request has no handler |
-| `LayerViolation` | error | A Domain project references an Infrastructure / Api / Web project |
-| `CommandWithoutValidator` | warning | A command has no FluentValidation validator |
+| `MultipleHandlers` | error | A request has more than one handler |
+| `LayerViolation` | error | A Domain project references an Infrastructure / Api / Web / UI project |
+| `ApplicationLayerViolation` | error | An Application project references an Infrastructure / Api / Web / UI project |
+| `CircularProjectDependency` | error | A cycle exists in the resolved `.csproj` dependency graph |
+| `CommandWithoutValidator` | warning | A command has no FluentValidation / FastEndpoints validator |
+| `OrphanValidator` | warning | A validator targets a type that does not match any discovered CQRS request |
+| `OrphanNotification` | warning | A notification / domain event (`INotification` / `IDomainEvent`) has no handler |
+| `AmbiguousProjectName` | warning | Duplicate project names make reference resolution ambiguous |
+
 
 Add `--strict` to fail (exit code `4`) when any **error** is found and the scan
 is complete enough to trust its architecture errors — built for CI gates. An
@@ -640,6 +647,7 @@ erDiagram
 | Handlers | `IRequestHandler<TRequest>` / `IRequestHandler<TRequest, TResponse>`, including source-declared wrappers and external wrappers named with `--handler-markers`; generic and non-generic overloads are resolved by arity |
 | Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation) and `Validator<T>` (FastEndpoints), including source-declared wrappers |
 | Pipeline behaviors | `IPipelineBehavior<...>` implementations |
+| Notifications & domain events | classes/records/structs implementing `INotification` or `IDomainEvent` (directly or through source-declared base classes/interfaces) and their 1-to-many `INotificationHandler<T>` / `IDomainEventHandler<T>` handlers |
 | DbContexts | classes deriving from `DbContext` (incl. `IdentityDbContext`), with their `DbSet<T>`s attributed per class, plus entity properties, keys (`Id`, `<Entity>Id`, `[Key]`, `HasKey`) and relationships (`[ForeignKey]`, `[InverseProperty]`, navigation properties, `OnModelCreating`, `IEntityTypeConfiguration<T>`) |
 
 ## How it works / limitations
@@ -680,6 +688,8 @@ Short version (full list in [ROADMAP.md](ROADMAP.md)):
 - ✅ Built-in Mediator (`martinothamar/Mediator`) and Wolverine (`WolverineFx`) conventions (`v0.7.0`)
 - ✅ Architecture diff CLI (`--diff` / `--diff-output`) and GitHub Action PR comment mode (`comment-pr: 'true'`) (`v0.7.0`)
 - ✅ Interactive HTML explorer (click a request, see its handler, validators, source files, and findings)
+- ✅ Domain events & notifications (`INotification`, `IDomainEvent`, 1-to-many `INotificationHandler<T>` fan-out diagrams)
+- ✅ Expanded architecture rules (`MultipleHandlers`, `ApplicationLayerViolation`, `CircularProjectDependency`, `OrphanValidator`, `OrphanNotification`)
 
 ## Development
 

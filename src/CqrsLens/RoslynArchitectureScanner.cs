@@ -256,6 +256,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
             AddRequest(symbol, declaration, model, classDecl, file.ProjectName, markers, hierarchy, result);
             AddHandlers(symbol, declaration, model, usings, file.ProjectName, handlerMarkers, hierarchy, result);
+            AddNotification(symbol, declaration, model, classDecl, file.ProjectName, hierarchy, result);
+            AddNotificationHandlers(symbol, declaration, model, usings, file.ProjectName, hierarchy, result);
             AddValidators(symbol, declaration, model, usings, file.ProjectName, result);
             AddBehavior(symbol, declaration, model, file.ProjectName, result);
             AddDbContext(symbol, declaration, file.ProjectName, result);
@@ -302,7 +304,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         {
             var (name, args) = CSharpScanner.ParseTypeReference(part);
             var simple = CSharpScanner.SimpleName(name);
-            if (simple is "DbContext" or "IdentityDbContext" or "IPipelineBehavior")
+            if (simple is "DbContext" or "IdentityDbContext" or "IPipelineBehavior" or
+                          "INotification" or "IDomainEvent" or "INotificationHandler" or "IDomainEventHandler")
                 continue;
 
             if (!isHandler && simple != "IRequestHandler")
@@ -566,6 +569,163 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         }
     }
 
+    private static void AddNotification(
+        INamedTypeSymbol symbol,
+        TypeDeclarationSyntax declaration,
+        SemanticModel model,
+        CSharpScanner.ClassDecl? classDecl,
+        string? projectName,
+        TypeHierarchy hierarchy,
+        AnalysisResult result)
+    {
+        if (symbol.IsAbstract) return;
+
+        var interfaces = ImplementedInterfaces(symbol, declaration, model).ToList();
+        var notificationInterface = interfaces.FirstOrDefault(i =>
+            i.Name == "INotification" && i.TypeArguments.Length == 0);
+        var domainEventInterface = interfaces.FirstOrDefault(i =>
+            i.Name == "IDomainEvent" && i.TypeArguments.Length == 0);
+
+        INamedTypeSymbol? externalNotification = null;
+        if (notificationInterface is null && domainEventInterface is null)
+        {
+            foreach (var errorBase in ErrorBaseTypes(declaration, model))
+            {
+                if (errorBase.Name is not ("INotification" or "IDomainEvent"))
+                    continue;
+                if (hierarchy.HasInterface(errorBase.Name))
+                    continue;
+
+                if (classDecl is not null)
+                {
+                    hierarchy.ResolveInterfaceReference(
+                        errorBase.Name,
+                        classDecl.Namespace,
+                        classDecl.Usings,
+                        classDecl.ContainingTypes,
+                        errorBase.TypeArguments.Length,
+                        out var ambiguous);
+                    if (ambiguous.Count >= 2)
+                        continue;
+                }
+
+                externalNotification = errorBase;
+                break;
+            }
+        }
+
+        if (notificationInterface is null && domainEventInterface is null && externalNotification is null)
+            return;
+
+        var ns = NamespaceOf(symbol);
+        var containing = ContainingTypeNames(symbol);
+        if (result.Notifications.Any(n =>
+                n.Name == symbol.Name &&
+                n.ProjectName == projectName &&
+                n.Namespace == ns &&
+                n.ContainingTypes.SequenceEqual(containing)))
+            return;
+
+        string? viaMarker = null;
+        if (domainEventInterface is not null)
+        {
+            viaMarker = interfaces
+                .FirstOrDefault(i =>
+                    i.Name != "INotification" &&
+                    (i.Name == "IDomainEvent" ||
+                     ImplementedInterfaces(i).Any(x => x.Name is "INotification" or "IDomainEvent")))
+                ?.Name ?? "IDomainEvent";
+        }
+        else if (externalNotification is not null && externalNotification.Name != "INotification")
+        {
+            viaMarker = externalNotification.Name;
+        }
+        else if (notificationInterface is not null)
+        {
+            viaMarker = interfaces
+                .FirstOrDefault(i =>
+                    i.Name != "INotification" &&
+                    ImplementedInterfaces(i).Any(x => x.Name == "INotification"))
+                ?.Name
+                ?? BaseTypes(symbol)
+                    .FirstOrDefault(b =>
+                        b.Name != "Object" &&
+                        ImplementedInterfaces(b).Any(x => x.Name == "INotification"))
+                    ?.Name;
+        }
+
+        var notification = new CqrsNotification
+        {
+            Name = symbol.Name,
+            Namespace = ns,
+            ProjectName = projectName,
+            ViaMarker = viaMarker,
+            Location = LocationOf(declaration.Identifier.GetLocation(), result.RootPath),
+        };
+        notification.ContainingTypes.AddRange(containing);
+        result.Notifications.Add(notification);
+    }
+
+    private static void AddNotificationHandlers(
+        INamedTypeSymbol symbol,
+        TypeDeclarationSyntax declaration,
+        SemanticModel model,
+        IReadOnlyList<UsingDirective>? usings,
+        string? projectName,
+        TypeHierarchy hierarchy,
+        AnalysisResult result)
+    {
+        if (symbol.IsAbstract) return;
+
+        var candidateInterfaces = ImplementedInterfaces(symbol, declaration, model)
+            .Where(i => i.Name is "INotificationHandler" or "IDomainEventHandler" &&
+                        i.TypeArguments.Length >= 1)
+            .ToList();
+
+        foreach (var errorBase in ErrorBaseTypes(declaration, model))
+        {
+            if (errorBase.Name is "INotificationHandler" or "IDomainEventHandler" &&
+                errorBase.TypeArguments.Length >= 1 &&
+                !hierarchy.HasInterface(errorBase.Name))
+            {
+                candidateInterfaces.Add(errorBase);
+            }
+        }
+
+        foreach (var handlerInterface in candidateInterfaces)
+        {
+            var target = handlerInterface.TypeArguments[0];
+            if (target.TypeKind == TypeKind.TypeParameter)
+                continue;
+
+            var targetName = TypeName(target);
+            var targetNamespace = NamespaceOf(target);
+            var normalizedNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace;
+            var fullName = FullName(symbol);
+
+            if (result.NotificationHandlers.Any(h =>
+                    h.FullName == fullName &&
+                    h.ProjectName == projectName &&
+                    h.NotificationName == targetName &&
+                    h.NotificationNamespace == normalizedNamespace))
+                continue;
+
+            var handler = new NotificationHandlerInfo
+            {
+                Name = symbol.Name,
+                Namespace = NamespaceOf(symbol),
+                NotificationName = targetName,
+                NotificationNamespace = normalizedNamespace,
+                ProjectName = projectName,
+                Location = LocationOf(declaration.Identifier.GetLocation(), result.RootPath),
+            };
+            handler.ContainingTypes.AddRange(ContainingTypeNames(symbol));
+            if (usings is not null)
+                CSharpScanner.AddImportedNamespaces(usings, handler.ImportedNamespaces);
+            result.NotificationHandlers.Add(handler);
+        }
+    }
+
     private static void AddValidators(
         INamedTypeSymbol symbol,
         TypeDeclarationSyntax declaration,
@@ -677,6 +837,10 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             mediatR.Add("public interface IPipelineBehavior<in TRequest, TResponse> where TRequest : notnull { }");
         if (probe.GetTypeByMetadataName("MediatR.RequestHandlerDelegate`1") is null)
             mediatR.Add("public delegate System.Threading.Tasks.Task<TResponse> RequestHandlerDelegate<TResponse>();");
+        if (probe.GetTypeByMetadataName("MediatR.INotification") is null)
+            mediatR.Add("public interface INotification { }");
+        if (probe.GetTypeByMetadataName("MediatR.INotificationHandler`1") is null)
+            mediatR.Add("public interface INotificationHandler<in TNotification> where TNotification : INotification { }");
 
         AppendNamespace(sb, "MediatR", mediatR);
 
@@ -729,6 +893,10 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             mediator.Add("public interface IStreamPipelineBehavior<TMessage, TResponse> where TMessage : notnull { }");
         if (probe.GetTypeByMetadataName("Mediator.MessageHandlerDelegate`2") is null)
             mediator.Add("public delegate System.Threading.Tasks.ValueTask<TResponse> MessageHandlerDelegate<TMessage, TResponse>(TMessage message, System.Threading.CancellationToken cancellationToken);");
+        if (probe.GetTypeByMetadataName("Mediator.INotification") is null)
+            mediator.Add("public interface INotification : IMessage { }");
+        if (probe.GetTypeByMetadataName("Mediator.INotificationHandler`1") is null)
+            mediator.Add("public interface INotificationHandler<in TNotification> where TNotification : INotification { }");
         AppendNamespace(sb, "Mediator", mediator);
 
         var fluent = new List<string>();

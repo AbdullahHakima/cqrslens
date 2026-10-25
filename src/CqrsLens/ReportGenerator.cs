@@ -11,7 +11,8 @@ public static class ReportGenerator
     {
         var text = "**Layer colors:** green = Domain · blue = Application · amber = Infrastructure · " +
                    "purple = Api/Web/UI · gray = Tests/other.";
-        if (result.Checks.Any(c => c.Code == ArchitectureChecker.LayerViolationCode))
+        if (result.Checks.Any(c =>
+                c.Code is ArchitectureChecker.LayerViolationCode or ArchitectureChecker.ApplicationLayerViolationCode))
             text += " Red dashed edges mark `LayerViolation` findings.";
         return text;
     }
@@ -90,6 +91,11 @@ public static class ReportGenerator
         md.AppendLine($"| Validators | {result.Validators.Count} |");
         md.AppendLine($"| Pipeline behaviors | {result.Behaviors.Count} |");
         md.AppendLine($"| DbContexts | {result.DbContexts.Count} |");
+        if (result.Notifications.Count > 0 || result.NotificationHandlers.Count > 0)
+        {
+            md.AppendLine($"| Notifications (domain events) | {result.Notifications.Count} |");
+            md.AppendLine($"| Notification handlers | {result.NotificationHandlers.Count} |");
+        }
         md.AppendLine();
 
         // ---- Project dependency graph --------------------------------------
@@ -199,6 +205,35 @@ public static class ReportGenerator
             }
         }
         md.AppendLine();
+
+        // ---- Domain Events & Notifications ----------------------------------
+        if (result.Notifications.Count > 0 || result.NotificationHandlers.Count > 0)
+        {
+            md.AppendLine("## Domain Events & Notifications");
+            md.AppendLine();
+            var notificationMap = DiagramBuilder.NotificationMap(result);
+            if (notificationMap is not null)
+            {
+                AppendDiagramOrLimitNote(md, notificationMap, "notification map");
+                md.AppendLine();
+            }
+
+            if (result.Notifications.Count > 0)
+            {
+                md.AppendLine("### Notifications");
+                md.AppendLine();
+                md.AppendLine("| Notification | Marker | Handlers | Project |");
+                md.AppendLine("| --- | --- | --- | --- |");
+                foreach (var n in result.Notifications)
+                {
+                    md.AppendLine(
+                        $"| {TableCell(n.Name)} | {TableCell(n.ViaMarker ?? "INotification")} | " +
+                        $"{TableCell(n.Handlers.Count > 0 ? string.Join(", ", n.Handlers.Select(CSharpScanner.SimpleName)) : "—")} | " +
+                        $"{TableCell(n.ProjectName ?? "—")} |");
+                }
+            }
+            md.AppendLine();
+        }
 
         // ---- Pipeline behaviors ----------------------------------------------
         md.AppendLine("## Pipeline Behaviors");

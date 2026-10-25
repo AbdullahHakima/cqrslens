@@ -58,6 +58,11 @@ public static class HtmlReportGenerator
         AppendCard(html, "Validators", result.Validators.Count);
         AppendCard(html, "Pipeline behaviors", result.Behaviors.Count);
         AppendCard(html, "DbContexts", result.DbContexts.Count);
+        if (result.Notifications.Count > 0 || result.NotificationHandlers.Count > 0)
+        {
+            AppendCard(html, "Notifications", result.Notifications.Count);
+            AppendCard(html, "Notification handlers", result.NotificationHandlers.Count);
+        }
         html.AppendLine("</section>");
 
         // ---- Diagrams ----------------------------------------------------------
@@ -87,6 +92,7 @@ public static class HtmlReportGenerator
 
         // ---- Requests table & Interactive Explorer ------------------------------
         AppendRequestsAndExplorer(html, result, renderMode);
+        AppendNotifications(html, result, renderMode);
 
         // ---- Behaviors -------------------------------------------------------------
         html.AppendLine("<h2>Pipeline Behaviors</h2>");
@@ -387,6 +393,49 @@ public static class HtmlReportGenerator
         html.AppendLine("</html>");
 
         return html.ToString();
+    }
+
+    private static void AppendNotifications(
+        StringBuilder html,
+        AnalysisResult result,
+        DiagramRenderMode renderMode)
+    {
+        if (result.Notifications.Count == 0 && result.NotificationHandlers.Count == 0)
+            return;
+
+        html.AppendLine("<h2>Domain Events &amp; Notifications</h2>");
+        var notificationMap = DiagramBuilder.NotificationMap(result);
+        if (notificationMap is not null)
+        {
+            if (!DiagramBuilder.IsWithinMermaidLimits(notificationMap))
+            {
+                html.AppendLine("<p class=\"note\"><em>Diagram omitted: notification graph exceeds the " +
+                                "CqrsLens safety limit (45,000 characters / 400 edges).</em></p>");
+            }
+            else
+            {
+                html.AppendLine(RenderDiagram(notificationMap, renderMode));
+            }
+        }
+
+        if (result.Notifications.Count > 0)
+        {
+            html.AppendLine("<table>");
+            html.AppendLine("<thead><tr><th>Notification</th><th>Marker</th><th>Handlers</th><th>Project</th><th>Source</th></tr></thead>");
+            html.AppendLine("<tbody>");
+            foreach (var n in result.Notifications)
+            {
+                var handlers = n.Handlers.Count > 0
+                    ? string.Join(", ", n.Handlers.Select(CSharpScanner.SimpleName))
+                    : "—";
+                var loc = n.Location is null ? "—" : $"<code>{E(n.Location.ToString())}</code>";
+                html.AppendLine(
+                    $"<tr><td><code>{E(n.Name)}</code></td><td><code>{E(n.ViaMarker ?? "INotification")}</code></td>" +
+                    $"<td>{E(handlers)}</td><td>{E(n.ProjectName ?? "—")}</td><td>{loc}</td></tr>");
+            }
+            html.AppendLine("</tbody>");
+            html.AppendLine("</table>");
+        }
     }
 
     private static void AppendRequestsAndExplorer(

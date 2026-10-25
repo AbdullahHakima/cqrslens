@@ -68,6 +68,8 @@ public static class JsonReportGenerator
                 Validators = result.Validators.Count,
                 Behaviors = result.Behaviors.Count,
                 DbContexts = result.DbContexts.Count,
+                Notifications = result.Notifications.Count,
+                NotificationHandlers = result.NotificationHandlers.Count,
                 Errors = errorCount,
                 Warnings = warningCount,
                 KnownFindings = knownCount,
@@ -235,6 +237,31 @@ public static class JsonReportGenerator
                 })
                 .ToList(),
             SkippedFiles = result.SkippedFiles.ToList(),
+            Notifications = result.Notifications
+                .Select(n => new JsonNotification
+                {
+                    Name = n.Name,
+                    Namespace = EmptyToNull(n.Namespace),
+                    FullName = n.FullName,
+                    ViaMarker = n.ViaMarker,
+                    Project = n.ProjectName,
+                    Handlers = n.Handlers.ToList(),
+                    Location = ToJsonLocation(n.Location),
+                })
+                .ToList(),
+            NotificationHandlers = result.NotificationHandlers
+                .OrderBy(h => h.FullName, StringComparer.Ordinal)
+                .ThenBy(h => h.NotificationName, StringComparer.Ordinal)
+                .Select(h => new JsonNotificationHandler
+                {
+                    Name = h.Name,
+                    Namespace = EmptyToNull(h.Namespace),
+                    FullName = h.FullName,
+                    NotificationName = h.NotificationName,
+                    Project = h.ProjectName,
+                    Location = ToJsonLocation(h.Location),
+                })
+                .ToList(),
         };
     }
 
@@ -285,6 +312,10 @@ public static class JsonReportGenerator
         document.Checks ??= new List<JsonCheckFinding>();
         document.Diagnostics ??= new List<JsonDiagnostic>();
         document.SkippedFiles ??= new List<string>();
+        document.Notifications ??= new List<JsonNotification>();
+        document.NotificationHandlers ??= new List<JsonNotificationHandler>();
+        foreach (var notification in document.Notifications)
+            notification.Handlers ??= new List<string>();
 
         foreach (var project in document.Projects)
         {
@@ -347,6 +378,8 @@ public static class JsonReportGenerator
         public List<JsonCheckFinding> Checks { get; set; } = new();
         public List<JsonDiagnostic> Diagnostics { get; set; } = new();
         public List<string> SkippedFiles { get; set; } = new();
+        public List<JsonNotification> Notifications { get; set; } = new();
+        public List<JsonNotificationHandler> NotificationHandlers { get; set; } = new();
     }
 
     internal sealed class JsonSummary
@@ -357,6 +390,8 @@ public static class JsonReportGenerator
         public int Validators { get; set; }
         public int Behaviors { get; set; }
         public int DbContexts { get; set; }
+        public int Notifications { get; set; }
+        public int NotificationHandlers { get; set; }
         public int Errors { get; set; }
         public int Warnings { get; set; }
         public int KnownFindings { get; set; }
@@ -490,5 +525,26 @@ public static class JsonReportGenerator
         public string File { get; set; } = "";
         public int Line { get; set; }
         public int Column { get; set; }
+    }
+
+    internal sealed class JsonNotification
+    {
+        public string Name { get; set; } = "";
+        public string? Namespace { get; set; }
+        public string FullName { get; set; } = "";
+        public string? ViaMarker { get; set; }
+        public string? Project { get; set; }
+        public List<string> Handlers { get; set; } = new();
+        public JsonLocation? Location { get; set; }
+    }
+
+    internal sealed class JsonNotificationHandler
+    {
+        public string Name { get; set; } = "";
+        public string? Namespace { get; set; }
+        public string FullName { get; set; } = "";
+        public string NotificationName { get; set; } = "";
+        public string? Project { get; set; }
+        public JsonLocation? Location { get; set; }
     }
 }

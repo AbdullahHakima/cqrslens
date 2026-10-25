@@ -25,6 +25,16 @@ public static class SarifReportGenerator
                 ("CommandWithoutValidator", "Command has no validator", "warning"),
             [ArchitectureChecker.AmbiguousProjectNameCode] =
                 ("AmbiguousProjectName", "Duplicate project name makes references ambiguous", "warning"),
+            [ArchitectureChecker.MultipleHandlersCode] =
+                ("MultipleHandlers", "Request has more than one handler", "error"),
+            [ArchitectureChecker.ApplicationLayerViolationCode] =
+                ("ApplicationLayerViolation", "Application dependency points to an outer layer", "error"),
+            [ArchitectureChecker.CircularProjectDependencyCode] =
+                ("CircularProjectDependency", "Project reference cycle detected", "error"),
+            [ArchitectureChecker.OrphanValidatorCode] =
+                ("OrphanValidator", "Validator target does not match any discovered CQRS request", "warning"),
+            [ArchitectureChecker.OrphanNotificationCode] =
+                ("OrphanNotification", "Notification has no handler", "warning"),
         };
 
     public static string Generate(AnalysisResult result, string? ciRoot = null)

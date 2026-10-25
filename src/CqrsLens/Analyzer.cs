@@ -335,5 +335,129 @@ public static class Analyzer
             var byName = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
             return byName != 0 ? byName : string.Compare(a.FullName, b.FullName, StringComparison.Ordinal);
         });
+
+        LinkNotifications(result);
+    }
+
+    private static void LinkNotifications(AnalysisResult result)
+    {
+        var byFullName = new Dictionary<string, List<CqrsNotification>>(StringComparer.Ordinal);
+        var bySimpleName = new Dictionary<string, List<CqrsNotification>>(StringComparer.Ordinal);
+        foreach (var notification in result.Notifications)
+        {
+            if (!byFullName.TryGetValue(notification.FullName, out var fullList))
+                byFullName[notification.FullName] = fullList = new List<CqrsNotification>();
+            fullList.Add(notification);
+
+            if (!bySimpleName.TryGetValue(notification.Name, out var list))
+                bySimpleName[notification.Name] = list = new List<CqrsNotification>();
+            list.Add(notification);
+        }
+
+        static CqrsNotification? PickHit(List<CqrsNotification> hits, string? ownerProject)
+        {
+            if (hits.Count == 1)
+                return hits[0];
+            if (!string.IsNullOrEmpty(ownerProject))
+            {
+                var sameProject = hits
+                    .Where(n => string.Equals(n.ProjectName, ownerProject, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (sameProject.Count == 1)
+                    return sameProject[0];
+            }
+            return hits[0];
+        }
+
+        CqrsNotification? Resolve(
+            string simpleName,
+            string? writtenNs,
+            string? fallbackNs,
+            IReadOnlyList<string> importedNamespaces,
+            string? ownerProject)
+        {
+            var candidates = new List<string>();
+            if (!string.IsNullOrEmpty(writtenNs))
+            {
+                candidates.Add($"{writtenNs}.{simpleName}");
+                if (!string.IsNullOrEmpty(fallbackNs))
+                    candidates.Add($"{fallbackNs}.{writtenNs}.{simpleName}");
+            }
+            if (!string.IsNullOrEmpty(fallbackNs))
+                candidates.Add($"{fallbackNs}.{simpleName}");
+            else
+                candidates.Add(simpleName);
+
+            foreach (var candidate in candidates)
+            {
+                if (byFullName.TryGetValue(candidate, out var hits))
+                    return PickHit(hits, ownerProject);
+            }
+
+            var importedMatches = new List<CqrsNotification>();
+            foreach (var ns in importedNamespaces.Distinct(StringComparer.Ordinal))
+            {
+                if (byFullName.TryGetValue($"{ns}.{simpleName}", out var hits))
+                {
+                    var picked = PickHit(hits, ownerProject);
+                    if (picked is not null && !importedMatches.Contains(picked))
+                        importedMatches.Add(picked);
+                }
+            }
+
+            if (importedMatches.Count == 1)
+                return importedMatches[0];
+            if (importedMatches.Count > 1)
+                return null;
+
+            if (!string.IsNullOrEmpty(fallbackNs) &&
+                byFullName.TryGetValue(simpleName, out var globalHits))
+            {
+                return PickHit(globalHits, ownerProject);
+            }
+
+            return bySimpleName.TryGetValue(simpleName, out var matches) && matches.Count == 1
+                ? matches[0]
+                : null;
+        }
+
+        foreach (var handler in result.NotificationHandlers.OrderBy(h => h.Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var notification = Resolve(
+                handler.NotificationName,
+                handler.NotificationNamespace,
+                handler.Namespace,
+                handler.ImportedNamespaces,
+                handler.ProjectName);
+            if (notification is null)
+            {
+                if (bySimpleName.TryGetValue(handler.NotificationName, out var matches) && matches.Count >= 2)
+                {
+                    var names = string.Join(
+                        ", ",
+                        matches.Select(m => m.FullName).OrderBy(n => n, StringComparer.OrdinalIgnoreCase));
+                    result.RecordDiagnostic(new AnalysisDiagnostic(
+                        AnalysisResult.AmbiguousLinkCode,
+                        AnalysisDiagnosticSeverity.Warning,
+                        $"NotificationHandler `{handler.FullName}` targets `{handler.NotificationName}`, which matches {matches.Count} notifications ({names}); the link was omitted.",
+                        handler.Location,
+                        handler.ProjectName));
+                }
+                continue;
+            }
+
+            handler.NotificationNamespace ??= notification.Namespace;
+            if (!notification.Handlers.Contains(handler.FullName))
+                notification.Handlers.Add(handler.FullName);
+        }
+
+        foreach (var notification in result.Notifications)
+            notification.Handlers.Sort(StringComparer.OrdinalIgnoreCase);
+
+        result.Notifications.Sort((a, b) =>
+        {
+            var byName = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+            return byName != 0 ? byName : string.Compare(a.FullName, b.FullName, StringComparison.Ordinal);
+        });
     }
 }

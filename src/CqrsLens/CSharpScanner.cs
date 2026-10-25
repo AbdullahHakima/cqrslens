@@ -599,6 +599,29 @@ public static partial class CSharpScanner
                 result.Requests.Add(request);
             }
 
+            // INotification / IDomainEvent -> a CQRS notification / domain event
+            if (!decl.IsAbstract &&
+                (decl.BaseRawNames.Contains("INotification") || decl.BaseRawNames.Contains("IDomainEvent")))
+            {
+                if (!result.Notifications.Any(n =>
+                        n.Name == decl.Name &&
+                        n.Namespace == decl.Namespace &&
+                        n.ProjectName == projectName &&
+                        n.ContainingTypes.SequenceEqual(decl.ContainingTypes)))
+                {
+                    var notification = new CqrsNotification
+                    {
+                        Name = decl.Name,
+                        Namespace = decl.Namespace,
+                        ProjectName = projectName,
+                        ViaMarker = decl.BaseRawNames.Contains("INotification") ? null : "IDomainEvent",
+                        Location = location,
+                    };
+                    notification.ContainingTypes.AddRange(decl.ContainingTypes);
+                    result.Notifications.Add(notification);
+                }
+            }
+
             // IRequestHandler<TRequest, TResponse> -> a handler for every interface.
             foreach (var handlerArgs in ExtractAllGenericArguments(decl.BaseList, "IRequestHandler"))
             {
@@ -625,6 +648,37 @@ public static partial class CSharpScanner
                 handler.ContainingTypes.AddRange(decl.ContainingTypes);
                 AddImportedNamespaces(decl.Usings, handler.ImportedNamespaces);
                 result.Handlers.Add(handler);
+            }
+
+            // INotificationHandler<TNotification> / IDomainEventHandler<TNotification> -> a notification handler
+            var notificationTargets = new List<string>();
+            foreach (var root in new[] { "INotificationHandler", "IDomainEventHandler" })
+                notificationTargets.AddRange(ExtractAllGenericArguments(decl.BaseList, root)
+                    .Where(a => a.Count >= 1)
+                    .Select(a => a[0]));
+            foreach (var notificationType in notificationTargets.Distinct(StringComparer.Ordinal))
+            {
+                if (!IsConcreteTarget(UnqualifiedTypeName(notificationType))) continue;
+                if (result.NotificationHandlers.Any(h =>
+                        h.Namespace == decl.Namespace &&
+                        h.Name == decl.Name &&
+                        h.ProjectName == projectName &&
+                        h.ContainingTypes.SequenceEqual(decl.ContainingTypes) &&
+                        h.NotificationName == UnqualifiedTypeName(notificationType)))
+                    continue;
+
+                var notificationHandler = new NotificationHandlerInfo
+                {
+                    Name = decl.Name,
+                    Namespace = decl.Namespace,
+                    NotificationName = UnqualifiedTypeName(notificationType),
+                    NotificationNamespace = NamespaceOfType(notificationType) is { Length: > 0 } ns ? ns : null,
+                    ProjectName = projectName,
+                    Location = location,
+                };
+                notificationHandler.ContainingTypes.AddRange(decl.ContainingTypes);
+                AddImportedNamespaces(decl.Usings, notificationHandler.ImportedNamespaces);
+                result.NotificationHandlers.Add(notificationHandler);
             }
 
             // AbstractValidator<T> / IValidator<T> -> a validator for every target.
