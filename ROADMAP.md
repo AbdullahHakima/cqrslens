@@ -5,10 +5,21 @@ where they exist; the dates are not promises.
 
 ## In progress
 
-- More mediators: Mediator (martinothamar) and Wolverine conventions,
-  detected automatically from package references and using directives
+- Interactive HTML explorer (click a request, see its handler and files)
 
 ## Done
+
+**0.7.0** (October 2026)
+
+- **More mediators**: Mediator (martinothamar) and Wolverine conventions,
+  detected automatically from package references and `using` directives
+- **Comparing two scans (`--diff` / `--diff-output`)**: compare a scan against a
+  base `ARCHITECTURE.json` report or base checkout folder to see what changed in
+  projects, layers, CQRS requests/handlers/validators, pipeline behaviors, EF Core
+  DbContexts, and architecture checks (as Markdown with a CQRS delta diagram or JSON)
+- **Pull request architecture diff comments (`action.yml`)**: `comment-pr: 'true'`
+  and `diff-base` / `diff-output` inputs automatically diff pull requests against
+  their base ref and post or update a sticky PR comment (`<!-- cqrslens-architecture-diff -->`)
 
 **0.6.0** (October 2026)
 
@@ -98,15 +109,6 @@ where they exist; the dates are not promises.
   request table, pipeline behavior detection, DbContext overview,
   Markdown report. Static analysis only, no build of the target solution.
 
-## Next
-
-- GitHub Action mode that comments the architecture diff on a pull request
-
-## After that
-
-- Comparing two scans: what changed in the CQRS surface between commits
-
 ## Ideas, not planned yet
 
-- Interactive HTML explorer (click a request, see its handler and files)
 - F# project support

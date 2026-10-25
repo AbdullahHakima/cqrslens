@@ -12,6 +12,8 @@ public sealed class CliOptions
     public string? ConfigPath { get; set; }
     public string? BaselinePath { get; set; }
     public string? WriteBaselinePath { get; set; }
+    public string? DiffPath { get; set; }
+    public string? DiffOutputPath { get; set; }
     public string? SarifPath { get; set; }
     public string? SummaryPath { get; set; }
     public string? CiRoot { get; set; }
@@ -133,6 +135,16 @@ public static class CliParser
                         return Error("error: --write-baseline needs a value, e.g. --write-baseline cqrslens-baseline.json");
                     options.WriteBaselinePath = args[++i];
                     break;
+                case "--diff":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --diff needs a value, e.g. --diff base-architecture.json");
+                    options.DiffPath = args[++i];
+                    break;
+                case "--diff-output":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --diff-output needs a value, e.g. --diff-output cqrslens-diff.md");
+                    options.DiffOutputPath = args[++i];
+                    break;
                 case "--sarif":
                     if (i + 1 >= args.Length)
                         return Error("error: --sarif needs a value, e.g. --sarif cqrslens.sarif");
@@ -199,6 +211,9 @@ public static class CliParser
         if (options.BaselinePath is not null && options.WriteBaselinePath is not null)
             return Error("error: use either --baseline or --write-baseline, not both.");
 
+        if (options.DiffOutputPath is not null && options.DiffPath is null)
+            return Error("error: --diff-output requires --diff <path-or-json>.");
+
         return new CliCommand(CliCommandKind.Run, options);
     }
 
@@ -242,7 +257,7 @@ public static class CliRunner
         {
             return Execute(command.Options!, stdout, stderr);
         }
-        catch (Exception ex) when (ex is ConfigurationException or BaselineException)
+        catch (Exception ex) when (ex is ConfigurationException or BaselineException or DiffException)
         {
             stderr.WriteLine($"error: {ex.Message}");
             return ExitCodes.Usage;
@@ -348,21 +363,20 @@ public static class CliRunner
             };
         }
 
-        var result = Analyzer.Analyze(
-            path,
-            analysisMode,
-            new AnalysisOptions
-            {
-                Markers = markers,
-                HandlerMarkers = handlerMarkers,
-                GeneratedAt = options.GeneratedAt,
-                Watermark = watermark,
-                Progress = progressCallback,
-                Include = settings.Include,
-                Exclude = settings.Exclude,
-                LayerOverrides = settings.LayerOverrides,
-                RuleSeverities = settings.RuleSeverities,
-            });
+        var analysisOptions = new AnalysisOptions
+        {
+            Markers = markers,
+            HandlerMarkers = handlerMarkers,
+            GeneratedAt = options.GeneratedAt,
+            Watermark = watermark,
+            Progress = progressCallback,
+            Include = settings.Include,
+            Exclude = settings.Exclude,
+            LayerOverrides = settings.LayerOverrides,
+            RuleSeverities = settings.RuleSeverities,
+        };
+
+        var result = Analyzer.Analyze(path, analysisMode, analysisOptions);
 
         if (isInteractiveConsole && lastProgressLen > 0)
         {
@@ -408,6 +422,13 @@ public static class CliRunner
             return ExitCodes.Usage;
         }
 
+        var fullDiffOutput = options.DiffOutputPath is null ? null : Path.GetFullPath(options.DiffOutputPath);
+        if (fullDiffOutput is not null && IsDirectoryOutput(options.DiffOutputPath!, fullDiffOutput))
+        {
+            stderr.WriteLine($"error: diff output path is a directory: {options.DiffOutputPath}");
+            return ExitCodes.Usage;
+        }
+
         var comparison = OperatingSystem.IsWindows()
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
@@ -425,6 +446,15 @@ public static class CliRunner
             return ExitCodes.Usage;
         }
 
+        if (fullDiffOutput is not null &&
+            (string.Equals(fullDiffOutput, fullOutput, comparison) ||
+             string.Equals(fullDiffOutput, fullSarif, comparison) ||
+             string.Equals(fullDiffOutput, fullSummary, comparison)))
+        {
+            stderr.WriteLine("error: --diff-output and the other output paths must be different files.");
+            return ExitCodes.Usage;
+        }
+
         if (options.WriteBaselinePath is not null)
         {
             Baseline.Write(result, options.WriteBaselinePath);
@@ -434,6 +464,22 @@ public static class CliRunner
         {
             var baseline = Baseline.Read(options.BaselinePath);
             Baseline.Apply(result, baseline, options.BaselinePath);
+        }
+
+        ArchitectureDiffer.ArchitectureDiff? diff = null;
+        if (options.DiffPath is not null)
+        {
+            var baseSnapshot = ArchitectureDiffer.LoadSnapshot(options.DiffPath, analysisMode, analysisOptions);
+            diff = ArchitectureDiffer.Compare(baseSnapshot, JsonReportGenerator.CreateDocument(result));
+
+            if (fullDiffOutput is not null)
+            {
+                EnsureOutputDirectory(fullDiffOutput);
+                var diffContent = fullDiffOutput.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
+                    ? ArchitectureDiffer.GenerateJson(diff)
+                    : ArchitectureDiffer.GenerateMarkdown(diff, result, ciRoot);
+                File.WriteAllText(fullDiffOutput, diffContent);
+            }
         }
 
         var report = isHtml
@@ -457,7 +503,7 @@ public static class CliRunner
         if (fullSummary is not null)
         {
             EnsureOutputDirectory(fullSummary);
-            File.WriteAllText(fullSummary, SummaryGenerator.Generate(result, ciRoot));
+            File.WriteAllText(fullSummary, SummaryGenerator.Generate(result, ciRoot, diff));
         }
 
         if (options.GitHubAnnotations)
@@ -478,6 +524,10 @@ public static class CliRunner
             stdout.WriteLine($"SARIF written to {fullSarif}");
         if (fullSummary is not null)
             stdout.WriteLine($"Summary written to {fullSummary}");
+        if (diff is not null)
+            stdout.WriteLine(ArchitectureDiffer.FormatConsoleSummary(diff));
+        if (fullDiffOutput is not null)
+            stdout.WriteLine($"Diff written to {fullDiffOutput}");
         if (result.SkippedFiles.Count > 0)
             stderr.WriteLine($"warning: {result.SkippedFiles.Count} source file(s) skipped - see the report.");
 
@@ -543,7 +593,7 @@ public static class CliRunner
 
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--watermark TEXT] [--banner|--no-banner] [--color|--no-color] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--watermark TEXT] [--banner|--no-banner] [--color|--no-color] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (.html or .json) in the current directory.");
@@ -569,14 +619,17 @@ public static class CliRunner
         writer.WriteLine("  --baseline    Compare checks with a baseline file; --strict then fails only");
         writer.WriteLine("                on errors not present in the baseline.");
         writer.WriteLine("  --write-baseline  Record current checks as the baseline, then continue.");
+        writer.WriteLine("  --diff        Compare the current scan against a base ARCHITECTURE.json file or");
+        writer.WriteLine("                base solution folder to see what changed in the CQRS surface.");
+        writer.WriteLine("  --diff-output Write the architecture diff report (.md for PR comments, or .json).");
         writer.WriteLine("  --sarif       Also write SARIF 2.1.0 for code scanning.");
         writer.WriteLine("  --summary     Also write a compact Markdown job summary.");
         writer.WriteLine("  --github-annotations  Emit file/line GitHub Actions annotations.");
         writer.WriteLine("  --ci-root     Repository root used to rebase annotation/SARIF paths.");
         writer.WriteLine("  --strict      Exit with code 4 when architecture checks report an error");
         writer.WriteLine("                and the scan is complete; incomplete scans report diagnostics.");
-        writer.WriteLine("  --version     Print the tool version and exit.");
         writer.WriteLine("  -h, --help    Show this help.");
+        writer.WriteLine("  --version     Print the tool version and exit.");
         writer.WriteLine();
         writer.WriteLine("Exit codes: 0 ok - 1 usage error - 2 path not found - 3 no projects found - 4 strict check failure - 5 unexpected failure.");
     }

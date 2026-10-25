@@ -14,6 +14,12 @@ public static class SummaryGenerator
     private const int MaxDiagnostics = 5;
 
     public static string Generate(AnalysisResult result, string? ciRoot = null)
+        => Generate(result, ciRoot, diff: null);
+
+    internal static string Generate(
+        AnalysisResult result,
+        string? ciRoot,
+        ArchitectureDiffer.ArchitectureDiff? diff)
     {
         var md = new StringBuilder();
         md.AppendLine("## CqrsLens architecture summary");
@@ -29,6 +35,14 @@ public static class SummaryGenerator
             $"| {result.Requests.Count} | {result.Handlers.Count} | {result.Validators.Count} | " +
             $"{result.Behaviors.Count} | {result.DbContexts.Count} |");
         md.AppendLine();
+
+        if (diff is not null)
+        {
+            md.AppendLine("### Architecture diff");
+            md.AppendLine();
+            md.AppendLine(ReportGenerator.InlineText(ArchitectureDiffer.FormatConsoleSummary(diff)));
+            md.AppendLine();
+        }
 
         md.AppendLine("### Architecture checks");
         md.AppendLine();

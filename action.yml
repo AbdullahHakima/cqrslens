@@ -2,8 +2,9 @@ name: CqrsLens
 description: >-
   Statically scan a .NET solution (no build required) and generate an
   architecture report — project graph, Clean Architecture layers, CQRS map
-  (requests, handlers, validators), pipeline behaviors, DbContexts, and
-  architecture checks — as Markdown, HTML (Mermaid or pre-rendered SVG), or JSON.
+  (requests, handlers, validators), pipeline behaviors, DbContexts,
+  architecture checks, and pull request architecture diffs — as Markdown,
+  HTML (Mermaid or pre-rendered SVG), or JSON.
 author: Abdullah Hakim
 branding:
   icon: search
@@ -54,6 +55,22 @@ inputs:
     description: Baseline file for new-only strict checks.
     required: false
     default: ''
+  diff-base:
+    description: 'Base scan to compare against (path to a base ARCHITECTURE.json report or base solution folder). When empty and comment-pr is true on a pull_request, the PR base ref is scanned automatically.'
+    required: false
+    default: ''
+  diff-output:
+    description: 'Architecture diff report file to write (defaults to cqrslens-diff.md when diff-base or comment-pr is enabled).'
+    required: false
+    default: ''
+  comment-pr:
+    description: 'Post or update a sticky pull request comment with the architecture diff. Requires pull-requests: write permission.'
+    required: false
+    default: 'false'
+  github-token:
+    description: 'GitHub token used to post or update the pull request comment when comment-pr is true.'
+    required: false
+    default: ${{ github.token }}
   sarif-output:
     description: SARIF 2.1.0 file to write; set to empty to disable.
     required: false
@@ -69,7 +86,7 @@ inputs:
   version:
     description: CqrsLens NuGet tool version to install.
     required: false
-    default: '0.6.0'
+    default: '0.7.0'
 
 outputs:
   report-path:
@@ -78,6 +95,9 @@ outputs:
   sarif-path:
     description: Path of the generated SARIF file (empty when disabled).
     value: ${{ steps.scan.outputs.sarif-path }}
+  diff-path:
+    description: Path of the generated architecture diff file (empty when disabled).
+    value: ${{ steps.scan.outputs.diff-path }}
 
 runs:
   using: composite
@@ -111,10 +131,34 @@ runs:
         CQRSLENS_ANALYSIS: ${{ inputs.analysis }}
         CQRSLENS_CONFIG: ${{ inputs.config }}
         CQRSLENS_BASELINE: ${{ inputs.baseline }}
+        CQRSLENS_DIFF_BASE: ${{ inputs.diff-base }}
+        CQRSLENS_DIFF_OUTPUT: ${{ inputs.diff-output }}
+        CQRSLENS_COMMENT_PR: ${{ inputs.comment-pr }}
         CQRSLENS_SARIF: ${{ inputs.sarif-output }}
         CQRSLENS_ANNOTATIONS: ${{ inputs.annotations }}
         CQRSLENS_SUMMARY: ${{ runner.temp }}/cqrslens-summary.md
+        CQRSLENS_BASE_WORKTREE: ${{ runner.temp }}/cqrslens-base-worktree
       run: |
+        cleanup_worktree() {
+          if [ -d "$CQRSLENS_BASE_WORKTREE" ]; then
+            git worktree remove --force "$CQRSLENS_BASE_WORKTREE" 2>/dev/null || rm -rf "$CQRSLENS_BASE_WORKTREE"
+          fi
+        }
+        trap cleanup_worktree EXIT
+
+        if [ -z "$CQRSLENS_DIFF_BASE" ] && [ "$CQRSLENS_COMMENT_PR" = "true" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
+          if git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF" 2>/dev/null &&
+             git worktree add --detach "$CQRSLENS_BASE_WORKTREE" FETCH_HEAD 2>/dev/null; then
+            if [ -d "$CQRSLENS_BASE_WORKTREE/$CQRSLENS_PATH" ]; then
+              CQRSLENS_DIFF_BASE="$CQRSLENS_BASE_WORKTREE/$CQRSLENS_PATH"
+            fi
+          fi
+        fi
+
+        if [ -n "$CQRSLENS_DIFF_BASE" ] && [ -z "$CQRSLENS_DIFF_OUTPUT" ]; then
+          CQRSLENS_DIFF_OUTPUT="cqrslens-diff.md"
+        fi
+
         args=("$CQRSLENS_PATH" -o "$CQRSLENS_OUTPUT" --format "$CQRSLENS_FORMAT" \
           --ci-root "$GITHUB_WORKSPACE" \
           --summary "$CQRSLENS_SUMMARY")
@@ -142,6 +186,12 @@ runs:
         if [ -n "$CQRSLENS_BASELINE" ]; then
           args+=(--baseline "$CQRSLENS_BASELINE")
         fi
+        if [ -n "$CQRSLENS_DIFF_BASE" ]; then
+          args+=(--diff "$CQRSLENS_DIFF_BASE")
+        fi
+        if [ -n "$CQRSLENS_DIFF_OUTPUT" ]; then
+          args+=(--diff-output "$CQRSLENS_DIFF_OUTPUT")
+        fi
         if [ -n "$CQRSLENS_SARIF" ]; then
           args+=(--sarif "$CQRSLENS_SARIF")
         fi
@@ -156,10 +206,47 @@ runs:
 
         echo "report-path=$CQRSLENS_OUTPUT" >> "$GITHUB_OUTPUT"
         echo "sarif-path=$CQRSLENS_SARIF" >> "$GITHUB_OUTPUT"
-        if [ -f "$CQRSLENS_SUMMARY" ]; then
+        echo "diff-path=$CQRSLENS_DIFF_OUTPUT" >> "$GITHUB_OUTPUT"
+        if [ -f "$CQRSLENS_DIFF_OUTPUT" ]; then
+          cat "$CQRSLENS_DIFF_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+        elif [ -f "$CQRSLENS_SUMMARY" ]; then
           cat "$CQRSLENS_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
         fi
         exit "$status"
+
+    - name: Comment architecture diff on pull request
+      if: always() && inputs.comment-pr == 'true' && github.event.pull_request.number != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        DIFF_FILE: ${{ steps.scan.outputs.diff-path }}
+        SUMMARY_FILE: ${{ runner.temp }}/cqrslens-summary.md
+        COMMENT_BODY_FILE: ${{ runner.temp }}/cqrslens-pr-comment.md
+      run: |
+        MARKER="<!-- cqrslens-architecture-diff -->"
+        if [ -n "$DIFF_FILE" ] && [ -f "$DIFF_FILE" ]; then
+          cp "$DIFF_FILE" "$COMMENT_BODY_FILE"
+        elif [ -f "$SUMMARY_FILE" ]; then
+          {
+            echo "$MARKER"
+            cat "$SUMMARY_FILE"
+          } > "$COMMENT_BODY_FILE"
+        else
+          echo "warning: no diff or summary file found to comment on PR." >&2
+          exit 0
+        fi
+
+        EXISTING_ID=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+          --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -n 1 || true)
+
+        if [ -n "$EXISTING_ID" ]; then
+          gh api --method PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${EXISTING_ID}" \
+            -F body=@"$COMMENT_BODY_FILE" > /dev/null
+        else
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -F body=@"$COMMENT_BODY_FILE" > /dev/null
+        fi
 
     - name: Upload report
       if: always()
@@ -167,6 +254,14 @@ runs:
       with:
         name: cqrslens-architecture-report
         path: ${{ inputs.output }}
+        if-no-files-found: warn
+
+    - name: Upload architecture diff artifact
+      if: always() && steps.scan.outputs.diff-path != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: cqrslens-architecture-diff
+        path: ${{ steps.scan.outputs.diff-path }}
         if-no-files-found: warn
 
     - name: Upload SARIF artifact

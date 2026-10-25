@@ -19,7 +19,20 @@ public static class JsonReportGenerator
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    private static readonly JsonSerializerOptions ReadOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        ReadCommentHandling = JsonCommentHandling.Skip,
+        AllowTrailingCommas = true,
+    };
+
     public static string Generate(AnalysisResult result)
+    {
+        var document = CreateDocument(result);
+        return JsonSerializer.Serialize(document, WriteOptions) + "\n";
+    }
+
+    internal static JsonReportDocument CreateDocument(AnalysisResult result)
     {
         ArgumentNullException.ThrowIfNull(result);
 
@@ -33,7 +46,7 @@ public static class JsonReportGenerator
             ? result.Checks.Count(c => c.IsKnown)
             : 0;
 
-        var document = new JsonReportDocument
+        return new JsonReportDocument
         {
             SchemaVersion = CurrentSchemaVersion,
             ToolVersion = ToolInfo.Version,
@@ -223,8 +236,78 @@ public static class JsonReportGenerator
                 .ToList(),
             SkippedFiles = result.SkippedFiles.ToList(),
         };
+    }
 
-        return JsonSerializer.Serialize(document, WriteOptions) + "\n";
+    internal static JsonReportDocument ReadDocument(string path)
+    {
+        if (!File.Exists(path))
+            throw new DiffException($"diff file not found: {path}");
+
+        JsonReportDocument? document;
+        try
+        {
+            var json = File.ReadAllText(path);
+            if (string.IsNullOrWhiteSpace(json))
+                throw new DiffException($"diff file is empty: {path}");
+            document = JsonSerializer.Deserialize<JsonReportDocument>(json, ReadOptions);
+        }
+        catch (DiffException)
+        {
+            throw;
+        }
+        catch (JsonException ex)
+        {
+            throw new DiffException($"invalid diff JSON '{path}': {ex.Message}");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new DiffException($"could not read diff file '{path}': {ex.Message}");
+        }
+
+        if (document is null)
+            throw new DiffException($"diff file is empty: {path}");
+        if (document.SchemaVersion is null)
+            throw new DiffException($"invalid diff JSON '{path}': missing schemaVersion.");
+        if (document.SchemaVersion != CurrentSchemaVersion)
+        {
+            throw new DiffException(
+                $"unsupported diff JSON schema version {document.SchemaVersion} in '{path}' " +
+                $"- expected {CurrentSchemaVersion}; regenerate it with --format json.");
+        }
+
+        document.Summary ??= new JsonSummary();
+        document.Projects ??= new List<JsonProject>();
+        document.Requests ??= new List<JsonRequest>();
+        document.Handlers ??= new List<JsonHandler>();
+        document.Validators ??= new List<JsonValidator>();
+        document.Behaviors ??= new List<JsonBehavior>();
+        document.DbContexts ??= new List<JsonDbContext>();
+        document.Checks ??= new List<JsonCheckFinding>();
+        document.Diagnostics ??= new List<JsonDiagnostic>();
+        document.SkippedFiles ??= new List<string>();
+
+        foreach (var project in document.Projects)
+        {
+            project.References ??= new List<string>();
+            project.Packages ??= new List<string>();
+        }
+
+        foreach (var request in document.Requests)
+        {
+            request.Handlers ??= new List<string>();
+            request.Validators ??= new List<string>();
+        }
+
+        foreach (var context in document.DbContexts)
+        {
+            context.DbSets ??= new List<JsonDbSet>();
+            context.Entities ??= new List<JsonEntity>();
+            context.Relationships ??= new List<JsonEntityRelationship>();
+            foreach (var entity in context.Entities)
+                entity.Properties ??= new List<JsonEntityProperty>();
+        }
+
+        return document;
     }
 
     private static string? EmptyToNull(string? value)
@@ -240,9 +323,9 @@ public static class JsonReportGenerator
                 Column = location.Column,
             };
 
-    private sealed class JsonReportDocument
+    internal sealed class JsonReportDocument
     {
-        public int SchemaVersion { get; set; }
+        public int? SchemaVersion { get; set; }
         public string ToolVersion { get; set; } = "";
         public string Scanner { get; set; } = "";
         public string GeneratedAt { get; set; } = "";
@@ -266,7 +349,7 @@ public static class JsonReportGenerator
         public List<string> SkippedFiles { get; set; } = new();
     }
 
-    private sealed class JsonSummary
+    internal sealed class JsonSummary
     {
         public int Projects { get; set; }
         public int Requests { get; set; }
@@ -280,7 +363,7 @@ public static class JsonReportGenerator
         public int Diagnostics { get; set; }
     }
 
-    private sealed class JsonProject
+    internal sealed class JsonProject
     {
         public string Name { get; set; } = "";
         public string Layer { get; set; } = "";
@@ -288,7 +371,7 @@ public static class JsonReportGenerator
         public List<string> Packages { get; set; } = new();
     }
 
-    private sealed class JsonRequest
+    internal sealed class JsonRequest
     {
         public string Name { get; set; } = "";
         public string? Namespace { get; set; }
@@ -302,7 +385,7 @@ public static class JsonReportGenerator
         public JsonLocation? Location { get; set; }
     }
 
-    private sealed class JsonHandler
+    internal sealed class JsonHandler
     {
         public string Name { get; set; } = "";
         public string? Namespace { get; set; }
@@ -312,7 +395,7 @@ public static class JsonReportGenerator
         public JsonLocation? Location { get; set; }
     }
 
-    private sealed class JsonValidator
+    internal sealed class JsonValidator
     {
         public string Name { get; set; } = "";
         public string? Namespace { get; set; }
@@ -322,14 +405,14 @@ public static class JsonReportGenerator
         public JsonLocation? Location { get; set; }
     }
 
-    private sealed class JsonBehavior
+    internal sealed class JsonBehavior
     {
         public string Name { get; set; } = "";
         public string? Project { get; set; }
         public JsonLocation? Location { get; set; }
     }
 
-    private sealed class JsonDbContext
+    internal sealed class JsonDbContext
     {
         public string Name { get; set; } = "";
         public string? Namespace { get; set; }
@@ -340,14 +423,14 @@ public static class JsonReportGenerator
         public List<JsonEntityRelationship> Relationships { get; set; } = new();
     }
 
-    private sealed class JsonDbSet
+    internal sealed class JsonDbSet
     {
         public string Property { get; set; } = "";
         public string Entity { get; set; } = "";
         public string? EntityFullName { get; set; }
     }
 
-    private sealed class JsonEntity
+    internal sealed class JsonEntity
     {
         public string Name { get; set; } = "";
         public string? Namespace { get; set; }
@@ -357,7 +440,7 @@ public static class JsonReportGenerator
         public List<JsonEntityProperty> Properties { get; set; } = new();
     }
 
-    private sealed class JsonEntityProperty
+    internal sealed class JsonEntityProperty
     {
         public string Name { get; set; } = "";
         public string Type { get; set; } = "";
@@ -370,7 +453,7 @@ public static class JsonReportGenerator
         public JsonLocation? Location { get; set; }
     }
 
-    private sealed class JsonEntityRelationship
+    internal sealed class JsonEntityRelationship
     {
         public string PrincipalEntity { get; set; } = "";
         public string DependentEntity { get; set; } = "";
@@ -382,7 +465,7 @@ public static class JsonReportGenerator
         public string? ConfiguredBy { get; set; }
     }
 
-    private sealed class JsonCheckFinding
+    internal sealed class JsonCheckFinding
     {
         public string Code { get; set; } = "";
         public string Severity { get; set; } = "";
@@ -393,7 +476,7 @@ public static class JsonReportGenerator
         public JsonLocation? Location { get; set; }
     }
 
-    private sealed class JsonDiagnostic
+    internal sealed class JsonDiagnostic
     {
         public string Code { get; set; } = "";
         public string Severity { get; set; } = "";
@@ -402,7 +485,7 @@ public static class JsonReportGenerator
         public JsonLocation? Location { get; set; }
     }
 
-    private sealed class JsonLocation
+    internal sealed class JsonLocation
     {
         public string File { get; set; } = "";
         public int Line { get; set; }
