@@ -16,6 +16,21 @@ All notable changes to CqrsLens are documented here.
   `WithOne`/`WithMany`, `HasForeignKey`, `IsRequired`) in `OnModelCreating` and
   `IEntityTypeConfiguration<T>.Configure`. Ambiguous inverse navigations are reported as
   `EfNavigationUnresolved` diagnostics instead of being paired by guesswork.
+- **Roslyn hardening and MSBuild `<Using>` evaluation (#1)**:
+  - `CsprojParser` now evaluates ancestor `Directory.Build.props`, `.csproj`, and
+    `Directory.Build.targets` files for `<Using Include="..." />` (including `Alias`,
+    `Static="true"`, and `<Using Remove="..." />`), `<PackageReference>`, and
+    `<ImplicitUsings>`.
+  - Project-level `<Using>` items and `.cs` `global using` directives are scoped per
+    project in both `text` and `roslyn` modes so `global using` directives in one
+    module never bleed into sibling projects, while `#line 1` mapping keeps Roslyn
+    source locations exact.
+  - `RoslynArchitectureScanner` now propagates `ViaMarker`, `ResponseType`, and request
+    `Kind` through inherited base-class interfaces (`QueryBase<T> : IQuery<T>`), binds
+    configured external `--markers` and `--handler-markers` even when their package
+    assembly is not in the runtime reference set, populates `ImportedNamespaces` on
+    handlers and validators for linker parity, and emits `AmbiguousContract` and
+    `UnresolvedContract` informational diagnostics matching text mode.
 
 ### Changed
 

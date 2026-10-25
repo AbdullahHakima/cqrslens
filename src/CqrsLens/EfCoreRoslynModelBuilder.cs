@@ -107,28 +107,13 @@ internal sealed class EfCoreRoslynModelBuilder
     public static void Build(
         Compilation compilation,
         IReadOnlyList<(SourceFile File, SyntaxTree Tree)> parsed,
+        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan)> ordered,
+        TypeHierarchy hierarchy,
         AnalysisResult result)
     {
         if (parsed.Count == 0 || result.DbContexts.Count == 0)
             return;
 
-        var ordered = new List<(SourceFile File, CSharpScanner.FileScan Scan)>(parsed.Count);
-        foreach (var (file, _) in parsed.OrderBy(p => p.File.Path, StringComparer.OrdinalIgnoreCase))
-        {
-            try
-            {
-                ordered.Add((file, CSharpScanner.ScanText(file.Code)));
-            }
-            catch
-            {
-                // Ignore text fallback failures; Roslyn already scanned the syntax tree.
-            }
-        }
-
-        ApplyProjectGlobalUsings(ordered);
-        var hierarchy = new TypeHierarchy(
-            ordered.SelectMany(o => o.Scan.Classes),
-            ordered.SelectMany(o => o.Scan.InterfaceDecls));
         var fluent = EfFluentConfigurationParser.ParseText(ordered, hierarchy, result);
 
         var builder = new EfCoreRoslynModelBuilder(
@@ -633,32 +618,6 @@ internal sealed class EfCoreRoslynModelBuilder
             ProjectName = context.ProjectName,
             Location = context.Location,
         };
-    }
-
-    private static void ApplyProjectGlobalUsings(
-        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan)> ordered)
-    {
-        var globalsByProject = ordered
-            .SelectMany(o => o.Scan.Usings
-                .Where(u => u.IsGlobal)
-                .Select(u => (Project: o.File.ProjectName ?? "", Using: u)))
-            .GroupBy(x => x.Project, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                g => g.Key,
-                g => g.Select(x => x.Using).Distinct().ToList(),
-                StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (file, scan) in ordered)
-        {
-            if (!globalsByProject.TryGetValue(file.ProjectName ?? "", out var globals))
-                continue;
-
-            foreach (var global in globals)
-            {
-                if (!scan.Usings.Contains(global))
-                    scan.Usings.Add(global);
-            }
-        }
     }
 
     private static string ComposeFullName(

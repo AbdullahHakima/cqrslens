@@ -5,7 +5,7 @@ where they exist; the dates are not promises.
 
 ## In progress
 
-**Visualization quality and GitHub rendering**
+**Visualization quality and Roslyn hardening**
 
 - Bounded, role-prefixed Mermaid diagrams with GitHub-safe entities and escaped
   table cells; CQRS maps split at 15 requests and balanced by project
@@ -15,6 +15,11 @@ where they exist; the dates are not promises.
 - **EF Core ER diagram** (#6): entity attributes, primary/foreign keys and
   1:1 / 1:N / M:N relationships from navigation properties, data annotations
   and common Fluent API calls in both text and Roslyn modes
+- **Roslyn hardening** (#1): MSBuild `.csproj` and `Directory.Build.props`/`targets`
+  `<Using>` / `<PackageReference>` / `<ImplicitUsings>` evaluation, per-project
+  `global using` isolation, base-class interface/response propagation, configured
+  external `--markers` / `--handler-markers`, and `AmbiguousContract` /
+  `UnresolvedContract` diagnostic parity across text and Roslyn modes
 - Non-gating Mermaid parser/render check; a fully pre-rendered SVG mode remains
   a follow-up (see below)
 
@@ -83,9 +88,6 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- **Roslyn hardening**: load evaluated MSBuild/package references and compare
-  broader real codebases before considering Roslyn as the default. Text mode
-  stays as the fast fallback.
 - **Pre-rendered SVG diagrams**: diagrams compiled to SVG ahead of time
   so the HTML report needs no JavaScript. The HTML generator already
   isolates rendering behind one method for this.

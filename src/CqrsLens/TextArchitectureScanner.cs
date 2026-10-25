@@ -32,16 +32,84 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             .OrderBy(f => f.File.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        ApplyProjectGlobalUsings(ordered);
+        ApplyProjectGlobalUsings(ordered, result.Projects);
 
         var hierarchy = new TypeHierarchy(
             ordered.SelectMany(o => o.Scan.Classes),
             ordered.SelectMany(o => o.Scan.InterfaceDecls));
 
-        // Build the interface closure using each declaration's own using
-        // directives. This is what makes module-local ICommand/IQuery contracts
-        // resolve to the contract imported by the file rather than to a
-        // same-named interface from another module.
+        var interfaceMap = BuildInterfaceMap(ordered, hierarchy, result);
+
+        var handlerRoots = BuildHandlerRoots(handlerMarkers);
+
+        foreach (var (file, scan) in ordered)
+        {
+            CSharpScanner.ApplyScan(scan, file.Code, file.ProjectName, result, file.Path);
+            DiscoverMarkerRequests(scan, file, hierarchy, interfaceMap, markers, result);
+            DiscoverIndirectShapes(scan, file, hierarchy, handlerRoots, result);
+        }
+
+        EfCoreTextModelBuilder.Build(ordered, hierarchy, result);
+    }
+
+    internal static Dictionary<string, List<UsingDirective>> ApplyProjectGlobalUsings(
+        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan)> ordered,
+        IReadOnlyList<ProjectInfo> projects)
+    {
+        var globalsByProject = new Dictionary<string, List<UsingDirective>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var project in projects)
+        {
+            if (project.ProjectUsings.Count == 0) continue;
+            globalsByProject[project.Name] = project.ProjectUsings.Distinct().ToList();
+        }
+
+        foreach (var (file, scan) in ordered)
+        {
+            var key = file.ProjectName ?? "";
+            foreach (var u in scan.Usings.Where(u => u.IsGlobal))
+            {
+                if (!globalsByProject.TryGetValue(key, out var list))
+                    globalsByProject[key] = list = new List<UsingDirective>();
+                if (!list.Contains(u))
+                    list.Add(u);
+            }
+        }
+
+        var injectedByPath = new Dictionary<string, List<UsingDirective>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (file, scan) in ordered)
+        {
+            if (!globalsByProject.TryGetValue(file.ProjectName ?? "", out var globals))
+                continue;
+
+            List<UsingDirective>? injected = null;
+            foreach (var global in globals)
+            {
+                if (!scan.Usings.Contains(global))
+                {
+                    scan.Usings.Add(global);
+                    injected ??= new List<UsingDirective>();
+                    injected.Add(global);
+                }
+            }
+
+            if (injected is { Count: > 0 })
+                injectedByPath[file.Path] = injected;
+        }
+
+        return injectedByPath;
+    }
+
+    /// <summary>
+    /// Builds the interface closure using each declaration's own using directives.
+    /// This makes module-local ICommand/IQuery contracts resolve to the contract
+    /// imported by the file rather than to a same-named interface from another module.
+    /// </summary>
+    internal static Dictionary<string, List<string>> BuildInterfaceMap(
+        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan)> ordered,
+        TypeHierarchy hierarchy,
+        AnalysisResult result)
+    {
         var interfaceMap = new Dictionary<string, List<string>>(StringComparer.Ordinal);
         foreach (var (file, scan) in ordered)
         {
@@ -75,52 +143,23 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             }
         }
 
+        return interfaceMap;
+    }
+
+    internal static HashSet<string> BuildHandlerRoots(IReadOnlySet<string> handlerMarkers)
+    {
         var handlerRoots = new HashSet<string>(HandlerRoots, StringComparer.Ordinal);
         foreach (var marker in handlerMarkers)
             handlerRoots.Add(CSharpScanner.SimpleName(marker));
-
-        foreach (var (file, scan) in ordered)
-        {
-            CSharpScanner.ApplyScan(scan, file.Code, file.ProjectName, result, file.Path);
-            DiscoverMarkerRequests(scan, file, hierarchy, interfaceMap, markers, result);
-            DiscoverIndirectShapes(scan, file, hierarchy, handlerRoots, result);
-        }
-
-        EfCoreTextModelBuilder.Build(ordered, hierarchy, result);
+        return handlerRoots;
     }
 
-    private static void ApplyProjectGlobalUsings(
-        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan)> ordered)
-    {
-        var globalsByProject = ordered
-            .SelectMany(o => o.Scan.Usings
-                .Where(u => u.IsGlobal)
-                .Select(u => (Project: o.File.ProjectName ?? "", Using: u)))
-            .GroupBy(x => x.Project, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                g => g.Key,
-                g => g.Select(x => x.Using).Distinct().ToList(),
-                StringComparer.OrdinalIgnoreCase);
-
-        foreach (var (file, scan) in ordered)
-        {
-            if (!globalsByProject.TryGetValue(file.ProjectName ?? "", out var globals))
-                continue;
-
-            foreach (var global in globals)
-            {
-                if (!scan.Usings.Contains(global))
-                    scan.Usings.Add(global);
-            }
-        }
-    }
-
-    private static readonly HashSet<string> HandlerRoots = new(StringComparer.Ordinal)
+    internal static readonly HashSet<string> HandlerRoots = new(StringComparer.Ordinal)
     {
         "IRequestHandler",
     };
 
-    private static readonly HashSet<string> ValidatorRoots = new(StringComparer.Ordinal)
+    internal static readonly HashSet<string> ValidatorRoots = new(StringComparer.Ordinal)
     {
         "AbstractValidator",
         "IValidator",
@@ -350,7 +389,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         }
     }
 
-    private static void RecordRequestResolutionGap(
+    internal static void RecordRequestResolutionGap(
         AnalysisResult result,
         SourceFile file,
         int sourceIndex,
@@ -389,17 +428,17 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             file.ProjectName));
     }
 
-    private static bool LooksLikeHandlerContract(string simple)
+    internal static bool LooksLikeHandlerContract(string simple)
         => simple.Contains("CommandHandler", StringComparison.Ordinal) ||
            simple.Contains("QueryHandler", StringComparison.Ordinal) ||
            simple.Contains("RequestHandler", StringComparison.Ordinal);
 
-    private static bool LooksLikeValidatorContract(string simple)
+    internal static bool LooksLikeValidatorContract(string simple)
         => simple is "Validator" or "AbstractValidator" or "IValidator" ||
            simple.EndsWith("CommandValidator", StringComparison.Ordinal) ||
            simple.EndsWith("QueryValidator", StringComparison.Ordinal);
 
-    private static void RecordShapeResolutionGap(
+    internal static void RecordShapeResolutionGap(
         AnalysisResult result,
         SourceFile file,
         int sourceIndex,
@@ -432,7 +471,7 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
             file.ProjectName));
     }
 
-    private static void RecordAmbiguousContract(
+    internal static void RecordAmbiguousContract(
         AnalysisResult result,
         SourceFile file,
         int sourceIndex,
