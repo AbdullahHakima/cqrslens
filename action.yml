@@ -3,7 +3,7 @@ description: >-
   Statically scan a .NET solution (no build required) and generate an
   architecture report — project graph, Clean Architecture layers, CQRS map
   (requests, handlers, validators), pipeline behaviors, DbContexts, and
-  architecture checks — as Markdown or HTML with Mermaid diagrams.
+  architecture checks — as Markdown, HTML (Mermaid or pre-rendered SVG), or JSON.
 author: Abdullah Hakim
 branding:
   icon: search
@@ -19,9 +19,17 @@ inputs:
     required: false
     default: 'ARCHITECTURE.md'
   format:
-    description: 'Report format: md or html.'
+    description: 'Report format: md, html, or json.'
     required: false
     default: 'md'
+  render:
+    description: 'HTML diagram rendering mode override: empty (config/default), mermaid, or svg.'
+    required: false
+    default: ''
+  watermark:
+    description: 'Optional custom watermark text rendered in the console and embedded in generated reports.'
+    required: false
+    default: ''
   strict:
     description: Fail the step when architecture checks report any new error.
     required: false
@@ -61,7 +69,7 @@ inputs:
   version:
     description: CqrsLens NuGet tool version to install.
     required: false
-    default: '0.5.1'
+    default: '0.6.0'
 
 outputs:
   report-path:
@@ -95,6 +103,8 @@ runs:
         CQRSLENS_PATH: ${{ inputs.path }}
         CQRSLENS_OUTPUT: ${{ inputs.output }}
         CQRSLENS_FORMAT: ${{ inputs.format }}
+        CQRSLENS_RENDER: ${{ inputs.render }}
+        CQRSLENS_WATERMARK: ${{ inputs.watermark }}
         CQRSLENS_STRICT: ${{ inputs.strict }}
         CQRSLENS_MARKERS: ${{ inputs.markers }}
         CQRSLENS_HANDLER_MARKERS: ${{ inputs.handler-markers }}
@@ -108,6 +118,12 @@ runs:
         args=("$CQRSLENS_PATH" -o "$CQRSLENS_OUTPUT" --format "$CQRSLENS_FORMAT" \
           --ci-root "$GITHUB_WORKSPACE" \
           --summary "$CQRSLENS_SUMMARY")
+        if [ -n "$CQRSLENS_RENDER" ]; then
+          args+=(--render "$CQRSLENS_RENDER")
+        fi
+        if [ -n "$CQRSLENS_WATERMARK" ]; then
+          args+=(--watermark "$CQRSLENS_WATERMARK")
+        fi
         if [ "$CQRSLENS_STRICT" = "true" ]; then
           args+=(--strict)
         fi

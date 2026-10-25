@@ -2,6 +2,59 @@
 
 All notable changes to CqrsLens are documented here.
 
+## [Unreleased]
+
+## [0.6.0] - 2026-10-25
+
+### Added
+
+- **EF Core ER diagrams (#6)**: each discovered `DbContext` now builds an entity-relationship
+  model (`DbContextInfo.Entities` and `DbContextInfo.Relationships`) in both `text` and
+  `roslyn` modes and renders a Mermaid `erDiagram` in the Markdown and HTML reports.
+  `DbSet<T>` types act as roots; classes reached through navigation properties join the
+  model when a key can be established (`Id`, `<Entity>Id`, `[Key]`, or Fluent `HasKey`),
+  keeping value objects out of the diagram. Supports `[ForeignKey]`, `[InverseProperty]`,
+  `[Required]`, `[NotMapped]`/`[Ignore]`, and Fluent API calls (`HasKey`, `HasOne`/`HasMany`,
+  `WithOne`/`WithMany`, `HasForeignKey`, `IsRequired`) in `OnModelCreating` and
+  `IEntityTypeConfiguration<T>.Configure`. Ambiguous inverse navigations are reported as
+  `EfNavigationUnresolved` diagnostics instead of being paired by guesswork.
+- **Roslyn hardening and MSBuild `<Using>` evaluation (#1)**:
+  - `CsprojParser` now evaluates ancestor `Directory.Build.props`, `.csproj`, and
+    `Directory.Build.targets` files for `<Using Include="..." />` (including `Alias`,
+    `Static="true"`, and `<Using Remove="..." />`), `<PackageReference>`, and
+    `<ImplicitUsings>`.
+  - Project-level `<Using>` items and `.cs` `global using` directives are scoped per
+    project in both `text` and `roslyn` modes so `global using` directives in one
+    module never bleed into sibling projects, while `#line 1` mapping keeps Roslyn
+    source locations exact.
+  - `RoslynArchitectureScanner` now propagates `ViaMarker`, `ResponseType`, and request
+    `Kind` through inherited base-class interfaces (`QueryBase<T> : IQuery<T>`), binds
+    configured external `--markers` and `--handler-markers` even when their package
+    assembly is not in the runtime reference set, populates `ImportedNamespaces` on
+    handlers and validators for linker parity, and emits `AmbiguousContract` and
+    `UnresolvedContract` informational diagnostics matching text mode.
+- **Pre-rendered SVG diagrams (`--render svg`)**:
+  - New `MermaidSvgRenderer` compiles CqrsLens flowcharts (`ProjectGraph`, `LayerGraph`,
+    `CqrsMapSections`) and EF Core `erDiagram`s to deterministic, accessible inline
+    `<svg>` ahead of time.
+  - `--render mermaid|svg` on the CLI, `"render": "mermaid" | "svg"` in `.cqrslens.json`,
+    and the `render` GitHub Action input select between browser-rendered Mermaid (the
+    default) and zero-JavaScript, offline-ready inline SVG HTML reports.
+- **JSON architecture report (`--format json`)**:
+  - New `JsonReportGenerator` emits a deterministic, schema-versioned (`schemaVersion: 1`)
+    JSON document containing summary counts, projects, requests, handlers, validators,
+    pipeline behaviors, DbContexts (with entities, properties, and relationships),
+    architecture checks, and diagnostics.
+  - Supported via `--format json` or by passing a `.json` path to `-o`.
+- **Console ASCII artwork, TrueColor gradients, progress bar, and watermarks**:
+  - Zero-dependency `ConsoleArtwork` engine renders a 24-bit ANSI TrueColor gradient
+    CqrsLens ASCII art banner, live scan progress bar, and Unicode box-drawing summary
+    card on interactive terminals (`--banner`/`--no-banner`, `--color`/`--no-color`, and
+    automatic `NO_COLOR`/CI pipe fallback).
+  - Custom watermark support via `--watermark <TEXT>`, `"watermark"` in `.cqrslens.json`,
+    and the Action `watermark` input renders a 5-row block ASCII art watermark stamp in
+    the console and embeds watermarks in Markdown, HTML, and JSON reports.
+
 ## [0.5.1] - 2026-10-23
 
 ### Changed
