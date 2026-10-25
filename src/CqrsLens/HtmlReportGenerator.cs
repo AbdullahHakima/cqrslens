@@ -42,6 +42,13 @@ public static class HtmlReportGenerator
             $"{result.GeneratedAt.UtcDateTime:yyyy-MM-dd HH:mm:ss} UTC · " +
             $"{E(result.ScannerName)} scanner · Source: <code>{E(rootName)}</code></p>");
 
+        if (!string.IsNullOrWhiteSpace(result.Watermark))
+        {
+            var stamp = ConsoleArtwork.RenderWatermarkStamp(result.Watermark, useColor: false);
+            html.AppendLine($"<div class=\"watermark-overlay\" aria-hidden=\"true\">{E(result.Watermark)}</div>");
+            html.AppendLine($"<pre class=\"ascii-watermark\" aria-label=\"Watermark\">{E(stamp)}</pre>");
+        }
+
         // ---- Stat cards ------------------------------------------------------
         html.AppendLine("<section class=\"cards\">");
         AppendCard(html, "Projects", result.Projects.Count);
@@ -525,6 +532,8 @@ public static class HtmlReportGenerator
         code { background: #eceef1; padding: .1rem .3rem; border-radius: 4px; }
         hr { border: none; border-top: 1px solid #d6d9de; margin: 2rem 0 1rem; }
         a { color: #0b5fff; }
+        .watermark-overlay { position: fixed; inset: 0; pointer-events: none; z-index: 9999; display: flex; align-items: center; justify-content: center; font-size: clamp(2.5rem, 6vw, 5.5rem); font-weight: 900; letter-spacing: .18em; text-transform: uppercase; color: rgba(99, 102, 241, .06); transform: rotate(-24deg); user-select: none; white-space: nowrap; }
+        pre.ascii-watermark { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #38bdf8; border: 1px solid #312e81; border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .78rem; line-height: 1.15; overflow-x: auto; text-align: center; box-shadow: 0 4px 14px rgba(15, 23, 42, .12); }
         @media (prefers-color-scheme: dark) {
           body { background: #16181c; color: #e6e8eb; }
           .card, table, pre.mermaid, .svg-diagram { background: #1f2227; border-color: #3a3e45; }

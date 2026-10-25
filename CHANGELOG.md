@@ -44,6 +44,14 @@ All notable changes to CqrsLens are documented here.
     pipeline behaviors, DbContexts (with entities, properties, and relationships),
     architecture checks, and diagnostics.
   - Supported via `--format json` or by passing a `.json` path to `-o`.
+- **Console ASCII artwork, TrueColor gradients, progress bar, and watermarks**:
+  - Zero-dependency `ConsoleArtwork` engine renders a 24-bit ANSI TrueColor gradient
+    CqrsLens ASCII art banner, live scan progress bar, and Unicode box-drawing summary
+    card on interactive terminals (`--banner`/`--no-banner`, `--color`/`--no-color`, and
+    automatic `NO_COLOR`/CI pipe fallback).
+  - Custom watermark support via `--watermark <TEXT>`, `"watermark"` in `.cqrslens.json`,
+    and the Action `watermark` input renders a 5-row block ASCII art watermark stamp in
+    the console and embeds watermarks in Markdown, HTML, and JSON reports.
 
 ## [0.5.1] - 2026-10-23
 

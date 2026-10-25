@@ -20,6 +20,12 @@ public sealed class AnalysisOptions
 
     public DateTimeOffset? GeneratedAt { get; init; }
 
+    /// <summary>Optional custom watermark text rendered in console and generated reports.</summary>
+    public string? Watermark { get; init; }
+
+    /// <summary>Optional callback invoked with progress snapshots during scanning.</summary>
+    public Action<ScanProgress>? Progress { get; init; }
+
     /// <summary>Root-relative include globs; empty means include everything.</summary>
     public IReadOnlyList<string> Include { get; init; } = Array.Empty<string>();
 

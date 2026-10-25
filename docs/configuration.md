@@ -18,6 +18,7 @@ unknown key or invalid value fails with exit code `1` instead of being ignored.
   "$schema": "https://raw.githubusercontent.com/AbdullahHakima/cqrslens/main/cqrslens.schema.json",
   "analysis": "text",
   "render": "mermaid",
+  "watermark": "CONTOSO ARCHITECTURE",
   "markers": ["ICommand", "IQuery"],
   "handlerMarkers": ["ICommandHandler", "IQueryHandler"],
   "include": ["src/**"],
@@ -45,6 +46,7 @@ unknown key or invalid value fails with exit code `1` instead of being ignored.
 | --- | --- |
 | `analysis` | `text` (default) or `roslyn`. `--analysis` overrides it. |
 | `render` | `mermaid` (default, browser-rendered via Mermaid.js) or `svg` (pre-rendered inline SVG, zero JavaScript). `--render` overrides it. |
+| `watermark` | Optional custom watermark text rendered as block ASCII art in the console and embedded as a watermark stamp in Markdown, HTML, and JSON reports. `--watermark` overrides it. |
 | `markers` | Custom marker interfaces that count as request roots. `--markers` overrides the list. |
 | `handlerMarkers` | Custom handler-root interfaces for wrappers supplied by an external package. Source-declared wrappers are followed automatically. `--handler-markers` overrides the list. |
 | `include` | Optional root-relative globs. When present, only matching source files are scanned. |

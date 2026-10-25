@@ -70,6 +70,14 @@ public static class ReportGenerator
             $"{InlineText(result.ScannerName)} scanner · Source: {CodeSpan(rootName)}");
         md.AppendLine();
 
+        if (!string.IsNullOrWhiteSpace(result.Watermark))
+        {
+            md.AppendLine("```text");
+            md.AppendLine(ConsoleArtwork.RenderWatermarkStamp(result.Watermark, useColor: false));
+            md.AppendLine("```");
+            md.AppendLine();
+        }
+
         // ---- Overview ------------------------------------------------------
         md.AppendLine("## Overview");
         md.AppendLine();

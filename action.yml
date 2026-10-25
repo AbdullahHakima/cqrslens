@@ -26,6 +26,10 @@ inputs:
     description: 'HTML diagram rendering mode override: empty (config/default), mermaid, or svg.'
     required: false
     default: ''
+  watermark:
+    description: 'Optional custom watermark text rendered in the console and embedded in generated reports.'
+    required: false
+    default: ''
   strict:
     description: Fail the step when architecture checks report any new error.
     required: false
@@ -100,6 +104,7 @@ runs:
         CQRSLENS_OUTPUT: ${{ inputs.output }}
         CQRSLENS_FORMAT: ${{ inputs.format }}
         CQRSLENS_RENDER: ${{ inputs.render }}
+        CQRSLENS_WATERMARK: ${{ inputs.watermark }}
         CQRSLENS_STRICT: ${{ inputs.strict }}
         CQRSLENS_MARKERS: ${{ inputs.markers }}
         CQRSLENS_HANDLER_MARKERS: ${{ inputs.handler-markers }}
@@ -115,6 +120,9 @@ runs:
           --summary "$CQRSLENS_SUMMARY")
         if [ -n "$CQRSLENS_RENDER" ]; then
           args+=(--render "$CQRSLENS_RENDER")
+        fi
+        if [ -n "$CQRSLENS_WATERMARK" ]; then
+          args+=(--watermark "$CQRSLENS_WATERMARK")
         fi
         if [ "$CQRSLENS_STRICT" = "true" ]; then
           args+=(--strict)

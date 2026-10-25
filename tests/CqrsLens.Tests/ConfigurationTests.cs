@@ -316,4 +316,31 @@ public class ConfigurationTests : IDisposable
         Assert.False(filter.IsIncluded("tests/App/Order.cs"));
         Assert.False(filter.IsIncluded("src/App/Generated/Order.cs"));
     }
+
+    [Fact]
+    public void ConfigWatermark_EmbedsWatermarkAndCliOverridesIt()
+    {
+        WriteFile("Features/PingQuery.cs", """
+            namespace App.Features;
+            public sealed record PingQuery : IRequest<int>;
+            public sealed class PingQueryHandler : IRequestHandler<PingQuery, int> { }
+            """);
+        WriteConfig("""
+            {
+              "watermark": "CONFIG STAMP"
+            }
+            """);
+
+        var mdOutput = Path.Combine(_root, "report.md");
+        var result = Run(new[] { _root, "-o", mdOutput });
+        Assert.Equal(ExitCodes.Success, result.Code);
+        Assert.Contains("◈ WATERMARK · CONFIG STAMP ◈", File.ReadAllText(mdOutput));
+
+        var overrideOutput = Path.Combine(_root, "override.md");
+        var overrideResult = Run(new[] { _root, "-o", overrideOutput, "--watermark", "CLI STAMP" });
+        Assert.Equal(ExitCodes.Success, overrideResult.Code);
+        var overrideMd = File.ReadAllText(overrideOutput);
+        Assert.Contains("◈ WATERMARK · CLI STAMP ◈", overrideMd);
+        Assert.DoesNotContain("CONFIG STAMP", overrideMd);
+    }
 }

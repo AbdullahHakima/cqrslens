@@ -20,6 +20,11 @@
       "enum": ["mermaid", "svg"],
       "description": "HTML diagram rendering mode: mermaid (default, browser-rendered via Mermaid.js) or svg (pre-rendered inline SVG, zero JavaScript)."
     },
+    "watermark": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional custom watermark text rendered as ASCII art in the console and embedded as a watermark stamp in generated reports."
+    },
     "markers": {
       "type": "array",
       "items": {

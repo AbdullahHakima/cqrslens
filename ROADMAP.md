@@ -5,7 +5,7 @@ where they exist; the dates are not promises.
 
 ## In progress
 
-**Visualization quality, Roslyn hardening, zero-JS SVG reports, and JSON output**
+**Visualization quality, Roslyn hardening, zero-JS SVG reports, JSON output, and Console ASCII artwork**
 
 - Bounded, role-prefixed Mermaid diagrams with GitHub-safe entities and escaped
   table cells; CQRS maps split at 15 requests and balanced by project
@@ -27,8 +27,17 @@ where they exist; the dates are not promises.
   projects, requests, handlers, validators, behaviors, DbContexts (with entities
   and relationships), checks, and diagnostics for external dashboards and custom
   tooling
+- **Console ASCII artwork, TrueColor gradients, live progress, and watermarks**:
+  24-bit ANSI TrueColor ASCII banner, live progress bar, Unicode box-drawing
+  summary card, and custom `--watermark` block ASCII art stamps in console and
+  Markdown/HTML/JSON reports
 
 ## Done
+
+**0.5.1** (October 2026)
+
+- Primary-constructor `DbContext` support in text mode (#66)
+- Hardened Mermaid diagrams for GitHub rendering (#67)
 
 **0.5.0** (October 2026)
 
@@ -93,7 +102,6 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- Colored console output and a progress line while scanning
 - More mediators: Mediator (martinothamar) and Wolverine conventions
 
 ## After that

@@ -348,6 +348,9 @@ public sealed class AnalysisResult
     /// <summary>One timestamp shared by every report artifact.</summary>
     public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
 
+    /// <summary>Optional custom watermark stamp rendered in console and generated reports.</summary>
+    public string? Watermark { get; set; }
+
     /// <summary>
     /// Strict architecture errors are trustworthy only when scanning completed and
     /// linking was unambiguous. Incomplete scans are reported as diagnostics.

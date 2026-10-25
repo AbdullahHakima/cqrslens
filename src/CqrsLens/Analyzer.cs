@@ -63,8 +63,10 @@ public static class Analyzer
                 var name => name,
             },
             GeneratedAt = options.GeneratedAt ?? DateTimeOffset.UtcNow,
+            Watermark = string.IsNullOrWhiteSpace(options.Watermark) ? null : options.Watermark.Trim(),
         };
 
+        options.Progress?.Invoke(new ScanProgress("Discovering projects", 0, 4));
         result.Projects.AddRange(CsprojParser.LoadProjects(root));
         foreach (var project in result.Projects)
         {
@@ -73,6 +75,7 @@ public static class Analyzer
                 : LayerClassifier.Classify(project.Name, project.DirectoryPath, root);
         }
 
+        options.Progress?.Invoke(new ScanProgress("Reading source files", 1, 4, $"{result.Projects.Count} project(s)"));
         var pathFilter = new SourcePathFilter(options.Include, options.Exclude);
         var files = CsprojParser.FindSourceFiles(root)
             .Where(file => pathFilter.IsIncluded(
@@ -106,6 +109,7 @@ public static class Analyzer
                 FindOwningProject(result.Projects, f.File)?.Name))
             .ToList();
 
+        options.Progress?.Invoke(new ScanProgress("Analyzing C# shapes", 2, 4, $"{sourceFiles.Count} file(s) · {result.ScannerName}"));
         scanner.Scan(sourceFiles, markerSet, options.HandlerMarkers, result);
         result.SkippedFiles.Sort(StringComparer.OrdinalIgnoreCase);
         result.FileCount = Math.Max(0, result.DiscoveredFileCount - result.SkippedFiles.Count);
@@ -122,11 +126,13 @@ public static class Analyzer
                 project?.Name));
         }
 
+        options.Progress?.Invoke(new ScanProgress("Linking CQRS & checks", 3, 4, $"{result.Requests.Count} request(s)"));
         Link(result);
         result.Checks.AddRange(ArchitectureChecker.ApplyRuleSeverities(
             ArchitectureChecker.RunChecks(result),
             options.RuleSeverities));
 
+        options.Progress?.Invoke(new ScanProgress("Scan complete", 4, 4, $"{result.Requests.Count} request(s), {result.Handlers.Count} handler(s)"));
         stopwatch.Stop();
         result.ElapsedMilliseconds = options.GeneratedAt is null
             ? stopwatch.ElapsedMilliseconds

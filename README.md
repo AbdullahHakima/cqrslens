@@ -104,6 +104,7 @@ root (`--config FILE` selects another file):
   "$schema": "https://raw.githubusercontent.com/AbdullahHakima/cqrslens/main/cqrslens.schema.json",
   "analysis": "text",
   "render": "mermaid",
+  "watermark": "CONTOSO ARCHITECTURE",
   "markers": ["ICommand", "IQuery"],
   "include": ["src/**"],
   "exclude": ["**/Migrations/**", "**/Generated/**"],
@@ -118,6 +119,16 @@ or `error` for any architecture rule. Unknown keys and invalid values are usage
 errors. Explicit `--analysis`, `--render`, `--markers` and `--handler-markers`
 flags override the config values. See [`docs/configuration.md`](docs/configuration.md)
 for the full reference.
+
+### Console ASCII artwork, TrueColor gradients & watermarks
+
+Interactive terminal runs render a 24-bit ANSI TrueColor gradient **CqrsLens** ASCII art banner, a live progress bar while scanning, and a Unicode box-drawing summary card (`--banner` / `--no-banner` and `--color` / `--no-color` control this explicitly, and `NO_COLOR` or redirected CI pipes automatically fall back to clean plain text).
+
+Pass `--watermark "ACME CORP"` (or `"watermark": "ACME CORP"` in `.cqrslens.json`) to render a custom 5-row block ASCII art watermark stamp in the console and embed the watermark across Markdown (`ARCHITECTURE.md`), HTML (`ARCHITECTURE.html` with both a floating watermark overlay and an ASCII art header card), and JSON (`ARCHITECTURE.json`) reports:
+
+```bash
+cqrslens <path> --watermark "ACME CORP" -o ARCHITECTURE.html --render svg
+```
 
 ### Custom marker interfaces
 
@@ -203,6 +214,7 @@ permissions:
     output: ARCHITECTURE.md
     format: md                   # md, html, or json
     render: ''                   # mermaid, svg, or empty to use config/default
+    watermark: ''                # optional custom watermark stamp for console & reports
     strict: 'true'               # fail on errors (new-only with a baseline)
     config: .cqrslens.json       # optional, or auto-discovered at path
     baseline: cqrslens-baseline.json

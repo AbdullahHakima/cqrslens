@@ -146,6 +146,7 @@ public class CliTests : IDisposable
     [InlineData("--sarif")]
     [InlineData("--summary")]
     [InlineData("--ci-root")]
+    [InlineData("--watermark")]
     public void OptionWithoutValue_IsUsageError(string option)
     {
         var result = Run(new[] { option });
@@ -387,5 +388,74 @@ public class CliTests : IDisposable
         Assert.Equal(
             new[] { "ICommandHandler", "IQueryHandler" },
             options.HandlerMarkers.OrderBy(m => m));
+    }
+
+    [Fact]
+    public void BannerAndTrueColor_RenderAsciiLogoAndSummaryCard()
+    {
+        WriteValidFixture();
+        var output = Path.Combine(_root, "ARCHITECTURE.md");
+
+        var colored = Run(new[] { _root, "-o", output, "--banner", "--color" });
+        Assert.Equal(ExitCodes.Success, colored.Code);
+        Assert.Contains("Static CQRS & Clean Architecture Lens", colored.Stdout);
+        Assert.Contains("CqrsLens Architecture Summary", colored.Stdout);
+        Assert.Contains("\x1b[38;2;", colored.Stdout);
+
+        var noColor = Run(new[] { _root, "-o", output, "--banner", "--no-color" });
+        Assert.Equal(ExitCodes.Success, noColor.Code);
+        Assert.Contains("██████╗", noColor.Stdout);
+        Assert.Contains("╭─", noColor.Stdout);
+        Assert.DoesNotContain("\x1b[38;2;", noColor.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WatermarkOption_RendersAsciiStampInConsoleAndReports()
+    {
+        WriteValidFixture();
+        var mdOut = Path.Combine(_root, "ARCHITECTURE.md");
+        var htmlOut = Path.Combine(_root, "ARCHITECTURE.html");
+        var jsonOut = Path.Combine(_root, "ARCHITECTURE.json");
+
+        var mdRun = Run(new[] { _root, "-o", mdOut, "--watermark", "ACME CORP", "--no-color" });
+        Assert.Equal(ExitCodes.Success, mdRun.Code);
+        Assert.Contains("◈ WATERMARK · ACME CORP ◈", mdRun.Stdout);
+        var md = File.ReadAllText(mdOut);
+        Assert.Contains("◈ WATERMARK · ACME CORP ◈", md);
+        Assert.Contains("╔═", md);
+
+        var htmlRun = Run(new[] { _root, "-o", htmlOut, "--watermark", "ACME CORP" });
+        Assert.Equal(ExitCodes.Success, htmlRun.Code);
+        var html = File.ReadAllText(htmlOut);
+        Assert.Contains("<div class=\"watermark-overlay\" aria-hidden=\"true\">ACME CORP</div>", html);
+        Assert.Contains("<pre class=\"ascii-watermark\" aria-label=\"Watermark\">", html);
+        Assert.Contains("◈ WATERMARK &#183; ACME CORP ◈", html);
+
+        var jsonRun = Run(new[] { _root, "-o", jsonOut, "--watermark", "ACME CORP" });
+        Assert.Equal(ExitCodes.Success, jsonRun.Code);
+        using var doc = JsonDocument.Parse(File.ReadAllText(jsonOut));
+        Assert.Equal("ACME CORP", doc.RootElement.GetProperty("watermark").GetString());
+    }
+
+    [Fact]
+    public void EmptyWatermark_IsUsageError()
+    {
+        var result = Run(new[] { _root, "--watermark", "   " });
+
+        Assert.Equal(ExitCodes.Usage, result.Code);
+        Assert.Contains("--watermark cannot be empty", result.Stderr);
+    }
+
+    [Fact]
+    public void ProgressBar_FormatsDeterministicAsciiAndColoredBars()
+    {
+        var progress = new ScanProgress("Analyzing C# shapes", 2, 4, "text");
+        var plain = ConsoleArtwork.FormatProgressBar(progress, useColor: false, barWidth: 20);
+        Assert.Contains("[██████████░░░░░░░░░░]  50% · Analyzing C# shapes (text)", plain);
+        Assert.DoesNotContain("\x1b[", plain, StringComparison.Ordinal);
+
+        var colored = ConsoleArtwork.FormatProgressBar(progress, useColor: true, barWidth: 20);
+        Assert.Contains("\x1b[38;2;", colored);
+        Assert.Contains("50%", colored);
     }
 }

@@ -24,6 +24,10 @@ public sealed class CliOptions
     public HashSet<string> Markers { get; } = new(StringComparer.Ordinal);
     public bool HandlerMarkersSpecified { get; set; }
     public HashSet<string> HandlerMarkers { get; } = new(StringComparer.Ordinal);
+    public string? Watermark { get; set; }
+    public bool WatermarkSpecified { get; set; }
+    public bool? Banner { get; set; }
+    public bool? Color { get; set; }
 }
 
 public enum CliCommandKind
@@ -149,6 +153,27 @@ public static class CliParser
                     break;
                 case "--strict":
                     options.Strict = true;
+                    break;
+                case "--watermark":
+                    if (i + 1 >= args.Length)
+                        return Error("error: --watermark needs a value, e.g. --watermark \"ACME CORP\"");
+                    var wm = args[++i];
+                    if (string.IsNullOrWhiteSpace(wm))
+                        return Error("error: --watermark cannot be empty.");
+                    options.Watermark = wm.Trim();
+                    options.WatermarkSpecified = true;
+                    break;
+                case "--banner":
+                    options.Banner = true;
+                    break;
+                case "--no-banner":
+                    options.Banner = false;
+                    break;
+                case "--color":
+                    options.Color = true;
+                    break;
+                case "--no-color":
+                    options.Color = false;
                     break;
                 default:
                     if (args[i].StartsWith('-'))
@@ -281,6 +306,47 @@ public static class CliRunner
         var handlerMarkers = options.HandlerMarkersSpecified
             ? options.HandlerMarkers
             : settings.HandlerMarkers;
+        var watermark = options.WatermarkSpecified
+            ? options.Watermark
+            : settings.Watermark;
+
+        var useColor = ConsoleArtwork.ShouldUseColor(stdout, options.Color);
+        var showBanner = ConsoleArtwork.ShouldShowBanner(stdout, options.Banner, options.GitHubAnnotations);
+        var isInteractiveConsole = ReferenceEquals(stdout, Console.Out) &&
+                                   !Console.IsOutputRedirected &&
+                                   !options.GitHubAnnotations;
+
+        if (showBanner)
+        {
+            stdout.WriteLine(ConsoleArtwork.RenderLogoBanner(ToolInfo.Version, useColor));
+            if (!string.IsNullOrWhiteSpace(watermark))
+            {
+                stdout.WriteLine(ConsoleArtwork.RenderWatermarkStamp(watermark, useColor));
+                stdout.WriteLine();
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(watermark) &&
+                 options.WatermarkSpecified &&
+                 options.Banner != false &&
+                 !options.GitHubAnnotations)
+        {
+            stdout.WriteLine(ConsoleArtwork.RenderWatermarkStamp(watermark, useColor));
+            stdout.WriteLine();
+        }
+
+        var lastProgressLen = 0;
+        Action<ScanProgress>? progressCallback = null;
+        if (isInteractiveConsole)
+        {
+            progressCallback = progress =>
+            {
+                var line = ConsoleArtwork.FormatProgressBar(progress, useColor);
+                var pad = Math.Max(0, lastProgressLen - line.Length);
+                lastProgressLen = line.Length;
+                stdout.Write("\r" + line + new string(' ', pad));
+                stdout.Flush();
+            };
+        }
 
         var result = Analyzer.Analyze(
             path,
@@ -290,11 +356,19 @@ public static class CliRunner
                 Markers = markers,
                 HandlerMarkers = handlerMarkers,
                 GeneratedAt = options.GeneratedAt,
+                Watermark = watermark,
+                Progress = progressCallback,
                 Include = settings.Include,
                 Exclude = settings.Exclude,
                 LayerOverrides = settings.LayerOverrides,
                 RuleSeverities = settings.RuleSeverities,
             });
+
+        if (isInteractiveConsole && lastProgressLen > 0)
+        {
+            stdout.Write("\r" + new string(' ', lastProgressLen) + "\r");
+            stdout.Flush();
+        }
 
         var isHtml = options.Format == "html" ||
                      (options.Format is null &&
@@ -389,6 +463,12 @@ public static class CliRunner
         if (options.GitHubAnnotations)
             GitHubAnnotations.Write(result, stdout, ciRoot);
 
+        if (showBanner)
+        {
+            stdout.WriteLine(ConsoleArtwork.RenderSummaryCard(result, fullOutput, useColor));
+            stdout.WriteLine();
+        }
+
         stdout.WriteLine($"Scanned {result.Projects.Count} project(s): " +
                          $"{result.Requests.Count} request(s), {result.Handlers.Count} handler(s), " +
                          $"{result.Validators.Count} validator(s), {result.Behaviors.Count} behavior(s), " +
@@ -455,14 +535,20 @@ public static class CliRunner
 
     public static void WriteUsage(TextWriter writer)
     {
+        if (ConsoleArtwork.ShouldShowBanner(writer, null, false))
+        {
+            var useColor = ConsoleArtwork.ShouldUseColor(writer, null);
+            writer.WriteLine(ConsoleArtwork.RenderLogoBanner(ToolInfo.Version, useColor));
+        }
+
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--watermark TEXT] [--banner|--no-banner] [--color|--no-color] [--baseline FILE] [--write-baseline FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (.html or .json) in the current directory.");
         writer.WriteLine("  --config      Config file. Default: <path>/.cqrslens.json when present.");
-        writer.WriteLine("                Settings: analysis, render, markers, handlerMarkers, include/exclude globs, layers, rules.");
+        writer.WriteLine("                Settings: analysis, render, watermark, markers, handlerMarkers, include/exclude globs, layers, rules.");
         writer.WriteLine("  --format      Report format: md (default), html, or json. A .html or .json -o path implies that format.");
         writer.WriteLine("  --render      HTML diagram rendering: mermaid (default) or svg (zero-JS inline SVG).");
         writer.WriteLine("  --analysis    Analysis backend: text (default) or roslyn (opt-in).");
@@ -474,6 +560,12 @@ public static class CliRunner
         writer.WriteLine("  --handler-markers  Comma-separated custom handler roots for external wrappers");
         writer.WriteLine("                (e.g. ICommandHandler,IQueryHandler). Source-declared wrappers");
         writer.WriteLine("                are followed automatically.");
+        writer.WriteLine("  --watermark   Custom watermark text rendered as block ASCII art in the console");
+        writer.WriteLine("                and embedded as a watermark stamp in Markdown, HTML, and JSON reports.");
+        writer.WriteLine("  --banner      Force rendering the ASCII art logo banner and summary card.");
+        writer.WriteLine("  --no-banner   Suppress the ASCII art logo banner and summary card.");
+        writer.WriteLine("  --color       Force ANSI 24-bit TrueColor gradients in console output.");
+        writer.WriteLine("  --no-color    Disable ANSI colors in console output (also respects NO_COLOR).");
         writer.WriteLine("  --baseline    Compare checks with a baseline file; --strict then fails only");
         writer.WriteLine("                on errors not present in the baseline.");
         writer.WriteLine("  --write-baseline  Record current checks as the baseline, then continue.");
