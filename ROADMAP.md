@@ -5,7 +5,7 @@ where they exist; the dates are not promises.
 
 ## In progress
 
-**Visualization quality and Roslyn hardening**
+**Visualization quality, Roslyn hardening, and zero-JS SVG reports**
 
 - Bounded, role-prefixed Mermaid diagrams with GitHub-safe entities and escaped
   table cells; CQRS maps split at 15 requests and balanced by project
@@ -20,8 +20,9 @@ where they exist; the dates are not promises.
   `global using` isolation, base-class interface/response propagation, configured
   external `--markers` / `--handler-markers`, and `AmbiguousContract` /
   `UnresolvedContract` diagnostic parity across text and Roslyn modes
-- Non-gating Mermaid parser/render check; a fully pre-rendered SVG mode remains
-  a follow-up (see below)
+- **Pre-rendered SVG diagrams**: `--render svg` and `"render": "svg"` compile
+  every flowchart and ER diagram to deterministic inline `<svg>` ahead of time
+  so HTML reports require zero JavaScript and work completely offline
 
 ## Done
 
@@ -88,14 +89,11 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- **Pre-rendered SVG diagrams**: diagrams compiled to SVG ahead of time
-  so the HTML report needs no JavaScript. The HTML generator already
-  isolates rendering behind one method for this.
+- `--format json` output for external dashboards and custom tooling
+- Colored console output and a progress line while scanning
 
 ## After that
 
-- `--format json` output for external dashboards and custom tooling
-- Colored console output and a progress line while scanning
 - More mediators: Mediator (martinothamar) and Wolverine conventions
 - GitHub Action mode that comments the architecture diff on a pull request
 

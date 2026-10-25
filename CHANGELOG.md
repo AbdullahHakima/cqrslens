@@ -31,6 +31,13 @@ All notable changes to CqrsLens are documented here.
     assembly is not in the runtime reference set, populates `ImportedNamespaces` on
     handlers and validators for linker parity, and emits `AmbiguousContract` and
     `UnresolvedContract` informational diagnostics matching text mode.
+- **Pre-rendered SVG diagrams (`--render svg`)**:
+  - New `MermaidSvgRenderer` compiles CqrsLens flowcharts (`ProjectGraph`, `LayerGraph`,
+    `CqrsMapSections`) and EF Core `erDiagram`s to deterministic, accessible inline
+    `<svg>` ahead of time.
+  - `--render mermaid|svg` on the CLI, `"render": "mermaid" | "svg"` in `.cqrslens.json`,
+    and the `render` GitHub Action input select between browser-rendered Mermaid (the
+    default) and zero-JavaScript, offline-ready inline SVG HTML reports.
 
 ### Changed
 

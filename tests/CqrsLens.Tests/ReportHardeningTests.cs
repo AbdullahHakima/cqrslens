@@ -396,6 +396,133 @@ public class ReportHardeningTests
         Assert.Contains("A&lt;B&gt;.cs", html);
     }
 
+    [Fact]
+    public void RenderDiagram_SupportsBothMermaidAndSvgModes()
+    {
+        Assert.Equal(
+            "<pre class=\"mermaid\">A --&gt; B</pre>",
+            HtmlReportGenerator.RenderDiagram("A --> B"));
+
+        var svg = HtmlReportGenerator.RenderDiagram("A --> B", DiagramRenderMode.Svg);
+        Assert.StartsWith("<div class=\"svg-diagram\"><svg ", svg);
+        Assert.Contains("data-id=\"A\"", svg);
+        Assert.Contains("data-id=\"B\"", svg);
+        Assert.Contains("data-source=\"A\" data-target=\"B\"", svg);
+        Assert.EndsWith("</svg></div>", svg);
+    }
+
+    [Fact]
+    public void Html_SvgRenderMode_EmitsZeroJavaScriptAndInlineSvgsForAllDiagrams()
+    {
+        var result = new AnalysisResult
+        {
+            RootPath = Path.Combine(Path.GetTempPath(), "cqrslens-svg"),
+            GeneratedAt = new DateTimeOffset(2026, 2, 3, 4, 5, 6, TimeSpan.Zero),
+            ScannerName = "text",
+        };
+
+        var domain = new ProjectInfo
+        {
+            Name = "Shop.Domain",
+            FilePath = "/tmp/Shop.Domain.csproj",
+            DirectoryPath = "/tmp/Shop.Domain",
+            Layer = "Domain",
+        };
+        var app = new ProjectInfo
+        {
+            Name = "Shop.Application",
+            FilePath = "/tmp/Shop.Application.csproj",
+            DirectoryPath = "/tmp/Shop.Application",
+            Layer = "Application",
+        };
+        app.ReferenceNames.Add("Shop.Domain");
+        domain.ReferenceNames.Add("Shop.Application");
+        result.Projects.Add(domain);
+        result.Projects.Add(app);
+        result.Checks.Add(new CheckFinding(
+            CheckSeverity.Error,
+            ArchitectureChecker.LayerViolationCode,
+            "Domain references Application.",
+            Target: "Shop.Domain -> Shop.Application"));
+
+        var cmd = new CqrsRequest
+        {
+            Name = "PlaceOrderCommand",
+            Namespace = "Shop.Application",
+            ProjectName = "Shop.Application",
+            ResponseType = "Guid",
+        };
+        cmd.Handlers.Add("Shop.Application.PlaceOrderHandler");
+        cmd.Validators.Add("Shop.Application.PlaceOrderValidator");
+        result.Requests.Add(cmd);
+
+        var db = new DbContextInfo
+        {
+            Name = "ShopDbContext",
+            Namespace = "Shop.Infrastructure",
+            ProjectName = "Shop.Application",
+        };
+        db.DbSets.Add(new DbSetInfo("Order", "Orders"));
+        var customer = new EntityInfo
+        {
+            Name = "Customer",
+            Namespace = "Shop.Domain",
+        };
+        customer.Properties.Add(new EntityPropertyInfo { Name = "Id", Type = "int", IsKey = true });
+        var order = new EntityInfo
+        {
+            Name = "Order",
+            Namespace = "Shop.Domain",
+        };
+        order.Properties.Add(new EntityPropertyInfo { Name = "Id", Type = "int", IsKey = true });
+        order.Properties.Add(new EntityPropertyInfo { Name = "CustomerId", Type = "int", IsForeignKey = true });
+        db.Entities.Add(customer);
+        db.Entities.Add(order);
+        db.Relationships.Add(new EntityRelationshipInfo(
+            "Shop.Domain.Customer",
+            "Shop.Domain.Order",
+            PrincipalNavigation: "Orders",
+            DependentNavigation: "Customer",
+            ForeignKey: "CustomerId",
+            IsRequired: true,
+            Kind: EntityRelationshipKind.OneToMany));
+        result.DbContexts.Add(db);
+
+        var html = HtmlReportGenerator.Generate(result, DiagramRenderMode.Svg);
+        var secondHtml = HtmlReportGenerator.Generate(result, DiagramRenderMode.Svg);
+
+        Assert.Equal(html, secondHtml);
+        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("mermaid.min.js", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("<pre class=\"mermaid\">", html, StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(4, Regex.Count(html, "<div class=\"svg-diagram\"><svg "));
+        Assert.Contains("<title>Project dependency graph</title>", html);
+        Assert.Contains("<title>Layer diagram</title>", html);
+        Assert.Contains("<title>CQRS map</title>", html);
+        Assert.Contains("<title>ShopDbContext ER diagram</title>", html);
+        Assert.Contains("PlaceOrderCommand", html);
+        Assert.Contains("PlaceOrderHandler", html);
+        Assert.Contains("PlaceOrderValidator", html);
+        Assert.Contains(">violates<", html);
+        Assert.Contains(">validates<", html);
+        Assert.Contains("Orders / Customer (1..*)", html);
+        Assert.Contains(">int Id<", html);
+        Assert.Contains(">PK<", html);
+        Assert.Contains(">FK<", html);
+    }
+
+    [Fact]
+    public void Html_SvgRenderMode_DecodesMermaidEntitiesAndXmlEscapesUserLabelsOnce()
+    {
+        var result = FixedResult("A<B>&\"C\"#quot;<script>");
+
+        var html = HtmlReportGenerator.Generate(result, DiagramRenderMode.Svg);
+
+        Assert.DoesNotContain("<script>", html, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("A&lt;B&gt;&amp;&quot;C&quot;#quot;&lt;script&gt;", html);
+    }
+
     private static CqrsRequest Request(string name, string project)
         => new()
         {

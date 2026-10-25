@@ -73,6 +73,7 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, result.Code);
         Assert.Contains("Usage: cqrslens", result.Stdout);
+        Assert.Contains("--render", result.Stdout);
         Assert.Contains("--handler-markers", result.Stdout);
         Assert.Contains("--version", result.Stdout);
     }
@@ -133,6 +134,7 @@ public class CliTests : IDisposable
     [InlineData("-o")]
     [InlineData("--output")]
     [InlineData("--format")]
+    [InlineData("--render")]
     [InlineData("--config")]
     [InlineData("--analysis")]
     [InlineData("--markers")]
@@ -166,6 +168,30 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Usage, result.Code);
         Assert.Contains("unknown format 'pdf'", result.Stderr);
+    }
+
+    [Fact]
+    public void UnknownRenderMode_IsRejected()
+    {
+        var result = Run(new[] { _root, "--render", "canvas" });
+
+        Assert.Equal(ExitCodes.Usage, result.Code);
+        Assert.Contains("unknown render mode 'canvas'", result.Stderr);
+    }
+
+    [Fact]
+    public void SvgRenderMode_ProducesZeroJsHtmlReport()
+    {
+        WriteValidFixture();
+        var output = Path.Combine(_root, "report.html");
+
+        var result = Run(new[] { _root, "-o", output, "--render", "svg" });
+
+        Assert.Equal(ExitCodes.Success, result.Code);
+        var html = File.ReadAllText(output);
+        Assert.Contains("<div class=\"svg-diagram\"><svg ", html);
+        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("mermaid.min.js", html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -318,7 +344,7 @@ public class CliTests : IDisposable
     {
         var command = CliParser.Parse(new[]
         {
-            "src", "-o", "out.html", "--format", "HTML", "--analysis", "roslyn",
+            "src", "-o", "out.html", "--format", "HTML", "--render", "SVG", "--analysis", "roslyn",
             "--markers", "ICommand, App.IQuery",
             "--handler-markers", "ICommandHandler, App.IQueryHandler", "--strict",
         });
@@ -328,6 +354,8 @@ public class CliTests : IDisposable
         Assert.Equal("src", options.Path);
         Assert.Equal("out.html", options.Output);
         Assert.Equal("html", options.Format);
+        Assert.Equal(DiagramRenderMode.Svg, options.RenderMode);
+        Assert.True(options.RenderModeSpecified);
         Assert.Equal(AnalysisMode.Roslyn, options.AnalysisMode);
         Assert.True(options.Strict);
         Assert.Equal(new[] { "ICommand", "IQuery" }, options.Markers.OrderBy(m => m));
