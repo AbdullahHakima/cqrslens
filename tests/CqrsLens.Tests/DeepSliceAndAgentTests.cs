@@ -340,4 +340,94 @@ public class DeepSliceAndAgentTests
         Assert.Contains("PingQuery", content);
         Assert.Contains("`Echo: string`", content);
     }
+
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void DeepSliceAnalyzer_HandlesEndpointGroupMethodsConstRoutesAndGetterOnlyProperties(AnalysisMode mode)
+    {
+        using var dir = new TempDir();
+        dir.Write("App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+        dir.Write("RealWorldPatterns.cs", """
+            namespace MediatR
+            {
+                public interface IRequest<out TResponse> { }
+                public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse> { }
+            }
+            namespace FastEndpoints
+            {
+                public abstract class Endpoint<TRequest>
+                {
+                    protected void Post(string route) { }
+                }
+            }
+            namespace App
+            {
+                using MediatR;
+                using FastEndpoints;
+
+                public class AcceptProposalCommand : IRequest<int>
+                {
+                    public AcceptProposalCommand(System.Guid proposalId)
+                    {
+                        ProposalId = proposalId;
+                    }
+
+                    internal System.Guid ProposalId { get; }
+                }
+
+                public class AcceptProposalHandler : IRequestHandler<AcceptProposalCommand, int> { }
+
+                public class CreateContributorCommand : IRequest<int>
+                {
+                    public string Name { get; } = "";
+                }
+
+                public class CreateContributorHandler : IRequestHandler<CreateContributorCommand, int> { }
+
+                public class CreateContributorRequest
+                {
+                    public const string Route = "/Contributors";
+                }
+
+                public class CreateContributorEndpoint : Endpoint<CreateContributorRequest>
+                {
+                    public void Configure()
+                    {
+                        Post(CreateContributorRequest.Route);
+                    }
+
+                    public void Handle()
+                    {
+                        var cmd = new CreateContributorCommand();
+                    }
+                }
+
+                public class Proposals
+                {
+                    public static void Map(GroupBuilder groupBuilder)
+                    {
+                        groupBuilder.MapPatch(AcceptProposal, "{id}/accept");
+                    }
+
+                    public static int AcceptProposal(AcceptProposalCommand command) => 1;
+                }
+
+                public class GroupBuilder
+                {
+                    public void MapPatch(System.Func<AcceptProposalCommand, int> handler, string route) { }
+                }
+            }
+            """);
+
+        var result = Analyzer.Analyze(dir.Path, mode);
+
+        var acceptCmd = Assert.Single(result.Requests, r => r.Name == "AcceptProposalCommand");
+        Assert.Contains(acceptCmd.Properties, p => p.Name == "ProposalId" && p.Type == "System.Guid");
+        Assert.Contains("PATCH /api/Proposals/{id}/accept", acceptCmd.Entrypoints);
+
+        var createContributorCmd = Assert.Single(result.Requests, r => r.Name == "CreateContributorCommand");
+        Assert.Contains(createContributorCmd.Properties, p => p.Name == "Name" && p.Type == "string");
+        Assert.Contains("POST /Contributors", createContributorCmd.Entrypoints);
+    }
 }

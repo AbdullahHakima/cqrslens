@@ -4,7 +4,8 @@ namespace CqrsLens;
 
 /// <summary>
 /// Enriches linked CQRS shapes with deep vertical-slice metadata:
-/// API entrypoints (Controllers, Minimal APIs, FastEndpoints), request payload properties,
+/// API entrypoints (Controllers, Minimal APIs, Method-Group EndpointGroups, FastEndpoints),
+/// request payload properties (including immutable getter-only properties),
 /// handler constructor dependencies, touched EF Core DbSets/entities, and published notifications.
 /// Runs after <see cref="Analyzer"/> shape discovery and linking so both text and Roslyn modes
 /// produce identical deep slice traces.
@@ -26,8 +27,23 @@ internal static partial class DeepSliceAnalyzer
     [GeneratedRegex(@"(?<target>[A-Za-z_]\w*)\s*\.\s*Map(?<verb>Get|Post|Put|Delete|Patch)\s*\(\s*@?""(?<route>[^""]*)""")]
     private static partial Regex MinimalApiMapRegex();
 
-    [GeneratedRegex(@"\b(?<verb>Get|Post|Put|Delete|Patch)\s*\(\s*@?""(?<route>[^""]*)""\s*\)")]
+    // Matches Jason Taylor CleanArchitecture style: groupBuilder.MapPost(CreateTodoItem) or groupBuilder.MapPut(UpdateTodoItem, "{id}")
+    [GeneratedRegex(@"(?<target>[A-Za-z_]\w*)\s*\.\s*Map(?<verb>Get|Post|Put|Delete|Patch)\s*\(\s*(?<handler>[A-Za-z_]\w*)\s*(?:,\s*@?""(?<route>[^""]*)"")?\s*\)")]
+    private static partial Regex MethodGroupMinimalApiRegex();
+
+    [GeneratedRegex(@"(?:(?:public|private|protected|internal|static|async)\s+)+[^\(\{;=]+?\s+(?<method>[A-Za-z_]\w*)\s*\((?<params>[^\)]*)\)", RegexOptions.Singleline)]
+    private static partial Regex LocalMethodDeclarationRegex();
+
+    // Matches FastEndpoints route calls: Post("/route") OR Post(CreateContributorRequest.Route)
+    [GeneratedRegex(@"\b(?<verb>Get|Post|Put|Delete|Patch)\s*\(\s*(?:@?""(?<route>[^""]*)""|(?<constRef>[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)+))\s*\)")]
     private static partial Regex FastEndpointVerbRegex();
+
+    [GeneratedRegex(@"\bconst\s+string\s+(?<name>[A-Za-z_]\w*)\s*=\s*@?""(?<value>[^""]*)""")]
+    private static partial Regex ConstStringRegex();
+
+    // Captures getter-only auto-properties (public or internal) on immutable Command/Query classes.
+    [GeneratedRegex(@"(?:public|internal)\s+(?:required\s+)?(?!class\b|record\b|struct\b|interface\b)(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*(?:\s*<[^;{}()=]*>)?(?:\s*\[\s*\]\s*)*\??)\s+(?<name>[A-Za-z_]\w*)\s*\{\s*get\s*;\s*\}")]
+    private static partial Regex GetterOnlyPropertyRegex();
 
     [GeneratedRegex(@"\.\s*(?<prop>[A-Za-z_]\w*)\b")]
     private static partial Regex MemberAccessRegex();
@@ -77,14 +93,14 @@ internal static partial class DeepSliceAnalyzer
             .GroupBy(r => r.FullName, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
-        foreach (var (file, scan, _) in parsedFiles)
+        foreach (var (file, scan, mask) in parsedFiles)
         {
             foreach (var decl in scan.Classes)
             {
                 if (!requestsByFull.TryGetValue(decl.FullName, out var candidates))
                     continue;
 
-                var request = PickCandidate(candidates, file.ProjectName);
+                var request = PickCandidate(candidates, file.ProjectName, null);
                 if (request is null) continue;
 
                 foreach (var prop in decl.Properties)
@@ -93,6 +109,24 @@ internal static partial class DeepSliceAnalyzer
                     if (request.Properties.Any(p => string.Equals(p.Name, prop.Name, StringComparison.Ordinal)))
                         continue;
                     request.Properties.Add(new RequestPropertyInfo(prop.Name, prop.Type));
+                }
+
+                // Also capture public/internal getter-only auto-properties on immutable Command/Query classes.
+                if (decl.BodySpan.End > decl.BodySpan.Start)
+                {
+                    var bodyEnd = Math.Min(file.Code.Length, decl.BodySpan.End);
+                    foreach (Match m in GetterOnlyPropertyRegex().Matches(file.Code, decl.BodySpan.Start))
+                    {
+                        if (m.Index >= bodyEnd) break;
+                        if (!mask.IsCode(m.Index)) continue;
+                        if (!ReferenceEquals(InnermostClass(scan.Classes, m.Index), decl)) continue;
+
+                        var propName = m.Groups["name"].Value;
+                        var propType = Regex.Replace(m.Groups["type"].Value.Trim(), @"\s+", "");
+                        if (request.Properties.Any(p => string.Equals(p.Name, propName, StringComparison.Ordinal)))
+                            continue;
+                        request.Properties.Add(new RequestPropertyInfo(propName, propType));
+                    }
                 }
             }
         }
@@ -192,7 +226,7 @@ internal static partial class DeepSliceAnalyzer
 
                     if (requestsBySimple.TryGetValue(simple, out var reqHits))
                     {
-                        var req = PickCandidate(reqHits, file.ProjectName);
+                        var req = PickCandidate(reqHits, file.ProjectName, scan.Usings);
                         if (req is not null &&
                             !string.Equals(req.Name, handler.RequestName, StringComparison.Ordinal) &&
                             !handler.DispatchedRequests.Contains(req.FullName, StringComparer.Ordinal))
@@ -334,11 +368,14 @@ internal static partial class DeepSliceAnalyzer
             .GroupBy(r => r.Name, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
 
+        // Build constant string lookup for FastEndpoints route constants (e.g. CreateContributorRequest.Route)
+        var constStrings = BuildConstStringLookup(parsedFiles);
+
         foreach (var (file, scan, mask) in parsedFiles)
         {
             DiscoverControllerEndpoints(file, scan, mask, requestsBySimple, result);
-            DiscoverMinimalApiEndpoints(file, mask, requestsBySimple, result);
-            DiscoverFastEndpoints(file, scan, mask, requestsBySimple, result);
+            DiscoverMinimalApiEndpoints(file, scan, mask, requestsBySimple, result);
+            DiscoverFastEndpoints(file, scan, mask, requestsBySimple, constStrings, result);
         }
 
         result.Endpoints.Sort((a, b) =>
@@ -348,6 +385,30 @@ internal static partial class DeepSliceAnalyzer
             var byMethod = string.Compare(a.HttpMethod, b.HttpMethod, StringComparison.OrdinalIgnoreCase);
             return byMethod != 0 ? byMethod : string.Compare(a.Name, b.Name, StringComparison.Ordinal);
         });
+    }
+
+    private static Dictionary<string, string> BuildConstStringLookup(
+        List<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (file, scan, mask) in parsedFiles)
+        {
+            foreach (var decl in scan.Classes)
+            {
+                if (decl.BodySpan.End <= decl.BodySpan.Start) continue;
+                var bodyEnd = Math.Min(file.Code.Length, decl.BodySpan.End);
+                foreach (Match m in ConstStringRegex().Matches(file.Code, decl.BodySpan.Start))
+                {
+                    if (m.Index >= bodyEnd) break;
+                    if (!mask.IsCode(m.Index)) continue;
+                    var constName = m.Groups["name"].Value;
+                    var constVal = m.Groups["value"].Value;
+                    map.TryAdd($"{decl.Name}.{constName}", constVal);
+                    map.TryAdd($"{decl.FullName}.{constName}", constVal);
+                }
+            }
+        }
+        return map;
     }
 
     private static void DiscoverControllerEndpoints(
@@ -394,7 +455,8 @@ internal static partial class DeepSliceAnalyzer
                     parameters,
                     actionBody,
                     requestsBySimple,
-                    file.ProjectName);
+                    file.ProjectName,
+                    scan.Usings);
 
                 if (matchedRequests.Count == 0) continue;
 
@@ -433,6 +495,7 @@ internal static partial class DeepSliceAnalyzer
 
     private static void DiscoverMinimalApiEndpoints(
         SourceFile file,
+        CSharpScanner.FileScan scan,
         SourceMask mask,
         Dictionary<string, List<CqrsRequest>> requestsBySimple,
         AnalysisResult result)
@@ -444,6 +507,21 @@ internal static partial class DeepSliceAnalyzer
             groupPrefixes[gm.Groups["var"].Value] = gm.Groups["prefix"].Value;
         }
 
+        // Index local methods in the file so method-group Minimal APIs (e.g. groupBuilder.MapPost(CreateTodoItem)) can be resolved.
+        var localMethods = new Dictionary<string, (string Params, string Body, int Index)>(StringComparer.Ordinal);
+        foreach (Match mm in LocalMethodDeclarationRegex().Matches(file.Code))
+        {
+            if (!mask.IsCode(mm.Index)) continue;
+            var mName = mm.Groups["method"].Value;
+            if (mName is "Map" or "Configure" or "if" or "for" or "foreach" or "while" or "switch" or "using" or "catch")
+                continue;
+            var mParams = mm.Groups["params"].Value;
+            var mEnd = FindMethodEnd(file.Code, mask, mm.Index + mm.Length, file.Code.Length);
+            var mBody = mEnd > mm.Index + mm.Length ? file.Code[(mm.Index + mm.Length)..mEnd] : "";
+            localMethods.TryAdd(mName, (mParams, mBody, mm.Index));
+        }
+
+        // 1. Standard Minimal APIs: app.MapPost("/route", ...)
         foreach (Match m in MinimalApiMapRegex().Matches(file.Code))
         {
             if (!mask.IsCode(m.Index)) continue;
@@ -462,7 +540,8 @@ internal static partial class DeepSliceAnalyzer
                 callContent,
                 callContent,
                 requestsBySimple,
-                file.ProjectName);
+                file.ProjectName,
+                scan.Usings);
 
             if (matchedRequests.Count == 0) continue;
 
@@ -487,6 +566,55 @@ internal static partial class DeepSliceAnalyzer
                     });
             }
         }
+
+        // 2. Method-Group EndpointGroup Minimal APIs: groupBuilder.MapPost(CreateTodoItem) or groupBuilder.MapPut(UpdateTodoItem, "{id}")
+        foreach (Match m in MethodGroupMinimalApiRegex().Matches(file.Code))
+        {
+            if (!mask.IsCode(m.Index)) continue;
+
+            var handlerMethodName = m.Groups["handler"].Value;
+            if (!localMethods.TryGetValue(handlerMethodName, out var targetMethod))
+                continue;
+
+            var matchedRequests = FindReferencedRequests(
+                targetMethod.Params,
+                targetMethod.Body,
+                requestsBySimple,
+                file.ProjectName,
+                scan.Usings);
+
+            if (matchedRequests.Count == 0) continue;
+
+            var verb = m.Groups["verb"].Value.ToUpperInvariant();
+            var subRoute = m.Groups["route"].Success ? m.Groups["route"].Value : "";
+            var enclosingClass = InnermostClass(scan.Classes, m.Index);
+            var targetVar = m.Groups["target"].Value;
+            if (!groupPrefixes.TryGetValue(targetVar, out var prefix) && enclosingClass is not null)
+                prefix = $"/api/{enclosingClass.Name}";
+
+            var fullRoute = CombineRoutes(prefix, subRoute);
+            var endpointName = enclosingClass is not null
+                ? $"{enclosingClass.Name}.{handlerMethodName}"
+                : handlerMethodName;
+            var location = SourceLocation.Create(file.Path, result.RootPath, file.Code, targetMethod.Index);
+
+            foreach (var req in matchedRequests)
+            {
+                RecordEndpoint(
+                    result,
+                    req,
+                    new EndpointInfo
+                    {
+                        Name = endpointName,
+                        HttpMethod = verb,
+                        Route = fullRoute,
+                        TargetRequestName = req.Name,
+                        TargetRequestNamespace = req.Namespace,
+                        ProjectName = file.ProjectName,
+                        Location = location,
+                    });
+            }
+        }
     }
 
     private static void DiscoverFastEndpoints(
@@ -494,6 +622,7 @@ internal static partial class DeepSliceAnalyzer
         CSharpScanner.FileScan scan,
         SourceMask mask,
         Dictionary<string, List<CqrsRequest>> requestsBySimple,
+        Dictionary<string, string> constStrings,
         AnalysisResult result)
     {
         foreach (var decl in scan.Classes)
@@ -514,7 +643,7 @@ internal static partial class DeepSliceAnalyzer
                 var reqSimple = CSharpScanner.UnqualifiedTypeName(endpointArgs[0]);
                 if (requestsBySimple.TryGetValue(reqSimple, out var hits))
                 {
-                    var picked = PickCandidate(hits, file.ProjectName);
+                    var picked = PickCandidate(hits, file.ProjectName, scan.Usings);
                     if (picked is not null)
                         matchedRequests.Add(picked);
                 }
@@ -522,7 +651,7 @@ internal static partial class DeepSliceAnalyzer
 
             if (matchedRequests.Count == 0 && decl.BaseRawNames.Any(b => b.StartsWith("Endpoint", StringComparison.Ordinal)))
             {
-                matchedRequests.AddRange(FindReferencedRequests("", body, requestsBySimple, file.ProjectName));
+                matchedRequests.AddRange(FindReferencedRequests("", body, requestsBySimple, file.ProjectName, scan.Usings));
             }
 
             if (matchedRequests.Count == 0) continue;
@@ -532,7 +661,20 @@ internal static partial class DeepSliceAnalyzer
                 continue;
 
             var verb = verbMatch.Groups["verb"].Value.ToUpperInvariant();
-            var route = NormalizeRoute(verbMatch.Groups["route"].Value);
+            string rawRoute;
+            if (verbMatch.Groups["route"].Success)
+            {
+                rawRoute = verbMatch.Groups["route"].Value;
+            }
+            else
+            {
+                var constRef = verbMatch.Groups["constRef"].Value;
+                rawRoute = constStrings.TryGetValue(constRef, out var resolvedConst)
+                    ? resolvedConst
+                    : $"/{constRef}";
+            }
+
+            var route = NormalizeRoute(rawRoute);
             var location = SourceLocation.Create(file.Path, result.RootPath, file.Code, decl.BodySpan.Start);
 
             foreach (var req in matchedRequests)
@@ -560,6 +702,7 @@ internal static partial class DeepSliceAnalyzer
                 string.Equals(e.HttpMethod, endpoint.HttpMethod, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(e.Route, endpoint.Route, StringComparison.OrdinalIgnoreCase) &&
                 string.Equals(e.TargetRequestName, endpoint.TargetRequestName, StringComparison.Ordinal) &&
+                string.Equals(e.TargetRequestNamespace, endpoint.TargetRequestNamespace, StringComparison.Ordinal) &&
                 string.Equals(e.Name, endpoint.Name, StringComparison.Ordinal)))
         {
             result.Endpoints.Add(endpoint);
@@ -574,7 +717,8 @@ internal static partial class DeepSliceAnalyzer
         string parametersSection,
         string bodySection,
         Dictionary<string, List<CqrsRequest>> requestsBySimple,
-        string? projectName)
+        string? projectName,
+        IReadOnlyList<UsingDirective>? usings)
     {
         var results = new List<CqrsRequest>();
 
@@ -583,7 +727,7 @@ internal static partial class DeepSliceAnalyzer
             var simple = CSharpScanner.UnqualifiedTypeName(typeRef);
             if (!requestsBySimple.TryGetValue(simple, out var hits))
                 return;
-            var picked = PickCandidate(hits, projectName);
+            var picked = PickCandidate(hits, projectName, usings);
             if (picked is not null && !results.Contains(picked))
                 results.Add(picked);
         }
@@ -599,7 +743,7 @@ internal static partial class DeepSliceAnalyzer
             }
         }
 
-        // 2. Check object creation `new RequestType(` or `new RequestType {`
+        // 2. Check parameter patterns and object creations `new RequestType(` or `new RequestType {`
         foreach (Match m in ParameterTypeRegex().Matches(bodySection))
             TryAdd(m.Groups["type"].Value);
         foreach (Match m in ObjectCreationRegex().Matches(bodySection))
@@ -730,9 +874,25 @@ internal static partial class DeepSliceAnalyzer
         return owner;
     }
 
-    private static CqrsRequest? PickCandidate(List<CqrsRequest> candidates, string? projectName)
+    private static CqrsRequest? PickCandidate(
+        List<CqrsRequest> candidates,
+        string? projectName,
+        IReadOnlyList<UsingDirective>? usings)
     {
         if (candidates.Count == 1) return candidates[0];
+
+        if (usings is { Count: > 0 })
+        {
+            var importedNs = new HashSet<string>(
+                usings.SelectMany(u => u.NamespaceCandidates()),
+                StringComparer.Ordinal);
+            var byUsing = candidates
+                .Where(c => !string.IsNullOrEmpty(c.Namespace) && importedNs.Contains(c.Namespace))
+                .ToList();
+            if (byUsing.Count == 1)
+                return byUsing[0];
+        }
+
         if (!string.IsNullOrEmpty(projectName))
         {
             var sameProj = candidates.FirstOrDefault(
