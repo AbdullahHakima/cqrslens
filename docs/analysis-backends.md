@@ -15,28 +15,36 @@ source files into the shared analysis model.
 
 ## Roslyn backend
 
-The 0.3.0 rollout for #1:
+The rollout and hardening for #1:
 
 1. text mode stays the default behind the scanner boundary;
-2. Roslyn covers requests, handlers, validators, behaviors and DbContexts;
+2. Roslyn covers requests, handlers, validators, behaviors and DbContexts
+   (including EF Core entity/relationship ER models);
 3. `--analysis roslyn` exposes that backend as an opt-in mode;
-4. `samples/SampleShop` is compiled by the test suite and must produce identical
-   request, handler, validator, behavior and DbContext signatures in both modes;
-5. text mode remains the fallback for incomplete or non-buildable repositories.
+4. `CsprojParser` evaluates ancestor `Directory.Build.props`, `.csproj` and
+   `Directory.Build.targets` files for `<Using>` (`Include`, `Alias`, `Static`,
+   `Remove`), `<PackageReference>`, and `<ImplicitUsings>`, applying project-level
+   usings in both text and Roslyn modes;
+5. `global using` directives (both from `.cs` files and MSBuild `<Using>` items)
+   are scoped per project so module-local global usings never leak into sibling
+   projects, with `#line 1` mapping preserving exact source locations;
+6. `samples/SampleShop`, base-class request hierarchies (`QueryBase<T>`),
+   module-local contracts, FastEndpoints validators, and configured external
+   `--markers` / `--handler-markers` produce matching shapes and
+   `AmbiguousContract` / `UnresolvedContract` diagnostics in both modes;
+7. text mode remains the fallback for incomplete or non-buildable repositories.
 
 The Roslyn backend builds an in-memory compilation containing all source groups
 from the scan, plus runtime assemblies. This lets handlers in one project bind to
 requests declared in another project. Real applications reference MediatR,
-FluentValidation and EF Core assemblies that are not part of the runtime
-reference set, so the backend injects minimal contract shapes only when the
-source does not already declare them. Those shims are for symbol binding; they do
-not execute package code or claim that the target solution builds.
+FluentValidation, FastEndpoints and EF Core assemblies that are not part of the
+runtime reference set, so the backend injects minimal contract shapes only when
+the source does not already declare them. Those shims are for symbol binding;
+they do not execute package code or claim that the target solution builds.
 
-It does not yet evaluate the target solution through MSBuild, so project/package
-references outside the shimmed contracts can remain unresolved. When a project or
-file cannot be scanned, Roslyn isolation records skipped files and structured
-diagnostics instead of silently returning an empty architecture. Those
-diagnostics also disable confidence-sensitive `--strict` failures.
+When a project or file cannot be scanned, Roslyn isolation records skipped files
+and structured diagnostics instead of silently returning an empty architecture.
+Those diagnostics also disable confidence-sensitive `--strict` failures.
 
 The important constraint is that report generation, architecture checks and
 Mermaid output should not care which scanner produced the model. That keeps the

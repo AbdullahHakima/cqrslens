@@ -14,7 +14,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
 
-  - uses: AbdullahHakima/cqrslens@v0.5.1
+  - uses: AbdullahHakima/cqrslens@v0.6.0
     with:
       path: src
       output: ARCHITECTURE.md
@@ -36,8 +36,10 @@ the repository root. It uploads `cqrslens-architecture-report` and
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `path` | `.` | Folder to scan. |
-| `output` | `ARCHITECTURE.md` | Markdown/HTML report path. |
-| `format` | `md` | `md` or `html`. |
+| `output` | `ARCHITECTURE.md` | Markdown/HTML/JSON report path. |
+| `format` | `md` | `md`, `html`, or `json`. |
+| `render` | empty | `mermaid` or `svg` for HTML diagrams; empty uses config, then `mermaid`. |
+| `watermark` | empty | Optional custom watermark stamp embedded in console and generated reports. |
 | `strict` | `false` | Fail on architecture-check errors; with `baseline`, only new errors. |
 | `markers` | empty | Comma-separated custom request markers. |
 | `handler-markers` | empty | Comma-separated handler roots for external wrapper interfaces. |

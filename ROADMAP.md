@@ -3,19 +3,34 @@
 What is planned, in the order I expect to work on it. Issues are linked
 where they exist; the dates are not promises.
 
-## In progress
-
-**Visualization quality and GitHub rendering**
-
-- Bounded, role-prefixed Mermaid diagrams with GitHub-safe entities and escaped
-  table cells; CQRS maps split at 15 requests and balanced by project
-- Semantic styling, layer colors and legends driven by enabled checks
-- Mermaid 12.2.0 HTML pin with GitHub-compatible layout and per-diagram
-  render/source fallbacks
-- Non-gating Mermaid parser/render check; a fully pre-rendered SVG mode remains
-  a follow-up (see below)
-
 ## Done
+
+**0.6.0** (October 2026)
+
+- **EF Core ER diagram** (#6): entity attributes, primary/foreign keys and
+  1:1 / 1:N / M:N relationships from navigation properties, data annotations
+  and common Fluent API calls in both text and Roslyn modes
+- **Roslyn hardening** (#1): MSBuild `.csproj` and `Directory.Build.props`/`targets`
+  `<Using>` / `<PackageReference>` / `<ImplicitUsings>` evaluation, per-project
+  `global using` isolation, base-class interface/response propagation, configured
+  external `--markers` / `--handler-markers`, and `AmbiguousContract` /
+  `UnresolvedContract` diagnostic parity across text and Roslyn modes
+- **Pre-rendered SVG diagrams**: `--render svg` and `"render": "svg"` compile
+  every flowchart and ER diagram to deterministic inline `<svg>` ahead of time
+  so HTML reports require zero JavaScript and work completely offline
+- **`--format json` output**: schema-versioned, deterministic JSON report of
+  projects, requests, handlers, validators, behaviors, DbContexts (with entities
+  and relationships), checks, and diagnostics for external dashboards and custom
+  tooling
+- **Console ASCII artwork, TrueColor gradients, live progress, and watermarks**:
+  24-bit ANSI TrueColor ASCII banner, live progress bar, Unicode box-drawing
+  summary card, and custom `--watermark` block ASCII art stamps in console and
+  Markdown/HTML/JSON reports
+
+**0.5.1** (October 2026)
+
+- Primary-constructor `DbContext` support in text mode (#66)
+- Hardened Mermaid diagrams for GitHub rendering (#67)
 
 **0.5.0** (October 2026)
 
@@ -80,20 +95,10 @@ where they exist; the dates are not promises.
 
 ## Next
 
-- **Roslyn hardening**: load evaluated MSBuild/package references and compare
-  broader real codebases before considering Roslyn as the default. Text mode
-  stays as the fast fallback.
-- **EF Core ER diagram** (#6): entity relationships from navigation
-  properties and foreign keys, not just DbSet lists.
-- **Pre-rendered SVG diagrams**: diagrams compiled to SVG ahead of time
-  so the HTML report needs no JavaScript. The HTML generator already
-  isolates rendering behind one method for this.
+- More mediators: Mediator (martinothamar) and Wolverine conventions
 
 ## After that
 
-- `--format json` output for external dashboards and custom tooling
-- Colored console output and a progress line while scanning
-- More mediators: Mediator (martinothamar) and Wolverine conventions
 - GitHub Action mode that comments the architecture diff on a pull request
 
 ## Ideas, not planned yet
