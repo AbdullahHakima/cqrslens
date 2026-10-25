@@ -5,8 +5,9 @@ namespace CqrsLens;
 
 /// <summary>
 /// Generates a portable HTML architecture report (issue #5) with embedded CSS,
-/// stat cards, and either Mermaid source blocks (loaded from a pinned,
-/// SRI-checked CDN script) or pre-rendered inline SVG diagrams (zero-JS mode).
+/// stat cards, interactive CQRS request explorer, and either Mermaid source
+/// blocks (loaded from a pinned, SRI-checked CDN script) or pre-rendered inline
+/// SVG diagrams (zero-JS mode).
 /// </summary>
 public static class HtmlReportGenerator
 {
@@ -83,31 +84,9 @@ public static class HtmlReportGenerator
                             "their top-level folder.</p>");
         }
         AppendCqrs(html, result, renderMode);
-        // ---- Requests table ------------------------------------------------------
-        html.AppendLine("<h2>Requests</h2>");
-        if (result.Requests.Count == 0)
-        {
-            html.AppendLine("<p><em>No MediatR requests found.</em></p>");
-        }
-        else
-        {
-            html.AppendLine("<table>");
-            html.AppendLine("<thead><tr><th>Request</th><th>Type</th><th>Response</th><th>Handler</th><th>Validators</th><th>Project</th></tr></thead>");
-            html.AppendLine("<tbody>");
-            foreach (var r in result.Requests)
-            {
-                html.AppendLine("<tr>" +
-                    $"<td>{E(r.Name)}</td>" +
-                    $"<td>{E(r.Kind)}</td>" +
-                    $"<td>{E(r.ResponseType ?? "—")}</td>" +
-                    $"<td>{E(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers.Select(CSharpScanner.SimpleName)) : "—")}</td>" +
-                    $"<td>{E(r.Validators.Count > 0 ? string.Join(", ", r.Validators.Select(CSharpScanner.SimpleName)) : "—")}</td>" +
-                    $"<td>{E(r.ProjectName ?? "—")}</td>" +
-                    "</tr>");
-            }
-            html.AppendLine("</tbody>");
-            html.AppendLine("</table>");
-        }
+
+        // ---- Requests table & Interactive Explorer ------------------------------
+        AppendRequestsAndExplorer(html, result, renderMode);
 
         // ---- Behaviors -------------------------------------------------------------
         html.AppendLine("<h2>Pipeline Behaviors</h2>");
@@ -118,10 +97,13 @@ public static class HtmlReportGenerator
         else
         {
             html.AppendLine("<table>");
-            html.AppendLine("<thead><tr><th>Behavior</th><th>Project</th></tr></thead>");
+            html.AppendLine("<thead><tr><th>Behavior</th><th>Project</th><th>Source</th></tr></thead>");
             html.AppendLine("<tbody>");
             foreach (var b in result.Behaviors.OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase))
-                html.AppendLine($"<tr><td>{E(b.Name)}</td><td>{E(b.ProjectName ?? "—")}</td></tr>");
+            {
+                var loc = b.Location is null ? "—" : $"<code>{E(b.Location.ToString())}</code>";
+                html.AppendLine($"<tr><td>{E(b.Name)}</td><td>{E(b.ProjectName ?? "—")}</td><td>{loc}</td></tr>");
+            }
             html.AppendLine("</tbody>");
             html.AppendLine("</table>");
         }
@@ -284,6 +266,55 @@ public static class HtmlReportGenerator
             html.AppendLine("<script>");
             html.AppendLine("""
                 (async () => {
+                  const searchInput = document.getElementById('cqrs-explorer-search');
+                  const expandBtn = document.getElementById('cqrs-explorer-expand');
+                  const collapseBtn = document.getElementById('cqrs-explorer-collapse');
+                  const explorerItems = [...document.querySelectorAll('details.explorer-item')];
+                  const tableRows = [...document.querySelectorAll('table.requests-table tbody tr')];
+
+                  const openRequestInspector = (anchorId) => {
+                    const target = document.getElementById(anchorId);
+                    if (!target) return;
+                    if (target.tagName === 'DETAILS') target.open = true;
+                    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    history.replaceState(null, '', '#' + anchorId);
+                  };
+
+                  if (searchInput) {
+                    searchInput.addEventListener('input', () => {
+                      const q = searchInput.value.trim().toLowerCase();
+                      explorerItems.forEach((item) => {
+                        const hay = (item.getAttribute('data-search') || '').toLowerCase();
+                        item.hidden = q.length > 0 && !hay.includes(q);
+                      });
+                      tableRows.forEach((row) => {
+                        const hay = (row.getAttribute('data-search') || '').toLowerCase();
+                        row.hidden = q.length > 0 && !hay.includes(q);
+                      });
+                    });
+                  }
+
+                  if (expandBtn) {
+                    expandBtn.addEventListener('click', () => {
+                      explorerItems.forEach((item) => { if (!item.hidden) item.open = true; });
+                    });
+                  }
+                  if (collapseBtn) {
+                    collapseBtn.addEventListener('click', () => {
+                      explorerItems.forEach((item) => { item.open = false; });
+                    });
+                  }
+
+                  document.querySelectorAll('a.req-link').forEach((link) => {
+                    link.addEventListener('click', (e) => {
+                      const href = link.getAttribute('href') || '';
+                      if (href.startsWith('#')) {
+                        e.preventDefault();
+                        openRequestInspector(href.slice(1));
+                      }
+                    });
+                  });
+
                   const nodes = [...document.querySelectorAll('pre.mermaid')];
                   const showSource = (node, message) => {
                     const error = document.createElement('p');
@@ -322,12 +353,27 @@ public static class HtmlReportGenerator
                         (error && error.message ? error.message : String(error))));
                     return;
                   }
+                  const byName = new Map();
+                  explorerItems.forEach((item) => {
+                    const reqName = item.getAttribute('data-request-name');
+                    const reqFull = item.getAttribute('data-request-fullname');
+                    if (reqName && !byName.has(reqName)) byName.set(reqName, item.id);
+                    if (reqFull) byName.set(reqFull, item.id);
+                  });
                   for (let i = 0; i < nodes.length; i++) {
                     const node = nodes[i];
                     const source = node.textContent ?? '';
                     try {
                       const { svg } = await mermaid.render('cqrslens-diagram-' + i, source);
                       node.innerHTML = svg;
+                      node.querySelectorAll('g.node').forEach((g) => {
+                        const label = (g.textContent || '').trim();
+                        const anchorId = byName.get(label);
+                        if (anchorId) {
+                          g.style.cursor = 'pointer';
+                          g.addEventListener('click', () => openRequestInspector(anchorId));
+                        }
+                      });
                     } catch (error) {
                       showSource(node, 'This diagram could not be rendered. ' +
                         (error && error.message ? error.message : String(error)));
@@ -342,6 +388,275 @@ public static class HtmlReportGenerator
 
         return html.ToString();
     }
+
+    private static void AppendRequestsAndExplorer(
+        StringBuilder html,
+        AnalysisResult result,
+        DiagramRenderMode renderMode)
+    {
+        html.AppendLine("<h2>Requests</h2>");
+        if (result.Requests.Count == 0)
+        {
+            html.AppendLine("<p><em>No MediatR requests found.</em></p>");
+            return;
+        }
+
+        var usedAnchors = new HashSet<string>(StringComparer.Ordinal);
+        var anchors = new Dictionary<CqrsRequest, string>();
+        foreach (var r in result.Requests)
+        {
+            var baseId = "explorer-" + DiagramBuilder.MermaidId(r.FullName);
+            var id = baseId;
+            var suffix = 2;
+            while (!usedAnchors.Add(id))
+                id = $"{baseId}-{suffix++}";
+            anchors[r] = id;
+        }
+
+        var handlersByFullName = result.Handlers
+            .GroupBy(h => h.FullName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var handlersBySimpleName = result.Handlers
+            .GroupBy(h => h.Name, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        var validatorsByFullName = result.Validators
+            .GroupBy(v => v.FullName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var validatorsBySimpleName = result.Validators
+            .GroupBy(v => v.Name, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        var checksByTarget = result.Checks
+            .Where(c => !string.IsNullOrEmpty(c.Target))
+            .GroupBy(c => c.Target!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+        html.AppendLine("<table class=\"requests-table\">");
+        html.AppendLine("<thead><tr><th>Request</th><th>Type</th><th>Response</th><th>Handler</th><th>Validators</th><th>Project</th></tr></thead>");
+        html.AppendLine("<tbody>");
+        foreach (var r in result.Requests)
+        {
+            var anchor = anchors[r];
+            var searchBlob = BuildSearchBlob(r, handlersByFullName, handlersBySimpleName, validatorsByFullName, validatorsBySimpleName);
+            html.AppendLine($"<tr data-search=\"{E(searchBlob)}\">" +
+                $"<td><a class=\"req-link\" href=\"#{E(anchor)}\">{E(r.Name)}</a></td>" +
+                $"<td>{E(r.Kind)}</td>" +
+                $"<td>{E(r.ResponseType ?? "—")}</td>" +
+                $"<td>{E(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers.Select(CSharpScanner.SimpleName)) : "—")}</td>" +
+                $"<td>{E(r.Validators.Count > 0 ? string.Join(", ", r.Validators.Select(CSharpScanner.SimpleName)) : "—")}</td>" +
+                $"<td>{E(r.ProjectName ?? "—")}</td>" +
+                "</tr>");
+        }
+        html.AppendLine("</tbody>");
+        html.AppendLine("</table>");
+
+        // ---- Interactive CQRS Explorer ---------------------------------------
+        var commandCount = result.Requests.Count(r => string.Equals(r.Kind, "Command", StringComparison.Ordinal));
+        var queryCount = result.Requests.Count(r => string.Equals(r.Kind, "Query", StringComparison.Ordinal));
+        var issueCount = result.Requests.Count(r => checksByTarget.ContainsKey(r.FullName));
+
+        html.AppendLine("<h2>Interactive CQRS Explorer</h2>");
+        html.AppendLine("<p class=\"note\">Click any request in the table or diagram (or expand a card below) to inspect its contract, handlers, validators, and source file locations.</p>");
+        html.AppendLine("<section class=\"cqrs-explorer\" aria-label=\"Interactive CQRS explorer\">");
+
+        // Pure CSS radio filter inputs (work in both Mermaid and zero-JS SVG modes)
+        html.AppendLine("<input type=\"radio\" name=\"cqrs-filter\" id=\"cqrs-filter-all\" class=\"filter-radio\" checked>");
+        html.AppendLine("<input type=\"radio\" name=\"cqrs-filter\" id=\"cqrs-filter-command\" class=\"filter-radio\">");
+        html.AppendLine("<input type=\"radio\" name=\"cqrs-filter\" id=\"cqrs-filter-query\" class=\"filter-radio\">");
+        html.AppendLine("<input type=\"radio\" name=\"cqrs-filter\" id=\"cqrs-filter-issues\" class=\"filter-radio\">");
+
+        html.AppendLine("<div class=\"explorer-toolbar\">");
+        html.AppendLine("<div class=\"filter-pills\" role=\"group\" aria-label=\"Filter requests by type\">");
+        html.AppendLine($"<label for=\"cqrs-filter-all\" class=\"filter-pill\">All ({result.Requests.Count})</label>");
+        html.AppendLine($"<label for=\"cqrs-filter-command\" class=\"filter-pill\">Commands ({commandCount})</label>");
+        html.AppendLine($"<label for=\"cqrs-filter-query\" class=\"filter-pill\">Queries ({queryCount})</label>");
+        html.AppendLine($"<label for=\"cqrs-filter-issues\" class=\"filter-pill\">With Findings ({issueCount})</label>");
+        html.AppendLine("</div>");
+
+        if (renderMode == DiagramRenderMode.Mermaid)
+        {
+            html.AppendLine("<div class=\"explorer-actions\">");
+            html.AppendLine("<input type=\"search\" id=\"cqrs-explorer-search\" class=\"explorer-search\" placeholder=\"Filter by request, handler, validator, project, or file…\" aria-label=\"Filter requests\">");
+            html.AppendLine("<button type=\"button\" id=\"cqrs-explorer-expand\" class=\"explorer-btn\">Expand all</button>");
+            html.AppendLine("<button type=\"button\" id=\"cqrs-explorer-collapse\" class=\"explorer-btn\">Collapse all</button>");
+            html.AppendLine("</div>");
+        }
+        html.AppendLine("</div>");
+
+        html.AppendLine("<div class=\"explorer-list\">");
+        foreach (var r in result.Requests)
+        {
+            var anchor = anchors[r];
+            var kindClass = r.Kind.ToLowerInvariant() switch
+            {
+                "command" => "command",
+                "query" => "query",
+                _ => "request",
+            };
+            checksByTarget.TryGetValue(r.FullName, out var reqChecks);
+            var hasIssues = reqChecks is { Count: > 0 };
+            var issueAttr = hasIssues ? "true" : "false";
+            var searchBlob = BuildSearchBlob(r, handlersByFullName, handlersBySimpleName, validatorsByFullName, validatorsBySimpleName);
+
+            html.AppendLine(
+                $"<details class=\"explorer-item\" id=\"{E(anchor)}\" " +
+                $"data-kind=\"{E(kindClass)}\" data-issues=\"{issueAttr}\" " +
+                $"data-request-name=\"{E(r.Name)}\" data-request-fullname=\"{E(r.FullName)}\" " +
+                $"data-search=\"{E(searchBlob)}\">");
+
+            html.Append("<summary class=\"explorer-summary\">");
+            html.Append($"<span class=\"badge badge-{E(kindClass)}\">{E(r.Kind)}</span>");
+            html.Append($"<span class=\"explorer-title\"><strong>{E(r.Name)}</strong>");
+            if (!string.IsNullOrEmpty(r.ResponseType))
+                html.Append($" <span class=\"explorer-response\">→ <code>{E(r.ResponseType)}</code></span>");
+            html.Append("</span>");
+            html.Append("<span class=\"explorer-meta\">");
+            if (!string.IsNullOrEmpty(r.ProjectName))
+                html.Append($"<span class=\"meta-pill\">{E(r.ProjectName)}</span>");
+            if (hasIssues)
+            {
+                var hasErr = reqChecks!.Any(c => c.Severity == CheckSeverity.Error);
+                var statusCls = hasErr ? "status-error" : "status-warning";
+                var statusLabel = hasErr ? "❌ Check error" : "⚠️ Check warning";
+                html.Append($"<span class=\"meta-pill {statusCls}\">{statusLabel}</span>");
+            }
+            html.Append("</span>");
+            html.AppendLine("</summary>");
+
+            html.AppendLine("<div class=\"explorer-body\">");
+            html.AppendLine("<div class=\"explorer-grid\">");
+
+            // Column 1: Request contract & source location
+            html.AppendLine("<div class=\"explorer-panel\">");
+            html.AppendLine("<h4>Request Contract</h4>");
+            html.AppendLine("<dl class=\"explorer-dl\">");
+            html.AppendLine($"<dt>Full name</dt><dd><code>{E(r.FullName)}</code></dd>");
+            html.AppendLine($"<dt>Kind</dt><dd>{E(r.Kind)}{(string.IsNullOrEmpty(r.ViaMarker) ? "" : $" (via <code>{E(r.ViaMarker)}</code>)")}</dd>");
+            html.AppendLine($"<dt>Response</dt><dd><code>{E(r.ResponseType ?? "void")}</code></dd>");
+            html.AppendLine($"<dt>Project</dt><dd>{E(r.ProjectName ?? "—")}</dd>");
+            html.AppendLine($"<dt>Source file</dt><dd>{FormatLocationHtml(r.Location)}</dd>");
+            html.AppendLine("</dl>");
+            html.AppendLine("</div>");
+
+            // Column 2: Linked Handlers
+            html.AppendLine("<div class=\"explorer-panel\">");
+            html.AppendLine($"<h4>Handlers ({r.Handlers.Count})</h4>");
+            if (r.Handlers.Count == 0)
+            {
+                html.AppendLine("<p class=\"explorer-empty\">No handler linked.</p>");
+            }
+            else
+            {
+                html.AppendLine("<ul class=\"explorer-links\">");
+                foreach (var handlerName in r.Handlers)
+                {
+                    var hInfo = ResolveHandler(handlerName, handlersByFullName, handlersBySimpleName);
+                    var hDisplay = CSharpScanner.SimpleName(handlerName);
+                    var hLoc = hInfo?.Location is not null ? $" · {FormatLocationHtml(hInfo.Location)}" : "";
+                    var hProj = !string.IsNullOrEmpty(hInfo?.ProjectName) ? $" <span class=\"meta-sub\">({E(hInfo!.ProjectName)})</span>" : "";
+                    html.AppendLine($"<li><strong>{E(hDisplay)}</strong>{hProj}<br><span class=\"meta-sub\"><code>{E(hInfo?.FullName ?? handlerName)}</code>{hLoc}</span></li>");
+                }
+                html.AppendLine("</ul>");
+            }
+            html.AppendLine("</div>");
+
+            // Column 3: Linked Validators
+            html.AppendLine("<div class=\"explorer-panel\">");
+            html.AppendLine($"<h4>Validators ({r.Validators.Count})</h4>");
+            if (r.Validators.Count == 0)
+            {
+                html.AppendLine("<p class=\"explorer-empty\">No validators linked.</p>");
+            }
+            else
+            {
+                html.AppendLine("<ul class=\"explorer-links\">");
+                foreach (var validatorName in r.Validators)
+                {
+                    var vInfo = ResolveValidator(validatorName, validatorsByFullName, validatorsBySimpleName);
+                    var vDisplay = CSharpScanner.SimpleName(validatorName);
+                    var vLoc = vInfo?.Location is not null ? $" · {FormatLocationHtml(vInfo.Location)}" : "";
+                    var vProj = !string.IsNullOrEmpty(vInfo?.ProjectName) ? $" <span class=\"meta-sub\">({E(vInfo!.ProjectName)})</span>" : "";
+                    html.AppendLine($"<li><strong>{E(vDisplay)}</strong>{vProj}<br><span class=\"meta-sub\"><code>{E(vInfo?.FullName ?? validatorName)}</code>{vLoc}</span></li>");
+                }
+                html.AppendLine("</ul>");
+            }
+            html.AppendLine("</div>");
+
+            html.AppendLine("</div>"); // .explorer-grid
+
+            if (hasIssues)
+            {
+                html.AppendLine("<ul class=\"checks explorer-checks\">");
+                foreach (var check in reqChecks!)
+                    AppendCheckHtml(html, check, check.IsKnown);
+                html.AppendLine("</ul>");
+            }
+
+            html.AppendLine("</div>"); // .explorer-body
+            html.AppendLine("</details>");
+        }
+        html.AppendLine("</div>"); // .explorer-list
+        html.AppendLine("</section>");
+    }
+
+    private static string BuildSearchBlob(
+        CqrsRequest r,
+        IReadOnlyDictionary<string, HandlerInfo> handlersByFull,
+        IReadOnlyDictionary<string, HandlerInfo> handlersBySimple,
+        IReadOnlyDictionary<string, ValidatorInfo> validatorsByFull,
+        IReadOnlyDictionary<string, ValidatorInfo> validatorsBySimple)
+    {
+        var sb = new StringBuilder();
+        sb.Append(r.FullName).Append(' ')
+          .Append(r.Kind).Append(' ')
+          .Append(r.ResponseType).Append(' ')
+          .Append(r.ProjectName).Append(' ')
+          .Append(r.Location?.File).Append(' ');
+
+        foreach (var h in r.Handlers)
+        {
+            sb.Append(h).Append(' ');
+            var info = ResolveHandler(h, handlersByFull, handlersBySimple);
+            if (info?.Location is not null)
+                sb.Append(info.Location.File).Append(' ');
+        }
+
+        foreach (var v in r.Validators)
+        {
+            sb.Append(v).Append(' ');
+            var info = ResolveValidator(v, validatorsByFull, validatorsBySimple);
+            if (info?.Location is not null)
+                sb.Append(info.Location.File).Append(' ');
+        }
+
+        return sb.ToString().Trim();
+    }
+
+    private static HandlerInfo? ResolveHandler(
+        string name,
+        IReadOnlyDictionary<string, HandlerInfo> byFull,
+        IReadOnlyDictionary<string, HandlerInfo> bySimple)
+    {
+        if (byFull.TryGetValue(name, out var h))
+            return h;
+        return bySimple.TryGetValue(CSharpScanner.SimpleName(name), out h) ? h : null;
+    }
+
+    private static ValidatorInfo? ResolveValidator(
+        string name,
+        IReadOnlyDictionary<string, ValidatorInfo> byFull,
+        IReadOnlyDictionary<string, ValidatorInfo> bySimple)
+    {
+        if (byFull.TryGetValue(name, out var v))
+            return v;
+        return bySimple.TryGetValue(CSharpScanner.SimpleName(name), out v) ? v : null;
+    }
+
+    private static string FormatLocationHtml(SourceLocation? location)
+        => location is null
+            ? "—"
+            : $"<code>{E($"{location.File}:{location.Line}:{location.Column}")}</code>";
 
     private static void AppendCheckHtml(StringBuilder html, CheckFinding check, bool known)
     {
@@ -493,6 +808,7 @@ public static class HtmlReportGenerator
         h1 { font-size: 1.8rem; margin: 0 0 .25rem; }
         h2 { font-size: 1.25rem; margin: 2rem 0 .75rem; border-bottom: 1px solid #d6d9de; padding-bottom: .35rem; }
         h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
+        h4 { font-size: .88rem; text-transform: uppercase; letter-spacing: .04em; color: #5a6068; margin: 0 0 .5rem; }
         .meta, .footer, .note { color: #5a6068; font-size: .9rem; }
         .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin: 1.25rem 0 .5rem; }
         .card { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; padding: 1rem; text-align: center; }
@@ -524,6 +840,49 @@ public static class HtmlReportGenerator
         table { border-collapse: collapse; width: 100%; background: #ffffff; }
         th, td { border: 1px solid #d6d9de; padding: .45rem .6rem; text-align: left; font-size: .92rem; }
         th { background: #eceef1; }
+        a.req-link { font-weight: 600; text-decoration: none; }
+        a.req-link:hover { text-decoration: underline; }
+        .cqrs-explorer { margin: .75rem 0 1.5rem; }
+        .filter-radio { position: absolute; opacity: 0; pointer-events: none; }
+        .explorer-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; margin-bottom: .85rem; }
+        .filter-pills { display: flex; flex-wrap: wrap; gap: .4rem; }
+        .filter-pill { cursor: pointer; padding: .35rem .75rem; border-radius: 999px; font-size: .85rem; font-weight: 600; background: #ffffff; border: 1px solid #d6d9de; color: #334155; user-select: none; }
+        #cqrs-filter-all:checked ~ .explorer-toolbar label[for="cqrs-filter-all"],
+        #cqrs-filter-command:checked ~ .explorer-toolbar label[for="cqrs-filter-command"],
+        #cqrs-filter-query:checked ~ .explorer-toolbar label[for="cqrs-filter-query"],
+        #cqrs-filter-issues:checked ~ .explorer-toolbar label[for="cqrs-filter-issues"] { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+        #cqrs-filter-command:checked ~ .explorer-list details.explorer-item:not([data-kind="command"]) { display: none; }
+        #cqrs-filter-query:checked ~ .explorer-list details.explorer-item:not([data-kind="query"]) { display: none; }
+        #cqrs-filter-issues:checked ~ .explorer-list details.explorer-item:not([data-issues="true"]) { display: none; }
+        .explorer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; flex: 1; justify-content: flex-end; }
+        .explorer-search { padding: .4rem .7rem; border: 1px solid #d6d9de; border-radius: 8px; font-size: .88rem; min-width: 240px; max-width: 340px; width: 100%; background: #ffffff; color: inherit; }
+        .explorer-btn { cursor: pointer; padding: .38rem .68rem; border: 1px solid #d6d9de; border-radius: 8px; background: #ffffff; color: inherit; font-size: .84rem; font-weight: 500; }
+        .explorer-btn:hover { background: #eceef1; }
+        details.explorer-item { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; margin: 0 0 .55rem; overflow: hidden; transition: border-color .15s, box-shadow .15s; }
+        details.explorer-item:target { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, .2); }
+        summary.explorer-summary { cursor: pointer; padding: .65rem .9rem; display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; font-size: .93rem; list-style: none; }
+        summary.explorer-summary::-webkit-details-marker { display: none; }
+        .explorer-title { flex: 1; min-width: 180px; }
+        .explorer-response { color: #5a6068; font-size: .86rem; }
+        .explorer-meta { display: flex; flex-wrap: wrap; gap: .35rem; align-items: center; }
+        .badge { display: inline-block; padding: .15rem .5rem; border-radius: 6px; font-size: .76rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+        .badge-command { background: #e8f1ff; color: #1e40af; border: 1px solid #93c5fd; }
+        .badge-query { background: #e6fffa; color: #115e59; border: 1px solid #5eead4; }
+        .badge-request { background: #f5f3ff; color: #5b21b6; border: 1px solid #c4b5fd; }
+        .meta-pill { font-size: .78rem; padding: .15rem .5rem; border-radius: 6px; background: #f1f5f9; color: #334155; }
+        .meta-pill.status-error { background: #fdecec; color: #991b1b; }
+        .meta-pill.status-warning { background: #fff6db; color: #92400e; }
+        .explorer-body { border-top: 1px solid #e5e7eb; padding: .9rem; background: #fafbfc; }
+        .explorer-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .85rem; }
+        .explorer-panel { background: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; padding: .75rem; }
+        dl.explorer-dl { margin: 0; display: grid; grid-template-columns: 92px 1fr; row-gap: .3rem; column-gap: .5rem; font-size: .86rem; }
+        dl.explorer-dl dt { color: #5a6068; font-weight: 600; }
+        dl.explorer-dl dd { margin: 0; word-break: break-word; }
+        ul.explorer-links { margin: 0; padding-left: 1.1rem; font-size: .86rem; }
+        ul.explorer-links li { margin-bottom: .35rem; }
+        .meta-sub { color: #5a6068; font-size: .8rem; }
+        .explorer-empty { margin: 0; color: #5a6068; font-size: .85rem; font-style: italic; }
+        ul.explorer-checks { margin: .75rem 0 0; }
         ul.checks { list-style: none; padding: 0; }
         ul.checks li { padding: .4rem .6rem; border-radius: 6px; margin-bottom: .35rem; }
         ul.checks li.error { background: #fdecec; }
@@ -536,7 +895,12 @@ public static class HtmlReportGenerator
         pre.ascii-watermark { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #38bdf8; border: 1px solid #312e81; border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .78rem; line-height: 1.15; overflow-x: auto; text-align: center; box-shadow: 0 4px 14px rgba(15, 23, 42, .12); }
         @media (prefers-color-scheme: dark) {
           body { background: #16181c; color: #e6e8eb; }
-          .card, table, pre.mermaid, .svg-diagram { background: #1f2227; border-color: #3a3e45; }
+          .card, table, pre.mermaid, .svg-diagram, details.explorer-item, .explorer-panel, .filter-pill, .explorer-search, .explorer-btn { background: #1f2227; border-color: #3a3e45; color: #e6e8eb; }
+          .explorer-body { background: #181a1f; border-color: #3a3e45; }
+          .meta-pill { background: #26292f; color: #cbd5e1; }
+          .badge-command { background: #1e3a8a; color: #dbeafe; border-color: #3b82f6; }
+          .badge-query { background: #134e4a; color: #ccfbf1; border-color: #14b8a6; }
+          .badge-request { background: #4c1d95; color: #ede9fe; border-color: #8b5cf6; }
           th { background: #26292f; }
           th, td { border-color: #3a3e45; }
           h2 { border-color: #3a3e45; }
@@ -544,10 +908,11 @@ public static class HtmlReportGenerator
           ul.checks li.error { background: #3a2226; }
           ul.checks li.warning { background: #38331c; }
           ul.checks li.info { background: #1d2b3f; }
-          .meta, .footer, .note, .card-label, figure.diagram figcaption { color: #9aa0a8; }
+          .meta, .footer, .note, .card-label, figure.diagram figcaption, .explorer-response, .meta-sub, dl.explorer-dl dt, h4 { color: #9aa0a8; }
           .diagram-error { background: #3a2226; border-color: #7f1d1d; color: #fecaca; }
           details pre { background: #26292f; }
           hr { border-color: #3a3e45; }
+          a { color: #60a5fa; }
         }
         """;
 }

@@ -3,11 +3,15 @@
 What is planned, in the order I expect to work on it. Issues are linked
 where they exist; the dates are not promises.
 
-## In progress
-
-- Interactive HTML explorer (click a request, see its handler and files)
-
 ## Done
+
+**Unreleased**
+
+- **Interactive HTML explorer**: click any request (in the Requests table, explorer
+  cards, or Mermaid CQRS diagram) to inspect its contract, response type, handlers,
+  validators, source `File:Line:Col` locations, and per-request architecture check
+  findings, with filter pills (`All`, `Commands`, `Queries`, `With Findings`) and
+  live search
 
 **0.7.0** (October 2026)
 

@@ -4,6 +4,25 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Interactive HTML CQRS Explorer (`--format html`)**:
+  - `ARCHITECTURE.html` now includes an **Interactive CQRS Explorer** section with
+    expandable inspector cards for every request, displaying its contract metadata
+    (`FullName`, `Kind`, `ViaMarker`, `ResponseType`, `Project`, and source
+    `File:Line:Col`), linked handlers with their project and source `File:Line:Col`,
+    linked validators with their project and source `File:Line:Col`, and per-request
+    architecture check findings.
+  - Pure CSS filter pills (`All`, `Commands`, `Queries`, `With Findings`) and
+    clickable request anchors (`#explorer-...`) from the Requests table work in both
+    `--render mermaid` and zero-JavaScript `--render svg` modes.
+  - In `--render mermaid` mode, the explorer also adds live text filtering,
+    **Expand all** / **Collapse all** controls, and click handlers on Mermaid CQRS
+    diagram nodes (`g.node`) that jump directly to and open the matching request
+    inspector card.
+  - Added a `Source` (`File:Line:Col`) column to the HTML **Pipeline Behaviors**
+    table.
+
 ## [0.7.0] - 2026-10-25
 
 ### Added

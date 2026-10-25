@@ -78,8 +78,11 @@ cqrslens <path> --format json
 ```
 
 - **HTML (`--format html`)**: A single portable `ARCHITECTURE.html` with summary
-  stat cards, the same diagrams and tables as the Markdown report, and two
-  diagram rendering modes:
+  stat cards, the same diagrams and tables as the Markdown report, an **Interactive
+  CQRS Explorer** (clickable requests, filter pills for `All` / `Commands` /
+  `Queries` / `With Findings`, live search, and expandable inspector cards showing
+  every request's contract, handlers, validators, `File:Line:Col` source locations,
+  and architecture check findings), and two diagram rendering modes:
   - `--render mermaid` (default): emits `<pre class="mermaid">` blocks rendered in
     the browser by Mermaid `12.2.0` (loaded with a SHA-384 SRI check from jsDelivr;
     the first view needs network access, while the Mermaid source blocks remain
@@ -674,9 +677,9 @@ the source:
 Short version (full list in [ROADMAP.md](ROADMAP.md)):
 
 - ✅ Console ASCII artwork, 24-bit TrueColor gradients, live progress bar & custom watermarks (`v0.6.0`)
-- ✅ Built-in Mediator (`martinothamar/Mediator`) and Wolverine (`WolverineFx`) conventions
+- ✅ Built-in Mediator (`martinothamar/Mediator`) and Wolverine (`WolverineFx`) conventions (`v0.7.0`)
 - ✅ Architecture diff CLI (`--diff` / `--diff-output`) and GitHub Action PR comment mode (`comment-pr: 'true'`) (`v0.7.0`)
-- Interactive HTML explorer (click a request, see its handler and files)
+- ✅ Interactive HTML explorer (click a request, see its handler, validators, source files, and findings)
 
 ## Development
 
