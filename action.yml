@@ -65,7 +65,7 @@ inputs:
   version:
     description: CqrsLens NuGet tool version to install.
     required: false
-    default: '0.5.0'
+    default: '0.5.1'
 
 outputs:
   report-path:
