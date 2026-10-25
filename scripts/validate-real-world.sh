@@ -72,6 +72,7 @@ while IFS=$'\t' read -r name url ref subdir markers handler_markers; do
     rm -rf "$clone_dir"
     mkdir -p "$clone_dir"
     if git -C "$clone_dir" init -q \
+        && git -C "$clone_dir" config core.longpaths true \
         && git -C "$clone_dir" remote add origin "$url" \
         && git -C "$clone_dir" fetch -q --depth 1 origin "$ref" \
         && git -C "$clone_dir" checkout -q --detach FETCH_HEAD; then
