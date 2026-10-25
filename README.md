@@ -457,6 +457,124 @@ And the checks section told me the truth about my own code: **0 errors,
 
 The whole scan took 145 ms.
 
+### Public open-source benchmark gallery
+
+CqrsLens is also tested against 4 well-known open-source .NET repositories (**106 projects**, **154 requests**, **154 handlers**) with **100% shape and check parity between `--analysis text` and `--analysis roslyn`**:
+
+| Repository | Projects | Requests | Handlers | Validators | Behaviors | DbContexts | Checks (E/W) | Generated Report |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | 13 | 11 | 11 | 6 | 4 | 1 | `0 / 3` | [`jasontaylor-ARCHITECTURE.md`](docs/sample-output/real-world/jasontaylor-ARCHITECTURE.md) |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | 22 | 23 | 23 | 21 | 3 | 3 | `0 / 13` | [`ardalis-ARCHITECTURE.md`](docs/sample-output/real-world/ardalis-ARCHITECTURE.md) |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | 46 | 105 | 105 | 5 | 0 | 4 | `0 / 71` | [`kgrzybek-ddd-ARCHITECTURE.md`](docs/sample-output/real-world/kgrzybek-ddd-ARCHITECTURE.md) |
+| [martinothamar/Mediator](https://github.com/martinothamar/Mediator) (`samples`) | 24 | 15 | 15 | 1 | 9 | 0 | `0 / 3` | [`mediator-ARCHITECTURE.md`](docs/sample-output/real-world/mediator-ARCHITECTURE.md) |
+
+#### Example: `jasontaylordev/CleanArchitecture` CQRS Map (11 Requests, 11 Handlers, 6 Validators)
+
+```mermaid
+flowchart LR
+    accTitle: CQRS map
+    accDescr: 11 requests, 11 handlers, 6 validators, 3 CommandWithoutValidator.
+    subgraph prj__unassigned_["Unassigned requests"]
+        req_CleanArchitectureUseCaseCommand["CleanArchitectureUseCaseCommand"]:::clsCommand
+        req_CleanArchitectureUseCaseQuery["CleanArchitectureUseCaseQuery"]:::clsQuery
+    end
+    subgraph prj_Application["Requests in Application"]
+        req_CreateTodoItemCommand["CreateTodoItemCommand"]:::clsCommand
+        req_DeleteTodoItemCommand["DeleteTodoItemCommand"]:::clsCommandNoValidator
+        req_UpdateTodoItemCommand["UpdateTodoItemCommand"]:::clsCommand
+        req_UpdateTodoItemDetailCommand["UpdateTodoItemDetailCommand"]:::clsCommandNoValidator
+        req_CreateTodoListCommand["CreateTodoListCommand"]:::clsCommand
+        req_DeleteTodoListCommand["DeleteTodoListCommand"]:::clsCommandNoValidator
+        req_UpdateTodoListCommand["UpdateTodoListCommand"]:::clsCommand
+        req_GetTodosQuery["GetTodosQuery"]:::clsQuery
+        req_GetWeatherForecastsQuery["GetWeatherForecastsQuery"]:::clsQuery
+    end
+    hdl_CleanArchitectureUseCaseCommandHandler(["CleanArchitectureUseCaseCommandHandler"]):::clsHandler
+    hdl_CleanArchitectureUseCaseQueryHandler(["CleanArchitectureUseCaseQueryHandler"]):::clsHandler
+    hdl_CreateTodoItemCommandHandler(["CreateTodoItemCommandHandler"]):::clsHandler
+    hdl_DeleteTodoItemCommandHandler(["DeleteTodoItemCommandHandler"]):::clsHandler
+    hdl_UpdateTodoItemCommandHandler(["UpdateTodoItemCommandHandler"]):::clsHandler
+    hdl_UpdateTodoItemDetailCommandHandler(["UpdateTodoItemDetailCommandHandler"]):::clsHandler
+    hdl_CreateTodoListCommandHandler(["CreateTodoListCommandHandler"]):::clsHandler
+    hdl_DeleteTodoListCommandHandler(["DeleteTodoListCommandHandler"]):::clsHandler
+    hdl_UpdateTodoListCommandHandler(["UpdateTodoListCommandHandler"]):::clsHandler
+    hdl_GetTodosQueryHandler(["GetTodosQueryHandler"]):::clsHandler
+    hdl_GetWeatherForecastsQueryHandler(["GetWeatherForecastsQueryHandler"]):::clsHandler
+    val_CleanArchitectureUseCaseCommandValidator["CleanArchitectureUseCaseCommandValidator"]:::clsValidator
+    val_CleanArchitectureUseCaseQueryValidator["CleanArchitectureUseCaseQueryValidator"]:::clsValidator
+    val_CreateTodoItemCommandValidator["CreateTodoItemCommandValidator"]:::clsValidator
+    val_UpdateTodoItemCommandValidator["UpdateTodoItemCommandValidator"]:::clsValidator
+    val_CreateTodoListCommandValidator["CreateTodoListCommandValidator"]:::clsValidator
+    val_UpdateTodoListCommandValidator["UpdateTodoListCommandValidator"]:::clsValidator
+    req_CleanArchitectureUseCaseCommand --> hdl_CleanArchitectureUseCaseCommandHandler
+    val_CleanArchitectureUseCaseCommandValidator -.->|validates| req_CleanArchitectureUseCaseCommand
+    req_CleanArchitectureUseCaseQuery --> hdl_CleanArchitectureUseCaseQueryHandler
+    val_CleanArchitectureUseCaseQueryValidator -.->|validates| req_CleanArchitectureUseCaseQuery
+    req_CreateTodoItemCommand --> hdl_CreateTodoItemCommandHandler
+    val_CreateTodoItemCommandValidator -.->|validates| req_CreateTodoItemCommand
+    req_DeleteTodoItemCommand --> hdl_DeleteTodoItemCommandHandler
+    req_UpdateTodoItemCommand --> hdl_UpdateTodoItemCommandHandler
+    val_UpdateTodoItemCommandValidator -.->|validates| req_UpdateTodoItemCommand
+    req_UpdateTodoItemDetailCommand --> hdl_UpdateTodoItemDetailCommandHandler
+    req_CreateTodoListCommand --> hdl_CreateTodoListCommandHandler
+    val_CreateTodoListCommandValidator -.->|validates| req_CreateTodoListCommand
+    req_DeleteTodoListCommand --> hdl_DeleteTodoListCommandHandler
+    req_UpdateTodoListCommand --> hdl_UpdateTodoListCommandHandler
+    val_UpdateTodoListCommandValidator -.->|validates| req_UpdateTodoListCommand
+    req_GetTodosQuery --> hdl_GetTodosQueryHandler
+    req_GetWeatherForecastsQuery --> hdl_GetWeatherForecastsQueryHandler
+    style prj__unassigned_ fill:none,stroke:#94a3b8,stroke-dasharray:4 3
+    style prj_Application fill:none,stroke:#94a3b8,stroke-dasharray:4 3
+    classDef clsCommand fill:#e8f1ff,stroke:#2563eb,stroke-width:2px,color:#102a43
+    classDef clsQuery fill:#e6fffa,stroke:#0f766e,stroke-width:2px,color:#0f2e2e
+    classDef clsRequest fill:#f5f3ff,stroke:#6d28d9,stroke-width:2px,color:#2e1065
+    classDef clsHandler fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#1e293b
+    classDef clsValidator fill:#fff7ed,stroke:#c2410c,stroke-width:1.5px,color:#431407
+    classDef clsCommandNoValidator fill:#e8f1ff,stroke:#d97706,stroke-width:2px,stroke-dasharray:4 3,color:#102a43
+```
+
+#### Example: `kgrzybek/modular-monolith-with-ddd` `MeetingsContext` ER Diagram (10 Entities, 3 Backing-Field Relationships)
+
+```mermaid
+erDiagram
+    accTitle: MeetingsContext ER diagram
+    accDescr: 10 entities, 3 relationships.
+    ent_OutboxMessage["OutboxMessage"] {
+        Guid Id PK
+        string Data
+        DateTime OccurredOn
+        DateTime? ProcessedDate
+        string Type
+    }
+    ent_InternalCommand["InternalCommand"] {
+        Guid Id PK
+        string Data
+        DateTime? ProcessedDate
+        string Type
+    }
+    ent_MeetingCommentingConfiguration["MeetingCommentingConfiguration"]
+    ent_MeetingComment["MeetingComment"]
+    ent_MeetingGroupProposal["MeetingGroupProposal"] {
+        MeetingGroupProposalId Id PK
+    }
+    ent_MeetingGroup["MeetingGroup"] {
+        MeetingGroupId Id PK
+    }
+    ent_MeetingMemberCommentLike["MeetingMemberCommentLike"]
+    ent_Meeting["Meeting"] {
+        MeetingId Id PK
+    }
+    ent_Member["Member"] {
+        MemberId Id PK
+    }
+    ent_MemberSubscription["MemberSubscription"] {
+        MemberSubscriptionId Id PK
+    }
+    ent_MeetingCommentingConfiguration |o--o| ent_Meeting : "_meetingId"
+    ent_MeetingComment |o--o{ ent_MeetingMemberCommentLike : "_meetingCommentId"
+    ent_Member |o--o{ ent_MeetingMemberCommentLike : "_memberId"
+```
+
 ## What it detects
 
 | Shape | How |
@@ -502,8 +620,8 @@ the source:
 
 Short version (full list in [ROADMAP.md](ROADMAP.md)):
 
-- Colored console output and a progress line while scanning
-- More mediators: Mediator (martinothamar) and Wolverine conventions
+- ✅ Console ASCII artwork, 24-bit TrueColor gradients, live progress bar & custom watermarks (`v0.6.0`)
+- ✅ Built-in Mediator (`martinothamar/Mediator`) and Wolverine (`WolverineFx`) conventions
 - A GitHub Action that comments the architecture diff on pull requests
 
 ## Development
