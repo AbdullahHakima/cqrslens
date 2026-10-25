@@ -20,7 +20,14 @@ public sealed class RequestBaseClassTests : IDisposable
         Directory.CreateDirectory(_root);
         File.WriteAllText(
             Path.Combine(_root, "App.csproj"),
-            "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <Using Include="MediatR" />
+                <Using Include="App.Contracts" />
+              </ItemGroup>
+            </Project>
+            """);
     }
 
     public void Dispose()
@@ -35,8 +42,10 @@ public sealed class RequestBaseClassTests : IDisposable
         File.WriteAllText(path, code);
     }
 
-    [Fact]
-    public void QueryBaseClass_IsDiscoveredAndKeepsItsResponseType()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void QueryBaseClass_IsDiscoveredAndKeepsItsResponseType(AnalysisMode mode)
     {
         WriteFile("Contracts.cs", """
             namespace App.Contracts;
@@ -52,7 +61,7 @@ public sealed class RequestBaseClassTests : IDisposable
             public sealed class ThingDto : EntityBase { }
             """);
 
-        var result = Analyzer.Analyze(_root);
+        var result = Analyzer.Analyze(_root, mode);
 
         var request = Assert.Single(result.Requests);
         Assert.Equal("GetThingQuery", request.Name);
@@ -61,8 +70,10 @@ public sealed class RequestBaseClassTests : IDisposable
         Assert.DoesNotContain(result.Requests, r => r.Name == "ThingDto");
     }
 
-    [Fact]
-    public void ConfiguredMarkerThroughCustomBase_IsDiscovered()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void ConfiguredMarkerThroughCustomBase_IsDiscovered(AnalysisMode mode)
     {
         WriteFile("Contracts.cs", """
             namespace App.Contracts;
@@ -76,7 +87,10 @@ public sealed class RequestBaseClassTests : IDisposable
             public sealed class DoThingCommand : CommandBase { }
             """);
 
-        var result = Analyzer.Analyze(_root, new HashSet<string> { "ICommand" });
+        var result = Analyzer.Analyze(
+            _root,
+            mode,
+            new AnalysisOptions { Markers = new HashSet<string> { "ICommand" } });
 
         var request = Assert.Single(result.Requests);
         Assert.Equal("DoThingCommand", request.Name);
@@ -84,8 +98,10 @@ public sealed class RequestBaseClassTests : IDisposable
         Assert.Null(request.ResponseType);
     }
 
-    [Fact]
-    public void MultiLevelBaseChain_SubstitutesGenericResponse()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void MultiLevelBaseChain_SubstitutesGenericResponse(AnalysisMode mode)
     {
         WriteFile("Contracts.cs", """
             namespace App.Contracts;
@@ -101,15 +117,17 @@ public sealed class RequestBaseClassTests : IDisposable
             public sealed class PageDto { }
             """);
 
-        var result = Analyzer.Analyze(_root);
+        var result = Analyzer.Analyze(_root, mode);
 
         var request = Assert.Single(result.Requests);
         Assert.Equal("GetPageQuery", request.Name);
         Assert.Equal("PageDto", request.ResponseType);
     }
 
-    [Fact]
-    public void DirectOverloadedMarkers_AreResolvedByArity()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void DirectOverloadedMarkers_AreResolvedByArity(AnalysisMode mode)
     {
         WriteFile("Contracts.cs", """
             namespace App.Contracts;
@@ -124,7 +142,10 @@ public sealed class RequestBaseClassTests : IDisposable
             public sealed class CreateThingCommand : Contracts.ICommand<Guid> { }
             """);
 
-        var result = Analyzer.Analyze(_root, new HashSet<string> { "ICommand" });
+        var result = Analyzer.Analyze(
+            _root,
+            mode,
+            new AnalysisOptions { Markers = new HashSet<string> { "ICommand" } });
 
         Assert.Equal(2, result.Requests.Count);
         Assert.Null(result.Requests.Single(r => r.Name == "DoThingCommand").ResponseType);
@@ -133,8 +154,10 @@ public sealed class RequestBaseClassTests : IDisposable
             result.Requests.Single(r => r.Name == "CreateThingCommand").ResponseType);
     }
 
-    [Fact]
-    public void GenericAndNonGenericBases_AreResolvedByArity()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void GenericAndNonGenericBases_AreResolvedByArity(AnalysisMode mode)
     {
         WriteFile("Contracts.cs", """
             namespace App.Contracts;
@@ -151,7 +174,10 @@ public sealed class RequestBaseClassTests : IDisposable
             public sealed class CreateThingCommand : CommandBase<Guid> { }
             """);
 
-        var result = Analyzer.Analyze(_root, new HashSet<string> { "ICommand" });
+        var result = Analyzer.Analyze(
+            _root,
+            mode,
+            new AnalysisOptions { Markers = new HashSet<string> { "ICommand" } });
 
         Assert.Equal(2, result.Requests.Count);
         var doThing = result.Requests.Single(r => r.Name == "DoThingCommand");
@@ -160,14 +186,18 @@ public sealed class RequestBaseClassTests : IDisposable
         Assert.Equal("Guid", createThing.ResponseType);
     }
 
-    [Fact]
-    public void HandlerWrapperWithOverloadedContracts_ResolvesTheRequestArgument()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void HandlerWrapperWithOverloadedContracts_ResolvesTheRequestArgument(AnalysisMode mode)
     {
         WriteFile("Contracts.cs", """
             namespace App.Contracts;
 
-            public interface ICommandHandler<TCommand> : IRequestHandler<TCommand> { }
-            public interface ICommandHandler<TCommand, TResult> : IRequestHandler<TCommand, TResult> { }
+            public interface ICommandHandler<TCommand> : IRequestHandler<TCommand>
+                where TCommand : IRequest { }
+            public interface ICommandHandler<TCommand, TResult> : IRequestHandler<TCommand, TResult>
+                where TCommand : IRequest<TResult> { }
             """);
         WriteFile("Features/DoThingCommand.cs", """
             namespace App.Features;
@@ -176,7 +206,7 @@ public sealed class RequestBaseClassTests : IDisposable
             public sealed class DoThingHandler : App.Contracts.ICommandHandler<DoThingCommand, int> { }
             """);
 
-        var result = Analyzer.Analyze(_root);
+        var result = Analyzer.Analyze(_root, mode);
 
         var handler = Assert.Single(result.Handlers);
         Assert.Equal("DoThingCommand", handler.RequestName);
@@ -184,8 +214,10 @@ public sealed class RequestBaseClassTests : IDisposable
         Assert.Equal(new[] { "App.Features.DoThingHandler" }, request.Handlers);
     }
 
-    [Fact]
-    public void DtoBaseClass_IsNotABroadenedRequest()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void DtoBaseClass_IsNotABroadenedRequest(AnalysisMode mode)
     {
         WriteFile("Contracts.cs", """
             namespace App.Contracts;
@@ -200,14 +232,16 @@ public sealed class RequestBaseClassTests : IDisposable
             public sealed class ProductQuery : AggregateRoot { }
             """);
 
-        var result = Analyzer.Analyze(_root);
+        var result = Analyzer.Analyze(_root, mode);
 
         Assert.Empty(result.Requests);
         Assert.DoesNotContain(result.Diagnostics, d => d.Code == AnalysisResult.UnresolvedContractCode);
     }
 
-    [Fact]
-    public void UnresolvedRequestBase_IsInformationalInsteadOfSilent()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void UnresolvedRequestBase_IsInformationalInsteadOfSilent(AnalysisMode mode)
     {
         WriteFile("Features/DoThingCommand.cs", """
             namespace App.Features;
@@ -215,7 +249,7 @@ public sealed class RequestBaseClassTests : IDisposable
             public sealed class DoThingCommand : ExternalCommandBase { }
             """);
 
-        var result = Analyzer.Analyze(_root);
+        var result = Analyzer.Analyze(_root, mode);
 
         Assert.Empty(result.Requests);
         var diagnostic = Assert.Single(
@@ -226,8 +260,10 @@ public sealed class RequestBaseClassTests : IDisposable
         Assert.True(result.CanRunStrictChecks);
     }
 
-    [Fact]
-    public void AmbiguousRequestBase_IsInformationalAndNotGuessed()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void AmbiguousRequestBase_IsInformationalAndNotGuessed(AnalysisMode mode)
     {
         WriteFile("Alpha/QueryBase.cs", """
             namespace Alpha.Contracts;
@@ -245,7 +281,7 @@ public sealed class RequestBaseClassTests : IDisposable
             public sealed class ThingDto { }
             """);
 
-        var result = Analyzer.Analyze(_root);
+        var result = Analyzer.Analyze(_root, mode);
 
         Assert.Empty(result.Requests);
         var diagnostic = Assert.Single(

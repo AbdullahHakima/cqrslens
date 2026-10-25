@@ -29,7 +29,9 @@ public class ConfigurationTests : IDisposable
     }
 
     private void WriteConfig(string json)
-        => WriteFile(ConfigurationLoader.FileName, json);
+    {
+        WriteFile(ConfigurationLoader.FileName, json);
+    }
 
     private static (int Code, string Stdout, string Stderr) Run(string[] args)
     {
@@ -171,6 +173,35 @@ public class ConfigurationTests : IDisposable
     }
 
     [Fact]
+    public void ConfigRenderSvg_ProducesZeroJsHtmlReportAndCliCanOverride()
+    {
+        WriteFile("Features/PingQuery.cs", """
+            namespace App.Features;
+            public sealed record PingQuery : IRequest<int>;
+            public sealed class PingQueryHandler : IRequestHandler<PingQuery, int> { }
+            """);
+        WriteConfig("""
+            {
+              "render": "svg"
+            }
+            """);
+
+        var svgOutput = Path.Combine(_root, "report.html");
+        var svgResult = Run(new[] { _root, "-o", svgOutput });
+        Assert.Equal(ExitCodes.Success, svgResult.Code);
+        var svgHtml = File.ReadAllText(svgOutput);
+        Assert.Contains("<div class=\"svg-diagram\"><svg ", svgHtml);
+        Assert.DoesNotContain("<script", svgHtml, StringComparison.OrdinalIgnoreCase);
+
+        var mermaidOutput = Path.Combine(_root, "mermaid.html");
+        var mermaidResult = Run(new[] { _root, "-o", mermaidOutput, "--render", "mermaid" });
+        Assert.Equal(ExitCodes.Success, mermaidResult.Code);
+        var mermaidHtml = File.ReadAllText(mermaidOutput);
+        Assert.Contains("<pre class=\"mermaid\">", mermaidHtml);
+        Assert.Contains("mermaid.min.js", mermaidHtml);
+    }
+
+    [Fact]
     public void ConfigIncludeAndLayerOverride_AreApplied()
     {
         WriteFile("src/Keep.cs", """
@@ -226,6 +257,7 @@ public class ConfigurationTests : IDisposable
     [InlineData("""{ "rules": { "NoSuchRule": "error" } }""")]
     [InlineData("""{ "rules": { "MissingHandler": "fatal" } }""")]
     [InlineData("""{ "analysis": "magic" }""")]
+    [InlineData("""{ "render": "canvas" }""")]
     [InlineData("""{ "markers": [""] }""")]
     [InlineData("""{ "handlerMarkers": [""] }""")]
     public void InvalidConfig_IsAUsageError(string json)
@@ -283,5 +315,32 @@ public class ConfigurationTests : IDisposable
         Assert.True(filter.IsIncluded("src/App/Order.cs"));
         Assert.False(filter.IsIncluded("tests/App/Order.cs"));
         Assert.False(filter.IsIncluded("src/App/Generated/Order.cs"));
+    }
+
+    [Fact]
+    public void ConfigWatermark_EmbedsWatermarkAndCliOverridesIt()
+    {
+        WriteFile("Features/PingQuery.cs", """
+            namespace App.Features;
+            public sealed record PingQuery : IRequest<int>;
+            public sealed class PingQueryHandler : IRequestHandler<PingQuery, int> { }
+            """);
+        WriteConfig("""
+            {
+              "watermark": "CONFIG STAMP"
+            }
+            """);
+
+        var mdOutput = Path.Combine(_root, "report.md");
+        var result = Run(new[] { _root, "-o", mdOutput });
+        Assert.Equal(ExitCodes.Success, result.Code);
+        Assert.Contains("◈ WATERMARK · CONFIG STAMP ◈", File.ReadAllText(mdOutput));
+
+        var overrideOutput = Path.Combine(_root, "override.md");
+        var overrideResult = Run(new[] { _root, "-o", overrideOutput, "--watermark", "CLI STAMP" });
+        Assert.Equal(ExitCodes.Success, overrideResult.Code);
+        var overrideMd = File.ReadAllText(overrideOutput);
+        Assert.Contains("◈ WATERMARK · CLI STAMP ◈", overrideMd);
+        Assert.DoesNotContain("CONFIG STAMP", overrideMd);
     }
 }

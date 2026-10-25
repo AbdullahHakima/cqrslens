@@ -20,7 +20,13 @@ public sealed class ExternalHandlerWrapperTests : IDisposable
         Directory.CreateDirectory(_root);
         File.WriteAllText(
             Path.Combine(_root, "App.csproj"),
-            "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+            """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <Using Include="MediatR" />
+              </ItemGroup>
+            </Project>
+            """);
     }
 
     public void Dispose()
@@ -35,8 +41,10 @@ public sealed class ExternalHandlerWrapperTests : IDisposable
         File.WriteAllText(path, code);
     }
 
-    [Fact]
-    public void SourceDeclaredWrapper_IsFollowedWithoutConfiguration()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void SourceDeclaredWrapper_IsFollowedWithoutConfiguration(AnalysisMode mode)
     {
         WriteFile("Feature.cs", """
             namespace App.Features;
@@ -46,7 +54,7 @@ public sealed class ExternalHandlerWrapperTests : IDisposable
             public sealed class PingHandler : ICommandHandler<PingCommand> { }
             """);
 
-        var result = Analyzer.Analyze(_root);
+        var result = Analyzer.Analyze(_root, mode);
 
         var request = Assert.Single(result.Requests);
         var handler = Assert.Single(result.Handlers);
@@ -55,8 +63,10 @@ public sealed class ExternalHandlerWrapperTests : IDisposable
         Assert.DoesNotContain(result.Checks, c => c.Code == ArchitectureChecker.MissingHandlerCode);
     }
 
-    [Fact]
-    public void DefaultScan_LeavesExternalWrapperOpaque()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void DefaultScan_LeavesExternalWrapperOpaque(AnalysisMode mode)
     {
         WriteFile("Feature.cs", """
             using Ardalis.SharedKernel;
@@ -70,8 +80,13 @@ public sealed class ExternalHandlerWrapperTests : IDisposable
 
         var result = Analyzer.Analyze(
             _root,
-            new HashSet<string> { "ICommand" });
+            mode,
+            new AnalysisOptions
+            {
+                Markers = new HashSet<string> { "ICommand" },
+            });
 
+        Assert.Single(result.Requests);
         Assert.Empty(result.Handlers);
         var diagnostic = Assert.Single(
             result.Diagnostics,
@@ -82,8 +97,10 @@ public sealed class ExternalHandlerWrapperTests : IDisposable
             c.Code == ArchitectureChecker.MissingHandlerCode);
     }
 
-    [Fact]
-    public void ConfiguredExternalWrapper_LinksArdalisStyleHandler()
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void ConfiguredExternalWrapper_LinksArdalisStyleHandler(AnalysisMode mode)
     {
         WriteFile("Feature.cs", """
             using Ardalis.SharedKernel;
@@ -97,7 +114,7 @@ public sealed class ExternalHandlerWrapperTests : IDisposable
 
         var result = Analyzer.Analyze(
             _root,
-            AnalysisMode.Text,
+            mode,
             new AnalysisOptions
             {
                 Markers = new HashSet<string> { "ICommand" },
@@ -105,6 +122,8 @@ public sealed class ExternalHandlerWrapperTests : IDisposable
             });
 
         var request = Assert.Single(result.Requests);
+        Assert.Equal("ICommand", request.ViaMarker);
+        Assert.Equal("Result<int>", request.ResponseType);
         var handler = Assert.Single(result.Handlers);
         Assert.Equal("CreateContributorCommand", handler.RequestName);
         Assert.Equal("App.Features", handler.RequestNamespace);

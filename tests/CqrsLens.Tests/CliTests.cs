@@ -1,3 +1,4 @@
+using System.Text.Json;
 using CqrsLens;
 using Xunit;
 
@@ -73,6 +74,8 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, result.Code);
         Assert.Contains("Usage: cqrslens", result.Stdout);
+        Assert.Contains("--format md|html|json", result.Stdout);
+        Assert.Contains("--render", result.Stdout);
         Assert.Contains("--handler-markers", result.Stdout);
         Assert.Contains("--version", result.Stdout);
     }
@@ -133,6 +136,7 @@ public class CliTests : IDisposable
     [InlineData("-o")]
     [InlineData("--output")]
     [InlineData("--format")]
+    [InlineData("--render")]
     [InlineData("--config")]
     [InlineData("--analysis")]
     [InlineData("--markers")]
@@ -142,6 +146,7 @@ public class CliTests : IDisposable
     [InlineData("--sarif")]
     [InlineData("--summary")]
     [InlineData("--ci-root")]
+    [InlineData("--watermark")]
     public void OptionWithoutValue_IsUsageError(string option)
     {
         var result = Run(new[] { option });
@@ -166,6 +171,53 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Usage, result.Code);
         Assert.Contains("unknown format 'pdf'", result.Stderr);
+    }
+
+    [Fact]
+    public void JsonFormat_AndJsonExtensionInference_WriteStructuredJsonReport()
+    {
+        WriteValidFixture();
+        var inferredOutput = Path.Combine(_root, "report.json");
+        var explicitOutput = Path.Combine(_root, "explicit.out");
+
+        var inferredResult = Run(new[] { _root, "-o", inferredOutput, "--generated-at", "2026-02-03T04:05:06Z" });
+        var explicitResult = Run(new[] { _root, "-o", explicitOutput, "--format", "json", "--generated-at", "2026-02-03T04:05:06Z" });
+
+        Assert.Equal(ExitCodes.Success, inferredResult.Code);
+        Assert.Equal(ExitCodes.Success, explicitResult.Code);
+
+        var inferredJson = File.ReadAllText(inferredOutput);
+        var explicitJson = File.ReadAllText(explicitOutput);
+        Assert.Equal(inferredJson, explicitJson);
+
+        using var doc = JsonDocument.Parse(inferredJson);
+        Assert.Equal(1, doc.RootElement.GetProperty("schemaVersion").GetInt32());
+        Assert.Equal(1, doc.RootElement.GetProperty("summary").GetProperty("requests").GetInt32());
+        Assert.Equal(1, doc.RootElement.GetProperty("summary").GetProperty("handlers").GetInt32());
+    }
+
+    [Fact]
+    public void UnknownRenderMode_IsRejected()
+    {
+        var result = Run(new[] { _root, "--render", "canvas" });
+
+        Assert.Equal(ExitCodes.Usage, result.Code);
+        Assert.Contains("unknown render mode 'canvas'", result.Stderr);
+    }
+
+    [Fact]
+    public void SvgRenderMode_ProducesZeroJsHtmlReport()
+    {
+        WriteValidFixture();
+        var output = Path.Combine(_root, "report.html");
+
+        var result = Run(new[] { _root, "-o", output, "--render", "svg" });
+
+        Assert.Equal(ExitCodes.Success, result.Code);
+        var html = File.ReadAllText(output);
+        Assert.Contains("<div class=\"svg-diagram\"><svg ", html);
+        Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("mermaid.min.js", html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -318,7 +370,7 @@ public class CliTests : IDisposable
     {
         var command = CliParser.Parse(new[]
         {
-            "src", "-o", "out.html", "--format", "HTML", "--analysis", "roslyn",
+            "src", "-o", "out.html", "--format", "HTML", "--render", "SVG", "--analysis", "roslyn",
             "--markers", "ICommand, App.IQuery",
             "--handler-markers", "ICommandHandler, App.IQueryHandler", "--strict",
         });
@@ -328,11 +380,82 @@ public class CliTests : IDisposable
         Assert.Equal("src", options.Path);
         Assert.Equal("out.html", options.Output);
         Assert.Equal("html", options.Format);
+        Assert.Equal(DiagramRenderMode.Svg, options.RenderMode);
+        Assert.True(options.RenderModeSpecified);
         Assert.Equal(AnalysisMode.Roslyn, options.AnalysisMode);
         Assert.True(options.Strict);
         Assert.Equal(new[] { "ICommand", "IQuery" }, options.Markers.OrderBy(m => m));
         Assert.Equal(
             new[] { "ICommandHandler", "IQueryHandler" },
             options.HandlerMarkers.OrderBy(m => m));
+    }
+
+    [Fact]
+    public void BannerAndTrueColor_RenderAsciiLogoAndSummaryCard()
+    {
+        WriteValidFixture();
+        var output = Path.Combine(_root, "ARCHITECTURE.md");
+
+        var colored = Run(new[] { _root, "-o", output, "--banner", "--color" });
+        Assert.Equal(ExitCodes.Success, colored.Code);
+        Assert.Contains("Static CQRS & Clean Architecture Lens", colored.Stdout);
+        Assert.Contains("CqrsLens Architecture Summary", colored.Stdout);
+        Assert.Contains("\x1b[38;2;", colored.Stdout);
+
+        var noColor = Run(new[] { _root, "-o", output, "--banner", "--no-color" });
+        Assert.Equal(ExitCodes.Success, noColor.Code);
+        Assert.Contains("██████╗", noColor.Stdout);
+        Assert.Contains("╭─", noColor.Stdout);
+        Assert.DoesNotContain("\x1b[38;2;", noColor.Stdout, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WatermarkOption_RendersAsciiStampInConsoleAndReports()
+    {
+        WriteValidFixture();
+        var mdOut = Path.Combine(_root, "ARCHITECTURE.md");
+        var htmlOut = Path.Combine(_root, "ARCHITECTURE.html");
+        var jsonOut = Path.Combine(_root, "ARCHITECTURE.json");
+
+        var mdRun = Run(new[] { _root, "-o", mdOut, "--watermark", "ACME CORP", "--no-color" });
+        Assert.Equal(ExitCodes.Success, mdRun.Code);
+        Assert.Contains("◈ WATERMARK · ACME CORP ◈", mdRun.Stdout);
+        var md = File.ReadAllText(mdOut);
+        Assert.Contains("◈ WATERMARK · ACME CORP ◈", md);
+        Assert.Contains("╔═", md);
+
+        var htmlRun = Run(new[] { _root, "-o", htmlOut, "--watermark", "ACME CORP" });
+        Assert.Equal(ExitCodes.Success, htmlRun.Code);
+        var html = File.ReadAllText(htmlOut);
+        Assert.Contains("<div class=\"watermark-overlay\" aria-hidden=\"true\">ACME CORP</div>", html);
+        Assert.Contains("<pre class=\"ascii-watermark\" aria-label=\"Watermark\">", html);
+        Assert.Contains("◈ WATERMARK &#183; ACME CORP ◈", html);
+
+        var jsonRun = Run(new[] { _root, "-o", jsonOut, "--watermark", "ACME CORP" });
+        Assert.Equal(ExitCodes.Success, jsonRun.Code);
+        using var doc = JsonDocument.Parse(File.ReadAllText(jsonOut));
+        Assert.Equal("ACME CORP", doc.RootElement.GetProperty("watermark").GetString());
+    }
+
+    [Fact]
+    public void EmptyWatermark_IsUsageError()
+    {
+        var result = Run(new[] { _root, "--watermark", "   " });
+
+        Assert.Equal(ExitCodes.Usage, result.Code);
+        Assert.Contains("--watermark cannot be empty", result.Stderr);
+    }
+
+    [Fact]
+    public void ProgressBar_FormatsDeterministicAsciiAndColoredBars()
+    {
+        var progress = new ScanProgress("Analyzing C# shapes", 2, 4, "text");
+        var plain = ConsoleArtwork.FormatProgressBar(progress, useColor: false, barWidth: 20);
+        Assert.Contains("[██████████░░░░░░░░░░]  50% · Analyzing C# shapes (text)", plain);
+        Assert.DoesNotContain("\x1b[", plain, StringComparison.Ordinal);
+
+        var colored = ConsoleArtwork.FormatProgressBar(progress, useColor: true, barWidth: 20);
+        Assert.Contains("\x1b[38;2;", colored);
+        Assert.Contains("50%", colored);
     }
 }

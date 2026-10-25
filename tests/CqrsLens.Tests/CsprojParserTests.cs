@@ -111,4 +111,45 @@ public class CsprojParserTests : IDisposable
 
         Assert.Empty(CsprojParser.GetProjectReferenceIncludes(path));
     }
+
+    [Fact]
+    public void LoadProjects_EvaluatesDirectoryBuildPropsTargetsAndCsprojItems()
+    {
+        File.WriteAllText(Path.Combine(_root, "Directory.Build.props"), """
+            <Project>
+              <PropertyGroup>
+                <ImplicitUsings>enable</ImplicitUsings>
+              </PropertyGroup>
+              <ItemGroup>
+                <PackageReference Include="MediatR" Version="12.0.0" />
+                <PackageReference Include="Obsolete.Package" Version="1.0.0" />
+                <Using Include="MediatR" />
+                <Using Include="System.Math" Static="true" />
+                <Using Include="Obsolete.Namespace" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        var appDir = Path.Combine(_root, "src", "App");
+        Directory.CreateDirectory(appDir);
+        File.WriteAllText(Path.Combine(appDir, "App.csproj"), """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Remove="Obsolete.Package" />
+                <PackageReference Include="FluentValidation" Version="11.0.0" />
+                <Using Remove="Obsolete.Namespace" />
+                <Using Include="App.Contracts" Alias="Contracts" />
+              </ItemGroup>
+            </Project>
+            """);
+
+        var project = Assert.Single(CsprojParser.LoadProjects(_root));
+        Assert.True(project.ImplicitUsings);
+        Assert.Equal(new[] { "FluentValidation", "MediatR" }, project.PackageReferences);
+        Assert.Equal(3, project.ProjectUsings.Count);
+        Assert.Contains(project.ProjectUsings, u => u is { Target: "MediatR", Alias: null, IsStatic: false, IsGlobal: true });
+        Assert.Contains(project.ProjectUsings, u => u is { Target: "System.Math", Alias: null, IsStatic: true, IsGlobal: true });
+        Assert.Contains(project.ProjectUsings, u => u is { Target: "App.Contracts", Alias: "Contracts", IsStatic: false, IsGlobal: true });
+        Assert.DoesNotContain(project.ProjectUsings, u => u.Target == "Obsolete.Namespace");
+    }
 }
