@@ -60,6 +60,9 @@ internal static partial class DeepSliceAnalyzer
     [GeneratedRegex(@"\b(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s+@?[A-Za-z_]\w*\s*[,)=]")]
     private static partial Regex ParameterTypeRegex();
 
+    [GeneratedRegex(@"\bDbSet\s*<\s*(?<entity>[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*>\s+(?<prop>[A-Za-z_]\w*)\s*\{")]
+    private static partial Regex InterfaceDbSetRegex();
+
     public static void Analyze(IReadOnlyList<SourceFile> files, AnalysisResult result)
     {
         if (files.Count == 0 || result.Requests.Count == 0)
@@ -146,6 +149,20 @@ internal static partial class DeepSliceAnalyzer
                 var entitySimple = CSharpScanner.SimpleName(set.Entity);
                 var label = $"{set.Property} ({entitySimple})";
                 dbSetsByProperty.TryAdd(set.Property, label);
+                dbSetsByEntity.TryAdd(entitySimple, label);
+            }
+        }
+
+        // Also capture DbSet<T> properties declared on interfaces (e.g., IApplicationDbContext)
+        foreach (var (file, _, mask) in parsedFiles)
+        {
+            foreach (Match m in InterfaceDbSetRegex().Matches(file.Code))
+            {
+                if (!mask.IsCode(m.Index)) continue;
+                var prop = m.Groups["prop"].Value.Trim();
+                var entitySimple = CSharpScanner.SimpleName(m.Groups["entity"].Value.Trim());
+                var label = $"{prop} ({entitySimple})";
+                dbSetsByProperty.TryAdd(prop, label);
                 dbSetsByEntity.TryAdd(entitySimple, label);
             }
         }

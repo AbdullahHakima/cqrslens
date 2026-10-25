@@ -6,6 +6,9 @@ All notable changes to CqrsLens are documented here.
 
 ### Added
 
+- **Built-in Model Context Protocol (MCP) Server (`--mcp`)**:
+  - `McpServer` (`cqrslens --mcp [path]`) speaks JSON-RPC 2.0 over `stdio` (supporting both newline-delimited JSON-RPC and `Content-Length` framed messages) with zero external MCP package dependencies and automatic source-timestamp scan caching.
+  - Exposes 4 token-efficient MCP tools for AI coding agents (Claude Code, Cursor, Windsurf, Copilot, Antigravity): `get_architecture_dna`, `trace_slice`, `trace_entity_impact`, and `check_architecture`.
 - **Deep Vertical Slice Tracing & AI Agent Mode (`--format agent`, `--slice <filter>`)**:
   - `DeepSliceAnalyzer` traces end-to-end vertical slices across ASP.NET Core Controllers, Minimal APIs (`MapGet`/`MapPost`/`MapPut`/`MapDelete`/`MapPatch` + `MapGroup`), and FastEndpoints (`Endpoint<TRequest, TResponse>`) → Request payload properties → Validators → Handlers (constructor/primary-constructor DI dependencies) → touched EF Core `DbSet`s/entities + published Domain Events/Notifications (`INotification` / `IDomainEvent`) in both `text` and `roslyn` modes.
   - `AgentReportGenerator` (`--format agent`, default `ARCHITECTURE.agent.md`) generates a token-optimized, Mermaid-free architectural map with synthesized **Architectural DNA & Conventions** (layer topology, co-located vs. separate handler layout, active pipeline behaviors) and full vertical slice causal chains with `File:Line` source locations.

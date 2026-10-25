@@ -478,6 +478,166 @@ public static class AgentReportGenerator
         return bySimple.TryGetValue(CSharpScanner.SimpleName(name), out hit) ? hit : null;
     }
 
+    public static string GenerateDnaAndIndex(AnalysisResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+
+        var rootName = new DirectoryInfo(result.RootPath).Name;
+        var sb = new StringBuilder();
+
+        var handlersByFull = result.Handlers
+            .GroupBy(h => h.FullName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var handlersBySimple = result.Handlers
+            .GroupBy(h => h.Name, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        sb.AppendLine($"# CqrsLens Architectural DNA & Slice Index — `{rootName}`");
+        sb.AppendLine();
+        sb.AppendLine($"> {result.Projects.Count} project(s), {result.Endpoints.Count} endpoint(s), " +
+                      $"{result.Requests.Count} request(s), {result.Handlers.Count} handler(s), " +
+                      $"{result.Validators.Count} validator(s), {result.Behaviors.Count} behavior(s), " +
+                      $"{result.Notifications.Count} notification(s), {result.DbContexts.Count} DbContext(s).");
+        sb.AppendLine();
+
+        AppendArchitecturalDna(sb, result, handlersByFull, handlersBySimple);
+
+        sb.AppendLine($"## Vertical Slice Index ({result.Requests.Count})");
+        sb.AppendLine();
+        if (result.Requests.Count == 0)
+        {
+            sb.AppendLine("_No CQRS requests discovered._");
+        }
+        else
+        {
+            foreach (var r in result.Requests)
+            {
+                var response = string.IsNullOrEmpty(r.ResponseType) ? "void" : r.ResponseType;
+                var ep = r.Entrypoints.Count > 0 ? $" [{string.Join(", ", r.Entrypoints)}]" : "";
+                var proj = string.IsNullOrEmpty(r.ProjectName) ? "" : $" (`{r.ProjectName}`)";
+                sb.AppendLine($"- **[{r.Kind}] `{r.Name}`** → `{response}`{ep}{proj}{FormatLoc(r.Location)}");
+            }
+        }
+        sb.AppendLine();
+
+        if (result.Notifications.Count > 0)
+        {
+            sb.AppendLine($"## Domain Events & Notifications Index ({result.Notifications.Count})");
+            sb.AppendLine();
+            foreach (var n in result.Notifications)
+            {
+                sb.AppendLine($"- **`{n.Name}`** ({n.Handlers.Count} handler(s)){FormatLoc(n.Location)}");
+            }
+            sb.AppendLine();
+        }
+
+        return sb.ToString();
+    }
+
+    public static string GenerateEntityImpact(AnalysisResult result, string entityFilter)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var filter = (entityFilter ?? "").Trim();
+        var sb = new StringBuilder();
+        var rootName = new DirectoryInfo(result.RootPath).Name;
+
+        sb.AppendLine($"# CqrsLens Entity Impact Trace — `{filter}` (`{rootName}`)");
+        sb.AppendLine();
+
+        var handlersByFull = result.Handlers
+            .GroupBy(h => h.FullName, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var handlersBySimple = result.Handlers
+            .GroupBy(h => h.Name, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        var impactedRequests = result.Requests
+            .Where(r =>
+                r.TouchedEntities.Any(e => e.Contains(filter, StringComparison.OrdinalIgnoreCase)) ||
+                (r.ResponseType?.Contains(filter, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                r.Properties.Any(p => p.Type.Contains(filter, StringComparison.OrdinalIgnoreCase)) ||
+                r.Handlers.Any(hName =>
+                {
+                    var h = Resolve(hName, handlersByFull, handlersBySimple);
+                    return h is not null &&
+                           (h.TouchedEntities.Any(e => e.Contains(filter, StringComparison.OrdinalIgnoreCase)) ||
+                            h.Dependencies.Any(d => d.Contains(filter, StringComparison.OrdinalIgnoreCase)));
+                }))
+            .ToList();
+
+        AppendDataModelSummary(sb, result, filter, impactedRequests);
+
+        sb.AppendLine($"## Impacted Vertical Slices ({impactedRequests.Count})");
+        sb.AppendLine();
+        if (impactedRequests.Count == 0)
+        {
+            sb.AppendLine($"_No commands or queries directly touch or depend on `{filter}`._");
+        }
+        else
+        {
+            foreach (var r in impactedRequests)
+            {
+                var response = string.IsNullOrEmpty(r.ResponseType) ? "void" : r.ResponseType;
+                var ep = r.Entrypoints.Count > 0 ? $" · Entrypoints: {string.Join(", ", r.Entrypoints.Select(e => $"`{e}`"))}" : "";
+                sb.AppendLine($"- **[{r.Kind}] `{r.Name}`** → `{response}`{FormatLoc(r.Location)}{ep}");
+                foreach (var hName in r.Handlers)
+                {
+                    var h = Resolve(hName, handlersByFull, handlersBySimple);
+                    if (h is null) continue;
+                    var deps = h.Dependencies.Count > 0 ? $" · Deps: {string.Join(", ", h.Dependencies.Select(d => $"`{d}`"))}" : "";
+                    var sets = h.TouchedEntities.Count > 0 ? $" · DbSets: {string.Join(", ", h.TouchedEntities.Select(e => $"`{e}`"))}" : "";
+                    sb.AppendLine($"  - Handler: `{h.Name}`{FormatLoc(h.Location)}{deps}{sets}");
+                }
+            }
+        }
+        sb.AppendLine();
+
+        return sb.ToString();
+    }
+
+    public static string GenerateChecksSummary(AnalysisResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        var sb = new StringBuilder();
+        var rootName = new DirectoryInfo(result.RootPath).Name;
+
+        var activeChecks = result.BaselineApplied
+            ? result.Checks.Where(c => !c.IsKnown).ToList()
+            : result.Checks;
+        var errors = activeChecks.Count(c => c.Severity == CheckSeverity.Error);
+        var warnings = activeChecks.Count - errors;
+
+        sb.AppendLine($"# CqrsLens Architecture Checks — `{rootName}`");
+        sb.AppendLine();
+        sb.AppendLine($"- **Errors**: {errors}");
+        sb.AppendLine($"- **Warnings**: {warnings}");
+        sb.AppendLine($"- **Scan Diagnostics**: {result.Diagnostics.Count}");
+        sb.AppendLine();
+
+        if (activeChecks.Count == 0)
+        {
+            sb.AppendLine("All architecture checks passed.");
+        }
+        else
+        {
+            foreach (var check in activeChecks)
+            {
+                var sev = check.Severity == CheckSeverity.Error ? "ERROR" : "WARN";
+                sb.AppendLine($"- **[{sev}] `{check.Code}`**: {check.Message}{FormatLoc(check.Location)}");
+            }
+        }
+
+        if (result.Diagnostics.Count > 0)
+        {
+            sb.AppendLine();
+            sb.AppendLine("## Scan Diagnostics");
+            foreach (var d in result.Diagnostics)
+                sb.AppendLine($"- **[{d.Severity}] `{d.Code}`**: {d.Message}{FormatLoc(d.Location)}");
+        }
+
+        return sb.ToString();
+    }
+
     private static string FormatLoc(SourceLocation? loc)
         => loc is null ? "" : $" (`{loc.File}:{loc.Line}`)";
 }

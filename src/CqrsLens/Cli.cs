@@ -31,6 +31,7 @@ public sealed class CliOptions
     public bool WatermarkSpecified { get; set; }
     public bool? Banner { get; set; }
     public bool? Color { get; set; }
+    public bool Mcp { get; set; }
 }
 
 public enum CliCommandKind
@@ -193,6 +194,9 @@ public static class CliParser
                 case "--color":
                     options.Color = true;
                     break;
+                case "--mcp":
+                    options.Mcp = true;
+                    break;
                 case "--no-color":
                     options.Color = false;
                     break;
@@ -205,6 +209,9 @@ public static class CliParser
                     break;
             }
         }
+
+        if (options.Path is null && options.Mcp)
+            options.Path = Directory.GetCurrentDirectory();
 
         if (options.Path is null)
             return Error("error: pass a folder to scan.", showUsage: true);
@@ -265,6 +272,8 @@ public static class CliRunner
 
         try
         {
+            if (command.Options!.Mcp)
+                return McpServer.Run(command.Options, Console.In, stdout, stderr);
             return Execute(command.Options!, stdout, stderr);
         }
         catch (Exception ex) when (ex is ConfigurationException or BaselineException or DiffException)
@@ -638,6 +647,7 @@ public static class CliRunner
         writer.WriteLine("  --format      Report format: md (default), html, json, or agent. A .html, .json, or .agent.md -o path implies that format.");
         writer.WriteLine("  --slice       Filter and trace vertical slices matching FILTER (endpoint, request, handler, entity, or event).");
         writer.WriteLine("                Streams directly to stdout when -o is omitted.");
+        writer.WriteLine("  --mcp         Start the built-in Model Context Protocol (MCP) server over JSON-RPC 2.0 stdio.");
         writer.WriteLine("  --render      HTML diagram rendering: mermaid (default) or svg (zero-JS inline SVG).");
         writer.WriteLine("  --analysis    Analysis backend: text (default) or roslyn (opt-in).");
         writer.WriteLine("  --generated-at  Fixed ISO-8601 timestamp for reproducible reports (tests/CI);");
