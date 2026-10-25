@@ -256,9 +256,9 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
             AddRequest(symbol, declaration, model, classDecl, file.ProjectName, markers, hierarchy, result);
             AddHandlers(symbol, declaration, model, usings, file.ProjectName, handlerMarkers, hierarchy, result);
-            AddValidators(symbol, usings, file.ProjectName, result);
-            AddBehavior(symbol, file.ProjectName, result);
-            AddDbContext(symbol, file.ProjectName, result);
+            AddValidators(symbol, declaration, model, usings, file.ProjectName, result);
+            AddBehavior(symbol, declaration, model, file.ProjectName, result);
+            AddDbContext(symbol, declaration, file.ProjectName, result);
 
             if (!symbol.IsAbstract &&
                 classDecl is not null &&
@@ -404,7 +404,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
     {
         if (symbol.IsAbstract) return;
 
-        var interfaces = ImplementedInterfaces(symbol).ToList();
+        var interfaces = ImplementedInterfaces(symbol, declaration, model).ToList();
         var requestInterface = interfaces.FirstOrDefault(i =>
             i.Name == "IRequest" && i.TypeArguments.Length > 0);
         requestInterface ??= interfaces.FirstOrDefault(i => i.Name == "IRequest");
@@ -444,6 +444,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         var ns = NamespaceOf(symbol);
         if (result.Requests.Any(r =>
                 r.Name == symbol.Name &&
+                r.ProjectName == projectName &&
                 r.Namespace == ns &&
                 r.ContainingTypes.SequenceEqual(ContainingTypeNames(symbol))))
             return;
@@ -452,7 +453,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         var viaMarker = effectiveMarker?.Name;
         if (viaMarker is null && requestInterface is not null)
         {
-            viaMarker = symbol.Interfaces
+            viaMarker = interfaces
                 .FirstOrDefault(i =>
                     i.Name != "IRequest" &&
                     ImplementedInterfaces(i).Any(x => x.Name == "IRequest"))
@@ -486,11 +487,12 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             ResponseType = response is null ? null : DisplayType(response),
             ProjectName = projectName,
             ViaMarker = viaMarker,
-            Location = LocationOf(symbol, result.RootPath),
+            Location = LocationOf(declaration.Identifier.GetLocation(), result.RootPath),
         };
         request.ContainingTypes.AddRange(ContainingTypeNames(symbol));
 
-        if (!request.Name.EndsWith("Command", StringComparison.Ordinal) &&
+        if (viaMarker is not null &&
+            !request.Name.EndsWith("Command", StringComparison.Ordinal) &&
             !request.Name.EndsWith("Query", StringComparison.Ordinal))
         {
             request.Kind = MarkerResolver.ClassifyMarkerRequest(
@@ -515,7 +517,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
     {
         if (symbol.IsAbstract) return;
 
-        var candidateInterfaces = ImplementedInterfaces(symbol)
+        var candidateInterfaces = ImplementedInterfaces(symbol, declaration, model)
             .Where(i => (i.Name == "IRequestHandler" || handlerMarkers.Contains(i.Name)) &&
                         i.TypeArguments.Length >= 1)
             .ToList();
@@ -543,6 +545,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
             if (result.Handlers.Any(h =>
                     h.FullName == fullName &&
+                    h.ProjectName == projectName &&
                     h.RequestName == targetName &&
                     h.RequestNamespace == normalizedNamespace))
                 continue;
@@ -554,7 +557,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 RequestName = targetName,
                 RequestNamespace = normalizedNamespace,
                 ProjectName = projectName,
-                Location = LocationOf(symbol, result.RootPath),
+                Location = LocationOf(declaration.Identifier.GetLocation(), result.RootPath),
             };
             handler.ContainingTypes.AddRange(ContainingTypeNames(symbol));
             if (usings is not null)
@@ -565,6 +568,8 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
     private static void AddValidators(
         INamedTypeSymbol symbol,
+        TypeDeclarationSyntax declaration,
+        SemanticModel model,
         IReadOnlyList<UsingDirective>? usings,
         string? projectName,
         AnalysisResult result)
@@ -577,7 +582,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         if (validatorBase is { TypeArguments.Length: >= 1 })
             targets.Add(validatorBase.TypeArguments[0]);
 
-        targets.AddRange(ImplementedInterfaces(symbol)
+        targets.AddRange(ImplementedInterfaces(symbol, declaration, model)
             .Where(i => i.Name == "IValidator" && i.TypeArguments.Length >= 1)
             .Select(i => i.TypeArguments[0]));
 
@@ -593,6 +598,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
             if (result.Validators.Any(v =>
                     v.FullName == fullName &&
+                    v.ProjectName == projectName &&
                     v.TargetType == targetName &&
                     v.TargetNamespace == normalizedNamespace))
                 continue;
@@ -604,7 +610,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
                 TargetType = targetName,
                 TargetNamespace = normalizedNamespace,
                 ProjectName = projectName,
-                Location = LocationOf(symbol, result.RootPath),
+                Location = LocationOf(declaration.Identifier.GetLocation(), result.RootPath),
             };
             validator.ContainingTypes.AddRange(ContainingTypeNames(symbol));
             if (usings is not null)
@@ -674,6 +680,57 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
         AppendNamespace(sb, "MediatR", mediatR);
 
+        var mediator = new List<string>();
+        if (probe.GetTypeByMetadataName("Mediator.IMessage") is null)
+            mediator.Add("public interface IMessage { }");
+        if (probe.GetTypeByMetadataName("Mediator.IStreamMessage") is null)
+            mediator.Add("public interface IStreamMessage { }");
+        if (probe.GetTypeByMetadataName("Mediator.IBaseRequest") is null)
+            mediator.Add("public interface IBaseRequest : IMessage { }");
+        if (probe.GetTypeByMetadataName("Mediator.IRequest") is null)
+            mediator.Add("public interface IRequest : IBaseRequest { }");
+        if (probe.GetTypeByMetadataName("Mediator.IRequest`1") is null)
+            mediator.Add("public interface IRequest<out TResponse> : IBaseRequest { }");
+        if (probe.GetTypeByMetadataName("Mediator.IBaseCommand") is null)
+            mediator.Add("public interface IBaseCommand : IMessage { }");
+        if (probe.GetTypeByMetadataName("Mediator.ICommand") is null)
+            mediator.Add("public interface ICommand : IBaseCommand { }");
+        if (probe.GetTypeByMetadataName("Mediator.ICommand`1") is null)
+            mediator.Add("public interface ICommand<out TResponse> : IBaseCommand { }");
+        if (probe.GetTypeByMetadataName("Mediator.IBaseQuery") is null)
+            mediator.Add("public interface IBaseQuery : IMessage { }");
+        if (probe.GetTypeByMetadataName("Mediator.IQuery`1") is null)
+            mediator.Add("public interface IQuery<out TResponse> : IBaseQuery { }");
+        if (probe.GetTypeByMetadataName("Mediator.IStreamRequest`1") is null)
+            mediator.Add("public interface IStreamRequest<out TResponse> : IStreamMessage { }");
+        if (probe.GetTypeByMetadataName("Mediator.IStreamCommand`1") is null)
+            mediator.Add("public interface IStreamCommand<out TResponse> : IStreamMessage { }");
+        if (probe.GetTypeByMetadataName("Mediator.IStreamQuery`1") is null)
+            mediator.Add("public interface IStreamQuery<out TResponse> : IStreamMessage { }");
+        if (probe.GetTypeByMetadataName("Mediator.IRequestHandler`1") is null)
+            mediator.Add("public interface IRequestHandler<in TRequest> where TRequest : IRequest { }");
+        if (probe.GetTypeByMetadataName("Mediator.IRequestHandler`2") is null)
+            mediator.Add("public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse> { }");
+        if (probe.GetTypeByMetadataName("Mediator.ICommandHandler`1") is null)
+            mediator.Add("public interface ICommandHandler<in TCommand> where TCommand : ICommand { }");
+        if (probe.GetTypeByMetadataName("Mediator.ICommandHandler`2") is null)
+            mediator.Add("public interface ICommandHandler<in TCommand, TResponse> where TCommand : ICommand<TResponse> { }");
+        if (probe.GetTypeByMetadataName("Mediator.IQueryHandler`2") is null)
+            mediator.Add("public interface IQueryHandler<in TQuery, TResponse> where TQuery : IQuery<TResponse> { }");
+        if (probe.GetTypeByMetadataName("Mediator.IStreamRequestHandler`2") is null)
+            mediator.Add("public interface IStreamRequestHandler<in TRequest, TResponse> where TRequest : IStreamRequest<TResponse> { }");
+        if (probe.GetTypeByMetadataName("Mediator.IStreamCommandHandler`2") is null)
+            mediator.Add("public interface IStreamCommandHandler<in TCommand, TResponse> where TCommand : IStreamCommand<TResponse> { }");
+        if (probe.GetTypeByMetadataName("Mediator.IStreamQueryHandler`2") is null)
+            mediator.Add("public interface IStreamQueryHandler<in TQuery, TResponse> where TQuery : IStreamQuery<TResponse> { }");
+        if (probe.GetTypeByMetadataName("Mediator.IPipelineBehavior`2") is null)
+            mediator.Add("public interface IPipelineBehavior<TMessage, TResponse> where TMessage : notnull { }");
+        if (probe.GetTypeByMetadataName("Mediator.IStreamPipelineBehavior`2") is null)
+            mediator.Add("public interface IStreamPipelineBehavior<TMessage, TResponse> where TMessage : notnull { }");
+        if (probe.GetTypeByMetadataName("Mediator.MessageHandlerDelegate`2") is null)
+            mediator.Add("public delegate System.Threading.Tasks.ValueTask<TResponse> MessageHandlerDelegate<TMessage, TResponse>(TMessage message, System.Threading.CancellationToken cancellationToken);");
+        AppendNamespace(sb, "Mediator", mediator);
+
         var fluent = new List<string>();
         if (probe.GetTypeByMetadataName("FluentValidation.IValidator") is null)
             fluent.Add("public interface IValidator { }");
@@ -729,27 +786,34 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
 
     private static void AddBehavior(
         INamedTypeSymbol symbol,
+        TypeDeclarationSyntax declaration,
+        SemanticModel model,
         string? projectName,
         AnalysisResult result)
     {
-        if (!ImplementedInterfaces(symbol).Any(i =>
+        if (!ImplementedInterfaces(symbol, declaration, model).Any(i =>
                 i.Name == "IPipelineBehavior" &&
                 i.TypeArguments.Length == 2))
             return;
 
-        if (result.Behaviors.Any(b => b.Name == symbol.Name && b.ProjectName == projectName))
+        var location = LocationOf(declaration.Identifier.GetLocation(), result.RootPath);
+        if (result.Behaviors.Any(b =>
+                b.Name == symbol.Name &&
+                b.ProjectName == projectName &&
+                b.Location?.File == location?.File))
             return;
 
         result.Behaviors.Add(new BehaviorInfo
         {
             Name = symbol.Name,
             ProjectName = projectName,
-            Location = LocationOf(symbol, result.RootPath),
+            Location = location,
         });
     }
 
     private static void AddDbContext(
         INamedTypeSymbol symbol,
+        TypeDeclarationSyntax declaration,
         string? projectName,
         AnalysisResult result)
     {
@@ -769,7 +833,7 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
             Name = symbol.Name,
             Namespace = ns,
             ProjectName = projectName,
-            Location = LocationOf(symbol, result.RootPath),
+            Location = LocationOf(declaration.Identifier.GetLocation(), result.RootPath),
         };
         context.ContainingTypes.AddRange(containingTypes);
 
@@ -800,14 +864,51 @@ internal sealed class RoslynArchitectureScanner : IArchitectureScanner
         return false;
     }
 
-    private static IEnumerable<INamedTypeSymbol> ImplementedInterfaces(INamedTypeSymbol symbol)
+    private static IEnumerable<INamedTypeSymbol> ImplementedInterfaces(
+        INamedTypeSymbol symbol,
+        TypeDeclarationSyntax? declaration = null,
+        SemanticModel? model = null)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var type in symbol.Interfaces.Concat(symbol.AllInterfaces))
+        IEnumerable<INamedTypeSymbol> candidates;
+
+        if (declaration is not null &&
+            model is not null &&
+            symbol.DeclaringSyntaxReferences.Length > 1 &&
+            !declaration.Modifiers.Any(SyntaxKind.PartialKeyword))
+        {
+            candidates = DeclarationInterfaces(declaration, model);
+        }
+        else
+        {
+            candidates = symbol.Interfaces.Concat(symbol.AllInterfaces);
+        }
+
+        foreach (var type in candidates)
         {
             var key = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             if (seen.Add(key))
                 yield return type;
+        }
+    }
+
+    private static IEnumerable<INamedTypeSymbol> DeclarationInterfaces(
+        TypeDeclarationSyntax declaration,
+        SemanticModel model)
+    {
+        if (declaration.BaseList is null)
+            yield break;
+
+        foreach (var baseSyntax in declaration.BaseList.Types)
+        {
+            if (model.GetTypeInfo(baseSyntax.Type).Type is not INamedTypeSymbol baseSymbol)
+                continue;
+
+            if (baseSymbol.TypeKind is TypeKind.Interface or TypeKind.Error)
+                yield return baseSymbol;
+
+            foreach (var transitive in baseSymbol.Interfaces.Concat(baseSymbol.AllInterfaces))
+                yield return transitive;
         }
     }
 

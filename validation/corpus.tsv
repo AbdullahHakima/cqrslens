@@ -15,3 +15,4 @@
 jasontaylordev-clean-architecture	https://github.com/jasontaylordev/CleanArchitecture.git	968abf7dc4884d14d558e04828dff6d3324b1775	.	-	-
 ardalis-clean-architecture	https://github.com/ardalis/CleanArchitecture.git	e7c79be54ba0b001a5b332c1efe935f520b9db4b	.	ICommand,IQuery	ICommandHandler,IQueryHandler
 modular-monolith-with-ddd	https://github.com/kgrzybek/modular-monolith-with-ddd.git	91c8ef24b4cb6ef558c95d8267fa07d68c7059f8	src	ICommand,IQuery	-
+martinothamar-mediator	https://github.com/martinothamar/Mediator.git	8b87a0ed74747b7e4be907db220b930a50fbeb98	samples	-	-
