@@ -37,13 +37,13 @@ style (small fixture strings/files per case).
 The repo ships a sample Clean Architecture solution you can scan end-to-end:
 
 ```bash
-dotnet run --project src/CqrsLens -- samples/SampleShop -o /tmp/ARCHITECTURE.md
+dotnet run --project src/CqrsLens.Cli -- samples/SampleShop -o /tmp/ARCHITECTURE.md
 ```
 
 Or pack and install the tool from source:
 
 ```bash
-dotnet pack src/CqrsLens -c Release -o artifacts
+dotnet pack src/CqrsLens.Cli -c Release -o artifacts
 dotnet tool install --tool-path /tmp/cqrslens-tools --add-source artifacts CqrsLens
 /tmp/cqrslens-tools/cqrslens samples/SampleShop
 ```
@@ -51,6 +51,16 @@ dotnet tool install --tool-path /tmp/cqrslens-tools --add-source artifacts CqrsL
 Compare your output with `docs/sample-output/ARCHITECTURE.md` — if a change
 alters the sample output intentionally, regenerate that file in the same PR
 and mention it in the description.
+
+For performance changes, run the warm/cold benchmark harness before and after:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/benchmark.ps1 -Generate 400
+```
+
+The script writes JSON results under `artifacts/bench/results/`. `--profile` on
+the CLI prints the per-phase timing and allocation breakdown to stderr. See
+[`docs/architecture.md`](docs/architecture.md) and the README for details.
 
 ## Pull request expectations
 
@@ -72,6 +82,7 @@ work isn't duplicated.
 
 - Match the existing style of the file you touch (naming, nullability,
   file-scoped namespaces)
-- Detectors live in the scanner/analyzer layer; the report generator only
-  renders what the analyzer found — keep that separation
+- Detectors live in `CqrsLens.Analysis`; `CqrsLens.Reporting` only renders what the
+  analyzer found, and `CqrsLens.Core` must not depend on either — keep that
+  dependency direction
 - The analyzer must never throw on malformed input files; skip and continue

@@ -47,7 +47,7 @@ dotnet tool install -g CqrsLens
 ## Usage
 
 ```bash
-cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--strict]
+cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--profile] [--strict]
 ```
 
 - The folder is searched recursively for `.csproj` and `.cs` files (`bin`, `obj`, `.git` are skipped).
@@ -125,6 +125,82 @@ Reports record the scanner, a single generation timestamp, source locations and 
 diagnostics section for skipped files, unresolved contracts and ambiguous links.
 `--strict` only exits with code 4 when the scan is complete enough to trust its
 architecture errors; on an incomplete scan it reports the diagnostics instead.
+
+### Profiling and benchmarks
+
+Every analysis records wall time and allocated bytes for each stage. Add `--profile`
+to print the breakdown to stderr without changing the report:
+
+```bash
+cqrslens samples/SampleShop --profile -o ARCHITECTURE.md
+```
+
+```text
+Profile (text): 11 ms, 0.7 MB allocated
+  Read sources                           ...
+  Parse sources                          ...
+  Scan shapes                            ...
+  Scan: ApplyScan                        ...
+  Scan: EF model                         ...
+  Deep: handler slices                   ...
+  Deep: api entrypoints                  ...
+```
+
+`Scan:` and `Deep:` rows break their parent phase down further; they are not
+additive with the parent. `--generated-at` intentionally reports `0 ms` for
+reproducible golden files, but the allocation numbers remain available.
+
+For repeatable warm and cold-process measurements, use the benchmark script:
+
+```powershell
+# SampleShop, both scanners
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/benchmark.ps1
+
+# More stable warm numbers, plus five cold processes
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/benchmark.ps1 `
+  -Mode both -Warmup 3 -Iterations 20 -Cold 5
+
+# Deterministic 400-slice synthetic solution
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/benchmark.ps1 `
+  -Generate 400 -Mode text -Iterations 10 -Cold 3
+```
+
+The script builds the harness once, writes a timestamped JSON result under
+`artifacts/bench/results/`, and reports:
+
+- **warm**: one process, JIT and caches warmed, then `-Iterations` measurements;
+- **cold process**: a fresh process per sample with no warmup, so first-call JIT is
+  included (host startup is not).
+
+`-Generate N` creates a deterministic four-project solution under
+`artifacts/bench/synth-N` with requests, handlers, validators, notifications,
+endpoints, entities and one `DbContext`. `-Force` regenerates it. The harness also
+validates that repeated runs produce the same shape counts.
+
+The harness can be run directly when scripting CI or a profiler:
+
+```bash
+dotnet run --project benchmarks/CqrsLens.Benchmarks -c Release -- \
+  samples/SampleShop --mode both --warmup 3 --iterations 10
+
+dotnet run --project benchmarks/CqrsLens.Benchmarks -c Release -- \
+  --generate 400 --mode text --json
+```
+
+Representative Release results from one Windows machine (.NET SDK 10.0.400):
+
+| Fixture | Mode | Warm median | Warm allocation | Cold process |
+| --- | --- | ---: | ---: | ---: |
+| SampleShop | text | 10.4 ms | 0.65 MB | 148 ms |
+| SampleShop | roslyn | 28.9 ms | 1.56 MB | 805 ms |
+| Synthetic 200 slices | text | 222.7 ms | 37.0 MB | 353 ms |
+| Synthetic 400 slices | text | 319.3 ms | 74.1 MB | 559 ms |
+
+For the 400-slice fixture used during this optimization pass, repeated warm runs
+improved from roughly 610 ms / 190 MB to about 270–400 ms / 74–77 MB (best observed
+median 272 ms). Absolute numbers vary with hardware, GC state and concurrent load;
+use the script rather than comparing single ad-hoc runs. Roslyn remains the heavier
+opt-in backend because it parses syntax trees and builds an in-memory compilation.
 
 ### Configuration
 
@@ -694,10 +770,18 @@ Short version (full list in [ROADMAP.md](ROADMAP.md)):
 ## Development
 
 ```bash
-dotnet build CqrsLens.sln
-dotnet test  CqrsLens.sln
-dotnet pack  src/CqrsLens/CqrsLens.csproj -c Release
+dotnet build CqrsLens.sln -c Release
+dotnet test  CqrsLens.sln -c Release
+dotnet pack  src/CqrsLens.Cli/CqrsLens.Cli.csproj -c Release
+
+# warm/cold benchmarks and synthetic solutions
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts/benchmark.ps1 -Generate 400
 ```
+
+Production code is split into `Core`, `Analysis`, `Reporting` and `Cli`; the
+dependency direction, scan pipeline and correctness policy are documented in
+[`docs/architecture.md`](docs/architecture.md). Architecture boundaries and the
+golden corpus are enforced by the test suite.
 
 ## License
 

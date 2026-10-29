@@ -9,9 +9,11 @@ CqrsLens has two separate jobs during a scan:
 The text scanner is intentionally build-free. It is fast, works on solutions that
 do not compile, and remains the default even now that Roslyn mode is available.
 
-The backend boundary is `IArchitectureScanner`. `Analyzer` still owns file
-discovery, project ownership, linking, checks and timing; a scanner only turns
-source files into the shared analysis model.
+The backend boundary is `IArchitectureScanner`. `Analyzer` owns file discovery,
+project ownership, the shared `SourceWorkspace`, linking, deep-slice analysis,
+checks and phase timing; a scanner only turns the parsed workspace into the shared
+analysis model. Both scanners reuse the same per-file `CSharpScanner` scan and
+source masks, so selecting Roslyn does not duplicate text parsing.
 
 ## Roslyn backend
 

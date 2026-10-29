@@ -52,6 +52,28 @@ All notable changes to CqrsLens are documented here.
   - Added a `Source` (`File:Line:Col`) column to the HTML **Pipeline Behaviors**
     table.
 
+### Changed
+
+- Split the tool into `CqrsLens.Core`, `CqrsLens.Analysis`, `CqrsLens.Reporting`
+  and `CqrsLens.Cli` with a one-way dependency direction, enforced by
+  `ArchitectureBoundaryTests`.
+- Decomposed the remaining reporting and diff god classes behind stable
+  facades: HTML sections and assets, Mermaid flowchart/ER rendering, diagram
+  families, agent-report writers, and architecture-diff loading/calculation/
+  Markdown rendering are now separate single-responsibility collaborators.
+- Every analysis now parses each file once into a shared `SourceWorkspace`
+  (source text, source mask and cheap scan) reused by text, Roslyn, EF and
+  deep-slice analysis.
+- Added per-phase timing and allocation profiling (`--profile`) plus the
+  `benchmarks/CqrsLens.Benchmarks` harness, synthetic solution generator and
+  `scripts/benchmark.ps1` warm/cold-process runner.
+- Reduced the 400-slice synthetic text scan from roughly 610 ms / 190 MB to
+  roughly 270–320 ms / 74 MB (warm median) through direct-root gating, span-based
+  parsing, source-mask reuse, and cheap prechecks before endpoint/EF/constructor
+  regexes.
+- Added a checked-in golden corpus that asserts exact shape sets, text/Roslyn
+  parity, determinism and decoy suppression independently of either scanner.
+
 ## [0.7.0] - 2026-10-25
 
 ### Added
