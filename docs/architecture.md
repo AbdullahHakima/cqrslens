@@ -126,26 +126,43 @@ Public entry points are thin facades. Their implementation collaborators are
 
 **Reporting**
 
-- `ReportGenerator` renders Markdown; `JsonReportGenerator`,
-  `SarifReportGenerator`, `SummaryGenerator` and `GitHubAnnotations` own their
-  respective formats.
+Reporting is grouped by output format (`Markdown/`, `Html/`, `Json/`,
+`Mermaid/`, `Agent/`, `Sarif/`, `Console/`) and declares one top-level type per
+file.
+
+- `ReportGenerator` is the Markdown facade over `MarkdownReportWriter` and the
+  overview, diagram, CQRS, notification, behavior, DbContext, diagnostics and
+  checks section writers; `MarkdownEscaping` owns inline, table and code-span
+  escaping.
+- `JsonReportGenerator` is a facade over `JsonReportDocumentFactory`,
+  `JsonReportDocumentReader` and the top-level `Json*` DTOs.
 - `HtmlReportGenerator` assembles the page shell and stat cards.
-  `HtmlReportAssets`, `HtmlDiagramSectionRenderer`,
-  `HtmlRequestExplorerRenderer`, `HtmlNotificationSectionRenderer`,
-  `HtmlBehaviorSectionRenderer`, `HtmlDbContextSectionRenderer`,
-  `HtmlDiagnosticsSectionRenderer` and `HtmlCheckRenderer` own individual
-  sections; `HtmlReportText` is the shared encoder.
+  `HtmlReportStyles` and `HtmlReportScripts` hold the embedded assets;
+  `RequestTableRenderer`, `RequestExplorerIndex` and `RequestExplorerRenderer`
+  own the requests table and interactive explorer; the remaining
+  `Html*SectionRenderer` classes own individual sections and `HtmlReportText`
+  is the shared encoder.
 - `DiagramBuilder` is the diagram facade over `MermaidDiagramText`,
-  `ProjectDiagramBuilder`, `NotificationDiagramBuilder`,
-  `CqrsDiagramBuilder` and `ErDiagramBuilder`.
-- `MermaidSvgRenderer` dispatches to `MermaidFlowchartRenderer` and
-  `MermaidErRenderer`; `MermaidEntityDecoder` and `MermaidSvgText` provide the
-  shared decoding and formatting primitives.
+  `ProjectDiagramBuilder` (`ProjectDiagramData`, `ProjectGraphWriter`,
+  `LayerGraphWriter`, `ProjectDiagramSyntax`), `NotificationDiagramBuilder`,
+  `CqrsDiagramBuilder` (`CqrsDiagramPlanner`, `CqrsDiagramWriter`,
+  `CqrsRequestOrdering`, `CqrsStats`) and `ErDiagramBuilder`.
+- `MermaidSvgRenderer` dispatches to `MermaidFlowchartRenderer` (parser, layout,
+  SVG writer and flow model types) and `MermaidErRenderer` (ER parser, layout,
+  SVG writer and model types); `MermaidNodeSyntax`, `MermaidEntityDecoder` and
+  `MermaidSvgText` provide shared syntax, decoding and formatting primitives.
 - `AgentReportGenerator` exposes the agent reports while
   `AgentArchitectureMapGenerator`, `AgentDnaIndexGenerator`,
   `AgentEntityImpactGenerator` and `AgentChecksSummaryGenerator` build each
-  output. `AgentReportFormatter`, `AgentReportLookups`, `AgentSliceMatcher` and
-  `AgentSliceWriter` hold the shared ranking, formatting and trace logic.
+  output. `AgentArchitectureDnaWriter` and `AgentDataModelWriter` own the DNA
+  and EF data-model sections; `AgentReportFormatter`, `AgentReportLookups`,
+  `AgentSliceMatcher` and `AgentSliceWriter` hold the shared ranking,
+  formatting and trace logic.
+- `ConsoleArtwork` is the console facade over `ConsoleColorPolicy`, `AnsiColor`,
+  `ConsoleLogoRenderer`, `AsciiTextRenderer`, `BlockFont`, `ConsoleText`,
+  `WatermarkStampRenderer`, `ConsoleSummaryCardRenderer` and
+  `ConsoleProgressBarRenderer`.
+- `SarifReportGenerator` and `GitHubAnnotations` own SARIF and annotations.
 
 **CLI**
 
@@ -182,6 +199,10 @@ Public entry points are thin facades. Their implementation collaborators are
   new flags in `CommandLine/`, pipeline steps in `Execution/`, and new report
   sections in the matching `Diff/Markdown` writer. CLI sources declare one
   top-level type per file, enforced by `ArchitectureBoundaryTests`.
+- Reporting files stay in the folder for their output format (`Markdown/`,
+  `Html/`, `Json/`, `Mermaid/`, `Agent/`, `Sarif/`, `Console/`); Reporting
+  sources also declare one top-level type per file, enforced by
+  `ArchitectureBoundaryTests`.
 - Add a golden-corpus expectation and an architecture-boundary assertion when a
   new shape or output field crosses a project boundary.
 - Add a section to the matching renderer collaborator rather than growing a

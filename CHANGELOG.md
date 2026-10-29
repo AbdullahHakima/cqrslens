@@ -61,6 +61,10 @@ All notable changes to CqrsLens are documented here.
   facades: HTML sections and assets, Mermaid flowchart/ER rendering, diagram
   families, agent-report writers, and architecture-diff loading/calculation/
   Markdown rendering are now separate single-responsibility collaborators.
+  `CqrsLens.Reporting` is organized by output format (`Markdown/`, `Html/`,
+  `Json/`, `Mermaid/`, `Agent/`, `Sarif/`, `Console/`) and its sources now
+  declare one top-level type per file, enforced by
+  `ArchitectureBoundaryTests`.
 - Split the `CqrsLens.Core` model god file into one type per file by
   responsibility (`Architecture`, `Analysis`, `Checks`, `Configuration`,
   `Source`), separated baseline storage from matching, and centralized type
