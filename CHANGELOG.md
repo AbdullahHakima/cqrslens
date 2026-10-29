@@ -65,6 +65,20 @@ All notable changes to CqrsLens are documented here.
   responsibility (`Architecture`, `Analysis`, `Checks`, `Configuration`,
   `Source`), separated baseline storage from matching, and centralized type
   full-name composition in `TypeFullName`.
+- Decomposed `CqrsLens.Analysis` god classes behind stable facades: `Analyzer`
+  (workspace building, phase timing, linking), `CSharpScanner` text scanning,
+  `TextArchitectureScanner` (contract roots, global usings, interface maps,
+  marker discovery), `TypeHierarchy` (type index, name resolution, shape and
+  target resolution), Roslyn CQRS shape readers (one per shape family), endpoint
+  discovery strategies, `ArchitectureChecker` check families,
+  `EfFluentConfigurationParser` (source/call/type/statement/relationship),
+  shared EF key/entity/relationship rules between the text and Roslyn model
+  builders, `CsprojParser` (file discovery, MSBuild loading, reference resolution),
+  `MediatorConventions` (detection and Wolverine discovery), and deep-slice
+  enrichment (`HandlerEffectRollup`, handler effect passes, domain-index passes,
+  `EnclosingMemberLocator`).
+  Analysis sources now declare one top-level type per file, enforced by
+  `ArchitectureBoundaryTests`.
 - Every analysis now parses each file once into a shared `SourceWorkspace`
   (source text, source mask and cheap scan) reused by text, Roslyn, EF and
   deep-slice analysis.

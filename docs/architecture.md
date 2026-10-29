@@ -71,14 +71,56 @@ Public entry points are thin facades. Their implementation collaborators are
 **Analysis**
 
 - `Analyzer` orchestrates discovery, scanning, linking, deep slicing and checks.
+  `ProjectLocator` and `SourceWorkspaceBuilder` own workspace discovery and
+  parsing, `AnalysisPhaseRecorder` owns phase timing, and `ShapeLinker` with
+  `RequestLinker`/`NotificationLinker` (over the generic `LinkIndex<T>`) owns
+  shape linking and fail-closed ambiguity diagnostics.
 - `CSharpScanner` is the public text-scanner facade; `SourceFileScanner`,
   `ShapeApplier`, `CSharpSyntax` and `ScanIdentityIndex` do the scanning,
   shape application, syntax parsing and fail-closed identity lookup.
+  `TextArchitectureScanner` orchestrates `ContractRoots`, `GlobalUsingApplier`,
+  `InterfaceMapBuilder`, `ContractDiagnostics`, `MarkerRequestDiscoverer`,
+  `MarkerNotificationDiscoverer` and `IndirectShapeDiscoverer`.
+- `TypeHierarchy` is a facade over `TypeIndex`, `TypeNameResolver`,
+  `GenericBindings`, `RequestShapeResolver` and `ShapeTargetResolver`.
 - `DeepSliceAnalyzer` orchestrates endpoint discovery, request payloads, DbSet
   mapping, domain events, handlers, receiver types, dependencies and syntax
-  helpers through dedicated collaborators.
+  helpers through dedicated collaborators. Endpoint discovery is split into
+  `ControllerEndpointDiscovery`, `MinimalApiEndpointDiscovery` and
+  `FastEndpointDiscovery` behind `ApiEndpointDiscovery`, with shared
+  `EndpointRequestMatcher`, `EndpointRoutes` and `EndpointRecorder`.
+  `HandlerSliceEnricher` runs `HandlerTargetEnricher` over `HandlerEffectContext`,
+  whose dependency, DbSet, dispatch and domain-member passes are separate
+  collaborators (`HandlerDependencyEffects`, `HandlerDbSetEffects`,
+  `HandlerDispatchEffects`, `HandlerMemberEffects`); `HandlerEffectRollup`
+  projects their effects onto requests. `DomainEventIndexBuilder` orchestrates
+  `DomainWrapperIndexer`, `DomainRepositoryIndexer` and
+  `DomainMemberEventIndexer` into a `DomainEventIndexCollector`;
+  `EnclosingMemberLocator` attributes expressions to their declaring member.
+- EF Core model construction shares `EfKeyIndex`, `EfEntityFactory`,
+  `EfEntityStubFactory` and `EfEntityOrdering` between
+  `EfCoreTextModelBuilder` and `EfCoreRoslynModelBuilder`; relationships share
+  `EfRelationshipFactory`, `EfForeignKeyResolver` and
+  `EfNavigationRelationshipResolver`. The Roslyn backend indexes declarations
+  through `RoslynEntityIndex` and resolves types through `RoslynEntityResolver`.
 - `RoslynArchitectureScanner` orchestrates compilation, symbol facts, contract
-  diagnostics, CQRS shapes and EF shapes.
+  diagnostics, CQRS shapes and EF shapes. Each shape family has its own reader:
+  `RoslynRequestShapeReader`, `RoslynHandlerShapeReader`,
+  `RoslynNotificationShapeReader`, `RoslynNotificationHandlerShapeReader`,
+  `RoslynValidatorShapeReader`, `RoslynBehaviorShapeReader` and
+  `RoslynEfShapeReader`.
+- `EfFluentConfigurationParser` orchestrates `FluentSourceReader` (method bodies
+  and statements), `FluentCallReader` (call/member tokenization),
+  `FluentTypeResolver` (entity/property resolution), `FluentStatementParser`
+  (statement interpretation) and `FluentRelationshipBuilder` (cardinality and
+  principal/dependent selection).
+- `ArchitectureChecker` is a facade over `ProjectNameIndex`,
+  `RequestHandlerChecks`, `ProjectLayerChecks` (layer violations and circular
+  dependencies), `RequestValidatorChecks`, `NotificationChecks` and
+  `CheckFindingOrdering`.
+- `CsprojParser` is a facade over `ProjectFileDiscovery`,
+  `MsBuildProjectLoader` and `ProjectReferenceResolver`. `MediatorConventions`
+  is a facade over `MediatorLibraryDetector` and `WolverineHandlerDiscovery`.
 - `ArchitectureChecker`, `Baseline` and `SourceWorkspace` remain independently
   testable services.
 
