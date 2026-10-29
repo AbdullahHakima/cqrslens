@@ -149,10 +149,27 @@ Public entry points are thin facades. Their implementation collaborators are
 
 **CLI**
 
-- `ArchitectureDiffer` is the public diff facade over
-  `ArchitectureSnapshotLoader`, `ArchitectureDiffCalculator` and
-  `ArchitectureDiffMarkdownRenderer`; `ArchitectureDiffModels` holds the
-  serializable diff contract.
+- `CommandLine/` owns argument parsing: `CliParser` maps flags to `CliOptions`,
+  `ArgumentReader` enforces option values, `UsageWriter` owns the help text and
+  `ExitCodes` is the shared exit-code contract.
+- `Execution/` is the scan pipeline: `ScanPreparer` validates the root, merges
+  `.cqrslens.json` and produces a `PreparedScan`; `ScanConsole` owns banner,
+  progress and summary-card presentation; `ReportFormatResolver` and
+  `ReportOutputPathsResolver` choose formats and validate destinations;
+  `BaselineProcessor` and `DiffProcessor` apply cross-run state; `ReportWriter`
+  writes the primary/SARIF/summary files; `ScanReporter` prints the console
+  summary and evaluates `--strict`. `CliRunner` only dispatches commands.
+- `Configuration/` separates the JSON DTO (`CqrsLensConfiguration`), file
+  loading, validation, validated settings and the known-rule list.
+- `Diff/` keeps the diff contract as one type per file, one comparer per shape
+  family, and the Markdown renderer as section writers behind
+  `ArchitectureDiffMarkdownRenderer`; `ArchitectureDiffer` stays the public
+  facade.
+- `Mcp/` separates JSON-RPC routing, response building, the tool catalog,
+  argument validation, tool invocation, scan caching/fingerprinting and stdio
+  framing; `McpServer` only owns the read/respond loop.
+- `Summary/` splits the GitHub job summary into counts, checks and diagnostics
+  writers behind the stable `SummaryGenerator` entry point.
 
 ## Where changes belong
 
@@ -161,7 +178,10 @@ Public entry points are thin facades. Their implementation collaborators are
   own folder, one type per file.
 - Discovery, resolution and checks go in `CqrsLens.Analysis`.
 - Only presentation belongs in `CqrsLens.Reporting`.
-- CLI flags, config validation and output routing stay in `CqrsLens.Cli`.
+- CLI flags, config validation and output routing stay in `CqrsLens.Cli`; keep
+  new flags in `CommandLine/`, pipeline steps in `Execution/`, and new report
+  sections in the matching `Diff/Markdown` writer. CLI sources declare one
+  top-level type per file, enforced by `ArchitectureBoundaryTests`.
 - Add a golden-corpus expectation and an architecture-boundary assertion when a
   new shape or output field crosses a project boundary.
 - Add a section to the matching renderer collaborator rather than growing a

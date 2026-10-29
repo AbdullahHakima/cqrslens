@@ -79,6 +79,12 @@ All notable changes to CqrsLens are documented here.
   `EnclosingMemberLocator`).
   Analysis sources now declare one top-level type per file, enforced by
   `ArchitectureBoundaryTests`.
+- Decomposed the `CqrsLens.Cli` god files (`Cli`, `McpServer`, `Configuration`,
+  the diff models/calculator/renderer and `SummaryGenerator`) into
+  folder-by-responsibility collaborators (`CommandLine`, `Execution`,
+  `Configuration`, `Diff`, `Mcp`, `Summary`). The public CLI entry points are
+  unchanged, and CLI sources now declare one top-level type per file, enforced
+  by `ArchitectureBoundaryTests`.
 - Every analysis now parses each file once into a shared `SourceWorkspace`
   (source text, source mask and cheap scan) reused by text, Roslyn, EF and
   deep-slice analysis.
