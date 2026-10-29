@@ -1,5 +1,3 @@
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>

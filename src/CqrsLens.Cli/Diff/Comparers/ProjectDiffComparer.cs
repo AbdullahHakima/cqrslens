@@ -1,5 +1,3 @@
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Matches projects by name and reports layer, reference and package changes.</summary>

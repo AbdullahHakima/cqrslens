@@ -1,7 +1,5 @@
 using System.Text;
 
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Builds the colored Mermaid delta map for added, modified and removed requests.</summary>

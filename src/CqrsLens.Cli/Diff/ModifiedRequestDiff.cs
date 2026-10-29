@@ -1,7 +1,5 @@
 using System.Text.Json.Serialization;
 
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>A request whose kind, response, project, handlers or validators changed.</summary>

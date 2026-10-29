@@ -1,7 +1,5 @@
 using System.Text;
 
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Writes the DbContext, DbSet, entity and relationship changes section.</summary>

@@ -1,7 +1,5 @@
 using System.Text.Json.Serialization;
 
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Validators added or removed between the base and head scans.</summary>

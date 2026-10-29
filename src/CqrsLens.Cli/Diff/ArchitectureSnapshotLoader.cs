@@ -1,5 +1,3 @@
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Loads a diff baseline from either a live directory scan or a JSON report file.</summary>
@@ -30,11 +28,11 @@ internal static class ArchitectureSnapshotLoader
                     LayerOverrides = baseSettings.LayerOverrides.Count > 0 ? baseSettings.LayerOverrides : options.LayerOverrides,
                     RuleSeverities = baseSettings.RuleSeverities.Count > 0 ? baseSettings.RuleSeverities : options.RuleSeverities,
                 });
-            return CreateDocument(baseResult);
+            return JsonReportGenerator.CreateDocument(baseResult);
         }
 
         if (File.Exists(path))
-            return ReadDocument(path);
+            return JsonReportGenerator.ReadDocument(path);
 
         throw new DiffException($"diff path not found: {path}");
     }

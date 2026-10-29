@@ -1,5 +1,3 @@
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Matches validators by full name and target type.</summary>

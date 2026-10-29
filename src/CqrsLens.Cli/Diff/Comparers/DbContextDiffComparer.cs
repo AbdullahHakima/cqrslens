@@ -1,5 +1,3 @@
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Matches DbContexts by namespace-qualified name and diffs DbSets, entities and relationships.</summary>

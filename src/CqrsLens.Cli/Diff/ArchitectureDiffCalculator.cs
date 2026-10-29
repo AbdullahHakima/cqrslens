@@ -1,12 +1,10 @@
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Computes an architecture diff from two report documents or analysis results.</summary>
 internal static class ArchitectureDiffCalculator
 {
     internal static ArchitectureDiff Compare(AnalysisResult baseline, AnalysisResult current)
-        => Compare(CreateDocument(baseline), CreateDocument(current));
+        => Compare(JsonReportGenerator.CreateDocument(baseline), JsonReportGenerator.CreateDocument(current));
 
     internal static ArchitectureDiff Compare(JsonReportDocument baseline, JsonReportDocument current)
     {

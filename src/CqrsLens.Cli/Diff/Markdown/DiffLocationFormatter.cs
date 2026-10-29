@@ -1,5 +1,3 @@
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Formats a finding location for the diff report, rebased to the CI root when known.</summary>

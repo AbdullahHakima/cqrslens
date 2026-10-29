@@ -1,5 +1,3 @@
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Matches requests by full name (with a composite key for duplicates) and diffs their surface.</summary>

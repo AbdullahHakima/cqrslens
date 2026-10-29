@@ -1,7 +1,5 @@
 using System.Text.Json.Serialization;
 
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Architecture check findings introduced or resolved by the head scan.</summary>

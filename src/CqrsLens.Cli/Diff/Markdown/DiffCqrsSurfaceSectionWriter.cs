@@ -1,7 +1,5 @@
 using System.Text;
 
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Writes the CQRS surface section: request tables, delta diagram and behavior changes.</summary>

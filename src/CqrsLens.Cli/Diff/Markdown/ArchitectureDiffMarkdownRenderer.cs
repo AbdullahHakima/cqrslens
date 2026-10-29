@@ -1,7 +1,5 @@
 using System.Text;
 
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Renders an architecture diff as the Markdown report used in pull requests and CI summaries.</summary>

@@ -1,7 +1,5 @@
 using System.Text.Json.Serialization;
 
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Projects added, removed or changed between the base and head scans.</summary>

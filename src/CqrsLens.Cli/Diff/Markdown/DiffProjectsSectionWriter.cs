@@ -1,7 +1,5 @@
 using System.Text;
 
-using static CqrsLens.JsonReportGenerator;
-
 namespace CqrsLens;
 
 /// <summary>Writes the project and layer changes section.</summary>
