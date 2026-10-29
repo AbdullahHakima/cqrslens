@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using CqrsLens;
 using Xunit;
@@ -79,6 +80,27 @@ public sealed class ArchitectureBoundaryTests
     }
 
     [Fact]
+    public void CoreSourceFiles_DeclareOneTypeEach()
+    {
+        var coreRoot = Path.Combine(Root, "src", "CqrsLens.Core");
+        var offenders = Directory
+            .EnumerateFiles(coreRoot, "*.cs", SearchOption.AllDirectories)
+            .Where(path => !path.Contains(
+                $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
+                StringComparison.Ordinal))
+            .Select(path => new
+            {
+                Path = path,
+                Types = TopLevelTypeDeclarations(File.ReadAllText(path)),
+            })
+            .Where(file => file.Types > 1)
+            .Select(file => $"{Path.GetRelativePath(Root, file.Path)} ({file.Types} types)")
+            .ToList();
+
+        Assert.Empty(offenders);
+    }
+
+    [Fact]
     public void TestAndBenchmarkProjects_AreNotReferencedByProductionProjects()
     {
         foreach (var project in new[] { "CqrsLens.Core", "CqrsLens.Analysis", "CqrsLens.Reporting", "CqrsLens.Cli" })
@@ -87,6 +109,15 @@ public sealed class ArchitectureBoundaryTests
             Assert.DoesNotContain("CqrsLens.Tests", references);
             Assert.DoesNotContain("CqrsLens.Benchmarks", references);
         }
+    }
+
+    private static int TopLevelTypeDeclarations(string source)
+    {
+        var matches = Regex.Matches(
+            source,
+            @"^(?:public|internal)\s+(?:(?:sealed|static|abstract|readonly|partial)\s+)*(?:class|record|struct|enum|interface)\s+",
+            RegexOptions.Multiline | RegexOptions.CultureInvariant);
+        return matches.Count;
     }
 
     private static IReadOnlyList<string> ProjectReferences(string project)
