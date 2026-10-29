@@ -14,7 +14,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\CqrsLens\CqrsLens.csproj" />
+    <ProjectReference Include="..\..\src\CqrsLens.Core\CqrsLens.Core.csproj" />
+    <ProjectReference Include="..\..\src\CqrsLens.Analysis\CqrsLens.Analysis.csproj" />
+    <ProjectReference Include="..\..\src\CqrsLens.Reporting\CqrsLens.Reporting.csproj" />
+    <ProjectReference Include="..\..\src\CqrsLens.Cli\CqrsLens.Cli.csproj" />
   </ItemGroup>
 
   <ItemGroup>

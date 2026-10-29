@@ -81,6 +81,26 @@ public class CliTests : IDisposable
     }
 
     [Fact]
+    public void Profile_PrintsScanAndDeepSliceBreakdownToStderr()
+    {
+        WriteValidFixture();
+        var output = Path.Combine(_root, "ARCHITECTURE.md");
+
+        var result = Run(new[]
+        {
+            _root, "-o", output, "--profile", "--generated-at", "2026-01-01T00:00:00Z",
+        });
+
+        Assert.Equal(ExitCodes.Success, result.Code);
+        Assert.Contains("Profile (text):", result.Stderr);
+        Assert.Contains("Parse sources", result.Stderr);
+        Assert.Contains("Scan shapes", result.Stderr);
+        Assert.Contains("Scan: ApplyScan", result.Stderr);
+        Assert.Contains("Deep: handler slices", result.Stderr);
+        Assert.DoesNotContain("Profile (text):", result.Stdout);
+    }
+
+    [Fact]
     public void GeneratedAtOption_WritesPinnedTimestamp()
     {
         WriteValidFixture();
@@ -308,11 +328,15 @@ public class CliTests : IDisposable
     {
         WriteProject();
         WriteFile("Requests.cs", """
-            namespace Alpha;
-            public sealed record PingCommand : IRequest<int>;
+            namespace Alpha
+            {
+                public sealed record PingCommand : IRequest<int>;
+            }
 
-            namespace Beta;
-            public sealed record PingCommand : IRequest<int>;
+            namespace Beta
+            {
+                public sealed record PingCommand : IRequest<int>;
+            }
             """);
         WriteFile("Handler.cs", """
             namespace Handlers;

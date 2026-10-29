@@ -39,7 +39,7 @@ public class McpServerTests
             """{"jsonrpc":"2.0","method":"notifications/initialized"}""",
             """{"jsonrpc":"2.0","id":2,"method":"ping"}""",
             """{"jsonrpc":"2.0","id":3,"method":"tools/list"}""",
-            """{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_architecture_dna","arguments":{}}}""",
+            """{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"get_architecture_dna","arguments":{"includeIndex":true}}}""",
             """{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"trace_slice","arguments":{"filter":"CreateOrder"}}}""",
             """{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"trace_entity_impact","arguments":{"entity":"Order"}}}""",
             """{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"check_architecture","arguments":{"strict":true}}}""",

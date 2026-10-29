@@ -424,10 +424,163 @@ public class DeepSliceAndAgentTests
 
         var acceptCmd = Assert.Single(result.Requests, r => r.Name == "AcceptProposalCommand");
         Assert.Contains(acceptCmd.Properties, p => p.Name == "ProposalId" && p.Type == "System.Guid");
-        Assert.Contains("PATCH /api/Proposals/{id}/accept", acceptCmd.Entrypoints);
+        Assert.Contains("PATCH /api/Proposals/{id}/accept _(inferred)_", acceptCmd.Entrypoints);
 
         var createContributorCmd = Assert.Single(result.Requests, r => r.Name == "CreateContributorCommand");
         Assert.Contains(createContributorCmd.Properties, p => p.Name == "Name" && p.Type == "string");
         Assert.Contains("POST /Contributors", createContributorCmd.Entrypoints);
+    }
+
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void DeepSliceAnalyzer_TracesRepositoriesDomainEntityEventsAndNotificationHandlers(AnalysisMode mode)
+    {
+        using var dir = new TempDir();
+        dir.Write("App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\" />");
+        dir.Write("Level2DddSlices.cs", """
+            namespace MediatR
+            {
+                public interface IRequest<out TResponse> { }
+                public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse> { }
+                public interface INotification { }
+                public interface INotificationHandler<in TNotification> where TNotification : INotification { }
+            }
+            namespace Microsoft.EntityFrameworkCore
+            {
+                public class DbContext { }
+                public class DbSet<TEntity> where TEntity : class { }
+            }
+            namespace App
+            {
+                using System;
+                using MediatR;
+                using Microsoft.EntityFrameworkCore;
+
+                public interface IRepository<T> where T : class { }
+                public interface IProposalRepository { }
+
+                public abstract class DomainNotificationBase<TDomainEvent> : INotification
+                    where TDomainEvent : INotification
+                {
+                }
+
+                public record ProposalAcceptedDomainEvent(Guid ProposalId) : INotification;
+                public class ProposalAcceptedNotification : DomainNotificationBase<ProposalAcceptedDomainEvent> { }
+
+                public record CreateGroupFromProposalCommand(Guid ProposalId) : IRequest<Guid>;
+                public class CreateGroupFromProposalHandler : IRequestHandler<CreateGroupFromProposalCommand, Guid>
+                {
+                    public Guid Handle(CreateGroupFromProposalCommand cmd) => cmd.ProposalId;
+                }
+
+                public class Proposal
+                {
+                    public Guid Id { get; set; }
+                    public string Status { get; private set; } = "Pending";
+
+                    public void Accept()
+                    {
+                        Status = "Accepted";
+                        Raise(new ProposalAcceptedDomainEvent(Id));
+                    }
+
+                    private void Raise(INotification ev) { }
+                }
+
+                public class Contributor
+                {
+                    public int Id { get; set; }
+                    private bool _verified;
+                    public bool Verified
+                    {
+                        get => _verified;
+                        set
+                        {
+                            if (value && !_verified)
+                                Raise(new ContributorVerifiedEvent(Id));
+                            _verified = value;
+                        }
+                    }
+
+                    private void Raise(INotification ev) { }
+                }
+
+                public record ContributorVerifiedEvent(int ContributorId) : INotification;
+
+                public class AppDbContext : DbContext
+                {
+                    public DbSet<Proposal> Proposals { get; set; } = null!;
+                    public DbSet<Contributor> Contributors { get; set; } = null!;
+                }
+
+                public class ProposalRepository : IProposalRepository
+                {
+                    private readonly AppDbContext _db;
+                    public ProposalRepository(AppDbContext db) => _db = db;
+                    public object Query() => _db.Proposals;
+                }
+
+                public record AcceptProposalCommand(Guid ProposalId) : IRequest<bool>;
+
+                public class AcceptProposalCommandHandler(IProposalRepository repo)
+                    : IRequestHandler<AcceptProposalCommand, bool>
+                {
+                    public bool Handle(AcceptProposalCommand cmd)
+                    {
+                        var proposal = new Proposal();
+                        proposal.Accept();
+                        return true;
+                    }
+                }
+
+                public record VerifyContributorCommand(int ContributorId) : IRequest<bool>;
+
+                public class VerifyContributorHandler(IRepository<Contributor> repo)
+                    : IRequestHandler<VerifyContributorCommand, bool>
+                {
+                    public bool Handle(VerifyContributorCommand cmd)
+                    {
+                        var c = new Contributor();
+                        c.Verified = true;
+                        return true;
+                    }
+                }
+
+                public class ProposalAcceptedNotificationHandler(IRepository<Proposal> repo)
+                    : INotificationHandler<ProposalAcceptedNotification>
+                {
+                    public void Handle(ProposalAcceptedNotification notification)
+                    {
+                        var followUp = new CreateGroupFromProposalCommand(Guid.NewGuid());
+                    }
+                }
+            }
+            """);
+
+        var result = Analyzer.Analyze(dir.Path, mode);
+
+        // 1. Custom Repository (IProposalRepository -> ProposalRepository -> Proposals (Proposal))
+        // + Domain Entity Method (Proposal.Accept() -> ProposalAcceptedDomainEvent + ProposalAcceptedNotification)
+        var acceptCmd = Assert.Single(result.Requests, r => r.Name == "AcceptProposalCommand");
+        Assert.Contains("Proposals (Proposal)", acceptCmd.TouchedEntities);
+        Assert.Contains("App.ProposalAcceptedDomainEvent", acceptCmd.PublishedNotifications);
+        Assert.Contains("App.ProposalAcceptedNotification", acceptCmd.PublishedNotifications);
+
+        // 2. Generic Repository (IRepository<Contributor> -> Contributors (Contributor))
+        // + Domain Entity Property Setter (Contributor.Verified -> ContributorVerifiedEvent)
+        var verifyCmd = Assert.Single(result.Requests, r => r.Name == "VerifyContributorCommand");
+        Assert.Contains("Contributors (Contributor)", verifyCmd.TouchedEntities);
+        Assert.Contains("App.ContributorVerifiedEvent", verifyCmd.PublishedNotifications);
+
+        // 3. Notification Handler Deep Tracing (Dependencies, TouchedEntities, DispatchedRequests)
+        var notifHandler = Assert.Single(result.NotificationHandlers, h => h.Name == "ProposalAcceptedNotificationHandler");
+        Assert.Contains("IRepository<Proposal>", notifHandler.Dependencies);
+        Assert.Contains("Proposals (Proposal)", notifHandler.TouchedEntities);
+        Assert.Contains("App.CreateGroupFromProposalCommand", notifHandler.DispatchedRequests);
+
+        var agentReport = AgentReportGenerator.Generate(result, "AcceptProposal");
+        Assert.Contains("ProposalAcceptedNotificationHandler", agentReport);
+        Assert.Contains("Dispatches: `CreateGroupFromProposalCommand`", agentReport);
     }
 }
