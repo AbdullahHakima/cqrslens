@@ -39,7 +39,7 @@ public static class ArchitectureDiffer
         if (!diff.HasChanges)
             return "Architecture diff: no changes detected.";
 
-        return $"Architecture diff: " +
+        return "Architecture diff: " +
                $"+{diff.Requests.Added.Count}/-{diff.Requests.Removed.Count}/~{diff.Requests.Modified.Count} request(s), " +
                $"+{diff.Handlers.Added.Count}/-{diff.Handlers.Removed.Count} handler(s), " +
                $"+{diff.Validators.Added.Count}/-{diff.Validators.Removed.Count} validator(s), " +
