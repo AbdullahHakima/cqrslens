@@ -79,12 +79,14 @@ public sealed class ArchitectureBoundaryTests
         Assert.Equal(@"\", readme.Attribute("PackagePath")?.Value);
     }
 
-    [Fact]
-    public void CoreSourceFiles_DeclareOneTypeEach()
+    [Theory]
+    [InlineData("CqrsLens.Core")]
+    [InlineData("CqrsLens.Analysis")]
+    public void SourceFiles_DeclareOneTypeEach(string project)
     {
-        var coreRoot = Path.Combine(Root, "src", "CqrsLens.Core");
+        var projectRoot = Path.Combine(Root, "src", project);
         var offenders = Directory
-            .EnumerateFiles(coreRoot, "*.cs", SearchOption.AllDirectories)
+            .EnumerateFiles(projectRoot, "*.cs", SearchOption.AllDirectories)
             .Where(path => !path.Contains(
                 $"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}",
                 StringComparison.Ordinal))
