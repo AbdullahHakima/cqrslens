@@ -345,7 +345,7 @@ internal static class ArchitectureDiffCalculator
         IReadOnlyList<JsonCheckFinding> headChecks)
     {
         static string Key(JsonCheckFinding c)
-            => Baseline.CreateKey(c.Code, c.Target, c.Location?.File);
+            => BaselineKeys.Create(c.Code, c.Target, c.Location?.File);
 
         var activeBase = baseChecks.Where(c => !c.Known).ToList();
         var activeHead = headChecks.Where(c => !c.Known).ToList();

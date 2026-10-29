@@ -430,8 +430,8 @@ public static class McpServer
         var result = Analyzer.Analyze(fullRoot, mode, analysisOptions);
         if (defaultOptions.BaselinePath is not null && File.Exists(defaultOptions.BaselinePath))
         {
-            var baseline = Baseline.Read(defaultOptions.BaselinePath);
-            Baseline.Apply(result, baseline, defaultOptions.BaselinePath);
+            var baseline = BaselineStore.Read(defaultOptions.BaselinePath);
+            BaselineMatcher.Apply(result, baseline, defaultOptions.BaselinePath);
         }
 
         cache[cacheKey] = new CachedScan(result, fingerprint);

@@ -61,6 +61,10 @@ All notable changes to CqrsLens are documented here.
   facades: HTML sections and assets, Mermaid flowchart/ER rendering, diagram
   families, agent-report writers, and architecture-diff loading/calculation/
   Markdown rendering are now separate single-responsibility collaborators.
+- Split the `CqrsLens.Core` model god file into one type per file by
+  responsibility (`Architecture`, `Analysis`, `Checks`, `Configuration`,
+  `Source`), separated baseline storage from matching, and centralized type
+  full-name composition in `TypeFullName`.
 - Every analysis now parses each file once into a shared `SourceWorkspace`
   (source text, source mask and cheap scan) reused by text, Roslyn, EF and
   deep-slice analysis.

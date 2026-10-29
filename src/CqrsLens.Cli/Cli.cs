@@ -506,13 +506,13 @@ public static class CliRunner
 
         if (options.WriteBaselinePath is not null)
         {
-            Baseline.Write(result, options.WriteBaselinePath);
-            Baseline.MarkAllKnown(result, options.WriteBaselinePath);
+            BaselineStore.Write(result.Checks, options.WriteBaselinePath);
+            BaselineMatcher.MarkAllKnown(result, options.WriteBaselinePath);
         }
         else if (options.BaselinePath is not null)
         {
-            var baseline = Baseline.Read(options.BaselinePath);
-            Baseline.Apply(result, baseline, options.BaselinePath);
+            var baseline = BaselineStore.Read(options.BaselinePath);
+            BaselineMatcher.Apply(result, baseline, options.BaselinePath);
         }
 
         ArchitectureDiff? diff = null;

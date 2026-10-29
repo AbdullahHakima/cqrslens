@@ -57,6 +57,17 @@ on the scanner implementation.
 Public entry points are thin facades. Their implementation collaborators are
 `internal` so callers keep the stable API while each file owns one concern.
 
+**Core**
+
+- `Architecture/` holds the shape model (`CqrsRequest`, `HandlerInfo`, EF
+  entities and relationships, endpoints, projects), one type per file.
+  `TypeFullName` is the single implementation of full-name composition.
+- `Analysis/` holds the aggregate result, diagnostics, progress and timing
+  contracts.
+- `Baseline/` separates the on-disk document, stable keys, storage and matching.
+- `Checks/`, `Configuration/` and `Source/` hold findings, glob/options and
+  source-location contracts.
+
 **Analysis**
 
 - `Analyzer` orchestrates discovery, scanning, linking, deep slicing and checks.
@@ -103,7 +114,9 @@ Public entry points are thin facades. Their implementation collaborators are
 
 ## Where changes belong
 
-- New shape data starts in `CqrsLens.Core/Models.cs`.
+- New shape data goes in the matching `CqrsLens.Core/Architecture` type file;
+  diagnostics, checks, baseline and configuration contracts each live in their
+  own folder, one type per file.
 - Discovery, resolution and checks go in `CqrsLens.Analysis`.
 - Only presentation belongs in `CqrsLens.Reporting`.
 - CLI flags, config validation and output routing stay in `CqrsLens.Cli`.

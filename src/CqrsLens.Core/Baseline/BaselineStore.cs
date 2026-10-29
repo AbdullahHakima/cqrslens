@@ -3,41 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace CqrsLens;
 
-/// <summary>A baseline error that should be reported as a CLI usage failure.</summary>
-public sealed class BaselineException : Exception
-{
-    public BaselineException(string message) : base(message)
-    {
-    }
-}
-
-/// <summary>On-disk baseline document. Kept small and deterministic so it is reviewable in git.</summary>
-public sealed class BaselineDocument
-{
-    public int? SchemaVersion { get; set; }
-
-    public List<BaselineEntry> Findings { get; set; } = new();
-}
-
-public sealed class BaselineEntry
-{
-    public string Code { get; set; } = "";
-    public string? Target { get; set; }
-    public string? File { get; set; }
-    public string? Project { get; set; }
-    public string? Severity { get; set; }
-    public string? Message { get; set; }
-    public int? Line { get; set; }
-    public int? Column { get; set; }
-}
-
-/// <summary>
-/// Reads, writes and applies architecture-check baselines. Matching uses the
-/// stable key in <see cref="CheckFinding.BaselineKey"/> rather than messages or
-/// line numbers, so refactors and message wording changes keep old findings
-/// known while a new symbol/file is correctly treated as new.
-/// </summary>
-public static class Baseline
+/// <summary>Reads and writes the on-disk baseline document.</summary>
+public static class BaselineStore
 {
     public const int CurrentSchemaVersion = 1;
 
@@ -55,16 +22,6 @@ public static class Baseline
         AllowTrailingCommas = true,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
     };
-
-    public static string CreateKey(string code, string? target, string? file)
-    {
-        var normalizedFile = (file ?? "")
-            .Replace('\\', '/')
-            .Trim()
-            .TrimStart('/')
-            .ToLowerInvariant();
-        return $"{code}\u001f{target ?? ""}\u001f{normalizedFile}";
-    }
 
     public static BaselineDocument Read(string path)
     {
@@ -115,7 +72,7 @@ public static class Baseline
         return document;
     }
 
-    public static void Write(AnalysisResult result, string path)
+    public static void Write(IReadOnlyList<CheckFinding> checks, string path)
     {
         if (Directory.Exists(path))
             throw new BaselineException($"baseline path is a directory: {path}");
@@ -123,7 +80,7 @@ public static class Baseline
         var document = new BaselineDocument
         {
             SchemaVersion = CurrentSchemaVersion,
-            Findings = result.Checks
+            Findings = checks
                 .OrderBy(c => c.BaselineKey, StringComparer.Ordinal)
                 .ThenBy(c => c.Message, StringComparer.Ordinal)
                 .Select(c => new BaselineEntry
@@ -153,38 +110,5 @@ public static class Baseline
         {
             throw new BaselineException($"could not write baseline '{path}': {ex.Message}");
         }
-    }
-
-    /// <summary>Marks the current checks as known after generating a new baseline.</summary>
-    public static void MarkAllKnown(AnalysisResult result, string path)
-    {
-        for (var i = 0; i < result.Checks.Count; i++)
-            result.Checks[i] = result.Checks[i] with { IsKnown = true };
-
-        result.BaselineApplied = true;
-        result.BaselinePath = path;
-    }
-
-    public static void Apply(AnalysisResult result, BaselineDocument document, string path)
-    {
-        var remaining = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var entry in document.Findings)
-        {
-            var key = CreateKey(entry.Code, entry.Target, entry.File);
-            remaining[key] = remaining.TryGetValue(key, out var count) ? count + 1 : 1;
-        }
-
-        for (var i = 0; i < result.Checks.Count; i++)
-        {
-            var finding = result.Checks[i];
-            if (remaining.TryGetValue(finding.BaselineKey, out var count) && count > 0)
-            {
-                remaining[finding.BaselineKey] = count - 1;
-                result.Checks[i] = finding with { IsKnown = true };
-            }
-        }
-
-        result.BaselineApplied = true;
-        result.BaselinePath = path;
     }
 }
