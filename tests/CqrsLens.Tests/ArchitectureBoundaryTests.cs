@@ -82,6 +82,7 @@ public sealed class ArchitectureBoundaryTests
     [Theory]
     [InlineData("CqrsLens.Core")]
     [InlineData("CqrsLens.Analysis")]
+    [InlineData("CqrsLens.Cli")]
     public void SourceFiles_DeclareOneTypeEach(string project)
     {
         var projectRoot = Path.Combine(Root, "src", project);
