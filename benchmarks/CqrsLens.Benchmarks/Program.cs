@@ -212,6 +212,14 @@ static string GenerateSolution(string root, int slices, bool force)
 
     WriteGeneratedFile(Path.Combine(root, "Domain", "Contracts.cs"), GeneratedContractsSource);
 
+    // Regression shape for the "Parse sources" pathology: a data file whose
+    // payload is one oversized single-line string literal (NorthwindTraders'
+    // SampleDataSeeder shape). Keeping it in the synthetic solution means the
+    // benchmark harness exercises the long-word-run parse path on every run.
+    WriteGeneratedFile(
+        Path.Combine(root, "Application", "SeedData.cs"),
+        GenerateLongLineDataFile(512 * 1024));
+
     var moduleCount = Math.Max(1, Math.Min(10, slices));
     var dbSets = new StringBuilder();
     for (var i = 0; i < slices; i++)
@@ -371,6 +379,29 @@ static void WriteGeneratedProject(
     }
     builder.AppendLine("</Project>");
     WriteGeneratedFile(Path.Combine(root, directory, "Bench." + directory + ".csproj"), builder.ToString());
+}
+
+static string GenerateLongLineDataFile(int literalLength)
+{
+    const string digits = "FABCDEF0123456789";
+    var literal = new StringBuilder(literalLength);
+    for (var i = 0; i < literalLength; i++)
+        literal.Append(digits[i % digits.Length]);
+
+    var builder = new StringBuilder(literalLength + 512);
+    builder.AppendLine("namespace Bench.Application;");
+    builder.AppendLine("public static class SeedData");
+    builder.AppendLine("{");
+    builder.AppendLine("    public static byte[] Load()");
+    builder.AppendLine("    {");
+    builder.Append("        return StringToByteArray(\"");
+    builder.Append(literal);
+    builder.AppendLine("\");");
+    builder.AppendLine("    }");
+    builder.AppendLine();
+    builder.AppendLine("    private static byte[] StringToByteArray(string hex) => new byte[hex.Length / 2];");
+    builder.AppendLine("}");
+    return builder.ToString();
 }
 
 static void WriteGeneratedFile(string path, string content)
