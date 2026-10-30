@@ -19,7 +19,15 @@ internal static partial class SourceFileScanner
 
     // Best-effort property match. The accessor block keeps this from matching
     // methods and fields; attributes/modifiers are kept for EF annotations.
-    [GeneratedRegex(@"(?<attrs>(?:\[\s*[^\[\]]*\]\s*)*)(?<mods>(?:(?:public|private|protected|internal|static|virtual|override|sealed|required|new|readonly|abstract|unsafe|partial|extern)\s+)*)(?!\b(?:class|record|struct|interface|enum|namespace|return)\b)(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*(?:\s*<[^;{}()=]*>)?(?:\s*\[\s*\]\s*)*\??)\s+(?<name>[A-Za-z_]\w*)\s*(?<rest>\{\s*(?:(?:public|private|protected|internal)\s+)?(?:get|set|init)\b[^{}]*\})", RegexOptions.Singleline)]
+    // The leading (?<![A-Za-z0-9_]) is a performance guard, not a semantic one:
+    // the <type> group starts with [A-Za-z_]\w*, so without it the engine restarts
+    // this whole pattern at every offset of a long \w run (e.g. a multi-megabyte
+    // seed-data string literal) and each attempt rescans to the end of the run,
+    // making the scan O(run^2). A C# type never starts immediately after an
+    // identifier character, so requiring a non-word boundary drops only start
+    // positions that could not produce a match. Matches on corpus files are
+    // byte-identical with and without it.
+    [GeneratedRegex(@"(?<![A-Za-z0-9_])(?<attrs>(?:\[\s*[^\[\]]*\]\s*)*)(?<mods>(?:(?:public|private|protected|internal|static|virtual|override|sealed|required|new|readonly|abstract|unsafe|partial|extern)\s+)*)(?!\b(?:class|record|struct|interface|enum|namespace|return)\b)(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*(?:\s*<[^;{}()=]*>)?(?:\s*\[\s*\]\s*)*\??)\s+(?<name>[A-Za-z_]\w*)\s*(?<rest>\{\s*(?:(?:public|private|protected|internal)\s+)?(?:get|set|init)\b[^{}]*\})", RegexOptions.Singleline)]
     private static partial Regex PropertyRegex();
 
     // Matches: interface Name<...> [: base list] { or ;
