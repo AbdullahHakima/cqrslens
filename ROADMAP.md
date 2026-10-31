@@ -5,8 +5,15 @@ where they exist; the dates are not promises.
 
 ## Done
 
-**Unreleased**
+**0.8.0** (October 2026)
 
+- **Dispatch call-site tracking & flow graph**: find `Send` / `Publish` call
+  sites across MediatR, Mediator and Wolverine (including handler → request
+  chains and handler → notification publishes), export flow edges in JSON, and
+  report statically unresolvable dispatches as unresolved instead of guessing
+- **Reachability checks**: `UnreachableRequest` and `UnpublishedNotification`
+  warnings for handled requests nothing in production sends and handled
+  notifications nothing publishes; test-project sends never count
 - **Domain events & notifications (`INotification` / `IDomainEvent`)**: discover
   notifications and 1-to-many `INotificationHandler<T>` / `IDomainEventHandler<T>`
   handlers in both `text` and `roslyn` modes, and render fan-out diagrams and tables
