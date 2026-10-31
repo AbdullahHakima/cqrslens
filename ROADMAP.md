@@ -3,11 +3,30 @@
 What is planned, in the order I expect to work on it. Issues are linked
 where they exist; the dates are not promises.
 
-## In progress
-
-- Interactive HTML explorer (click a request, see its handler and files)
-
 ## Done
+
+**0.8.0** (October 2026)
+
+- **Dispatch call-site tracking & flow graph**: find `Send` / `Publish` call
+  sites across MediatR, Mediator and Wolverine (including handler → request
+  chains and handler → notification publishes), export flow edges in JSON, and
+  report statically unresolvable dispatches as unresolved instead of guessing
+- **Reachability checks**: `UnreachableRequest` and `UnpublishedNotification`
+  warnings for handled requests nothing in production sends and handled
+  notifications nothing publishes; test-project sends never count
+- **Domain events & notifications (`INotification` / `IDomainEvent`)**: discover
+  notifications and 1-to-many `INotificationHandler<T>` / `IDomainEventHandler<T>`
+  handlers in both `text` and `roslyn` modes, and render fan-out diagrams and tables
+  in Markdown, HTML (Mermaid and inline SVG), and JSON reports
+- **Expanded architecture rules**: `MultipleHandlers` (error), `ApplicationLayerViolation`
+  (error), `CircularProjectDependency` (error), `OrphanValidator` (warning), and
+  `OrphanNotification` (warning), all configurable in `.cqrslens.json` and emitted to SARIF
+
+- **Interactive HTML explorer**: click any request (in the Requests table, explorer
+  cards, or Mermaid CQRS diagram) to inspect its contract, response type, handlers,
+  validators, source `File:Line:Col` locations, and per-request architecture check
+  findings, with filter pills (`All`, `Commands`, `Queries`, `With Findings`) and
+  live search
 
 **0.7.0** (October 2026)
 
