@@ -41,7 +41,7 @@ jobs:
             src/CqrsLens.Cli/bin/Release/net8.0/cqrslens.runtimeconfig.json
 
       - name: Pack
-        run: dotnet pack src/CqrsLens/CqrsLens.csproj -c Release --no-build -o artifacts
+        run: dotnet pack src/CqrsLens.Cli/CqrsLens.Cli.csproj -c Release --no-build -o artifacts
 
       - name: Smoke test the source tree
         shell: bash
