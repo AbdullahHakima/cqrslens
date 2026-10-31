@@ -168,10 +168,29 @@
           "xunit.extensibility.core": "[2.9.3]"
         }
       },
-      "cqrslens": {
+      "CqrsLens": {
         "type": "Project",
         "dependencies": {
+          "CqrsLens.Analysis": "[0.7.0, )",
+          "CqrsLens.Core": "[0.7.0, )",
+          "CqrsLens.Reporting": "[0.7.0, )"
+        }
+      },
+      "cqrslens.analysis": {
+        "type": "Project",
+        "dependencies": {
+          "CqrsLens.Core": "[0.7.0, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )"
+        }
+      },
+      "cqrslens.core": {
+        "type": "Project"
+      },
+      "cqrslens.reporting": {
+        "type": "Project",
+        "dependencies": {
+          "CqrsLens.Analysis": "[0.7.0, )",
+          "CqrsLens.Core": "[0.7.0, )"
         }
       }
     }

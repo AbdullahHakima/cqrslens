@@ -4,6 +4,141 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-31
+
+First NuGet release since 0.6.0; also includes everything from the GitHub-only
+0.7.0 tag below.
+
+### Added
+
+- **Dispatch call-site tracking & flow graph**:
+  - Finds `Send` / `Publish` call sites across MediatR, martinothamar Mediator
+    and Wolverine, including handler → request chains and handler →
+    notification publishes.
+  - Exports flow edges in `--format json`: `endpoint → request`,
+    `handler → request`, `handler → notification`, and `handler → DbContext`
+    (type level).
+  - Dispatches whose target type cannot be resolved statically are reported
+    as unresolved instead of being guessed.
+- **Reachability checks**:
+  - `UnreachableRequest` (`warning`): flags requests that have a handler but
+    no production call site. Sends from test projects never count as
+    production reachability.
+  - `UnpublishedNotification` (`warning`): flags notifications that have
+    handlers but no production publisher.
+  - Both checks are warning-only; `--strict` outcomes are unchanged.
+- **Built-in Model Context Protocol (MCP) Server (`--mcp`)**:
+  - `McpServer` (`cqrslens --mcp [path]`) speaks JSON-RPC 2.0 over `stdio` (supporting both newline-delimited JSON-RPC and `Content-Length` framed messages) with zero external MCP package dependencies and automatic source-timestamp scan caching.
+  - Exposes 4 token-efficient MCP tools for AI coding agents (Claude Code, Cursor, Windsurf, Copilot, Antigravity): `get_architecture_dna`, `trace_slice`, `trace_entity_impact`, and `check_architecture`.
+- **Deep Vertical Slice Tracing & AI Agent Mode (`--format agent`, `--slice <filter>`)**:
+  - `DeepSliceAnalyzer` traces end-to-end vertical slices across ASP.NET Core Controllers, Minimal APIs (`MapGet`/`MapPost`/`MapPut`/`MapDelete`/`MapPatch` + `MapGroup`), and FastEndpoints (`Endpoint<TRequest, TResponse>`) → Request payload properties → Validators → Handlers (constructor/primary-constructor DI dependencies) → touched EF Core `DbSet`s/entities + published Domain Events/Notifications (`INotification` / `IDomainEvent`) in both `text` and `roslyn` modes.
+  - `AgentReportGenerator` (`--format agent`, default `ARCHITECTURE.agent.md`) generates a token-optimized, Mermaid-free architectural map with synthesized **Architectural DNA & Conventions** (layer topology, co-located vs. separate handler layout, active pipeline behaviors) and full vertical slice causal chains with `File:Line` source locations.
+  - `--slice <filter>` queries and streams matching vertical slices directly to `stdout` when `-o` is omitted, enabling AI coding agents to inspect any feature slice in milliseconds with minimal token usage.
+- **Domain events & notifications (`INotification` / `IDomainEvent`)**:
+  - Discovers notifications and domain events (`INotification`, `IDomainEvent`, and
+    source-declared wrapper interfaces/base classes) along with their 1-to-many
+    `INotificationHandler<T>` / `IDomainEventHandler<T>` handlers in both `text` and
+    `roslyn` modes.
+  - Renders a **Domain Events & Notifications** `flowchart LR` fan-out diagram and
+    summary table in Markdown and HTML reports (supporting both `--render mermaid`
+    and zero-JS `--render svg` modes) and exports `notifications` /
+    `notificationHandlers` in `--format json`.
+- **Expanded Clean Architecture & CQRS rules (`ArchitectureChecker`)**:
+  - `MultipleHandlers` (`error`): flags requests with more than one linked handler.
+  - `ApplicationLayerViolation` (`error`): flags `Application` projects referencing
+    `Infrastructure`, `Api`, `Web`, or `UI` projects, and highlights violating edges
+    in the project and layer diagrams.
+  - `CircularProjectDependency` (`error`): detects cycles in the `.csproj` dependency
+    graph.
+  - `OrphanValidator` (`warning`): flags validators whose target type does not match
+    any discovered CQRS request.
+  - `OrphanNotification` (`warning`): flags notifications / domain events with no
+    handlers.
+  - All 5 rules are configurable (`off`, `warning`, `error`) in `.cqrslens.json`
+    (`cqrslens.schema.json`) and included in SARIF 2.1.0 output.
+- **Interactive HTML CQRS Explorer (`--format html`)**:
+  - `ARCHITECTURE.html` now includes an **Interactive CQRS Explorer** section with
+    expandable inspector cards for every request, displaying its contract metadata
+    (`FullName`, `Kind`, `ViaMarker`, `ResponseType`, `Project`, and source
+    `File:Line:Col`), linked handlers with their project and source `File:Line:Col`,
+    linked validators with their project and source `File:Line:Col`, and per-request
+    architecture check findings.
+  - Pure CSS filter pills (`All`, `Commands`, `Queries`, `With Findings`) and
+    clickable request anchors (`#explorer-...`) from the Requests table work in both
+    `--render mermaid` and zero-JavaScript `--render svg` modes.
+  - In `--render mermaid` mode, the explorer also adds live text filtering,
+    **Expand all** / **Collapse all** controls, and click handlers on Mermaid CQRS
+    diagram nodes (`g.node`) that jump directly to and open the matching request
+    inspector card.
+  - Added a `Source` (`File:Line:Col`) column to the HTML **Pipeline Behaviors**
+    table.
+
+### Changed
+
+- Split the tool into `CqrsLens.Core`, `CqrsLens.Analysis`, `CqrsLens.Reporting`
+  and `CqrsLens.Cli` with a one-way dependency direction, enforced by
+  `ArchitectureBoundaryTests`.
+- Decomposed the remaining reporting and diff god classes behind stable
+  facades: HTML sections and assets, Mermaid flowchart/ER rendering, diagram
+  families, agent-report writers, and architecture-diff loading/calculation/
+  Markdown rendering are now separate single-responsibility collaborators.
+  `CqrsLens.Reporting` is organized by output format (`Markdown/`, `Html/`,
+  `Json/`, `Mermaid/`, `Agent/`, `Sarif/`, `Console/`) and its sources now
+  declare one top-level type per file, enforced by
+  `ArchitectureBoundaryTests`.
+- Split the `CqrsLens.Core` model god file into one type per file by
+  responsibility (`Architecture`, `Analysis`, `Checks`, `Configuration`,
+  `Source`), separated baseline storage from matching, and centralized type
+  full-name composition in `TypeFullName`.
+- Decomposed `CqrsLens.Analysis` god classes behind stable facades: `Analyzer`
+  (workspace building, phase timing, linking), `CSharpScanner` text scanning,
+  `TextArchitectureScanner` (contract roots, global usings, interface maps,
+  marker discovery), `TypeHierarchy` (type index, name resolution, shape and
+  target resolution), Roslyn CQRS shape readers (one per shape family), endpoint
+  discovery strategies, `ArchitectureChecker` check families,
+  `EfFluentConfigurationParser` (source/call/type/statement/relationship),
+  shared EF key/entity/relationship rules between the text and Roslyn model
+  builders, `CsprojParser` (file discovery, MSBuild loading, reference resolution),
+  `MediatorConventions` (detection and Wolverine discovery), and deep-slice
+  enrichment (`HandlerEffectRollup`, handler effect passes, domain-index passes,
+  `EnclosingMemberLocator`).
+  Analysis sources now declare one top-level type per file, enforced by
+  `ArchitectureBoundaryTests`.
+- Decomposed the `CqrsLens.Cli` god files (`Cli`, `McpServer`, `Configuration`,
+  the diff models/calculator/renderer and `SummaryGenerator`) into
+  folder-by-responsibility collaborators (`CommandLine`, `Execution`,
+  `Configuration`, `Diff`, `Mcp`, `Summary`). The public CLI entry points are
+  unchanged, and CLI sources now declare one top-level type per file, enforced
+  by `ArchitectureBoundaryTests`.
+- Every analysis now parses each file once into a shared `SourceWorkspace`
+  (source text, source mask and cheap scan) reused by text, Roslyn, EF and
+  deep-slice analysis.
+- Added per-phase timing and allocation profiling (`--profile`) plus the
+  `benchmarks/CqrsLens.Benchmarks` harness, synthetic solution generator and
+  `scripts/benchmark.ps1` warm/cold-process runner.
+- Reduced the 400-slice synthetic text scan from roughly 610 ms / 190 MB to
+  roughly 270–320 ms / 74 MB (warm median) through direct-root gating, span-based
+  parsing, source-mask reuse, and cheap prechecks before endpoint/EF/constructor
+  regexes.
+- Added a checked-in golden corpus that asserts exact shape sets, text/Roslyn
+  parity, determinism and decoy suppression independently of either scanner.
+
+### Fixed
+
+- Text-mode scanning no longer stalls on files with very long single lines: a
+  1.5 MB one-line data file that took ~295 s now scans in under a second.
+- Open-generic request wrappers such as `IdentifiedCommand<T, R>` no longer
+  produce false `MultipleHandlers` errors; eShop Ordering passes `--strict`
+  again in both modes.
+- `OrphanValidator` no longer fires on codebases with no CQRS request model
+  (nopCommerce reported 116 false warnings).
+- Layer findings from name-guessed layer models are warnings, not errors;
+  error severity is kept for asserted layer models and configured overrides
+  (ABP went from 1 error / 52 warnings to 0 errors / 4 warnings).
+- Notifications are now inventoried from the handlers that handle them on
+  custom mediator shapes (Ardalis CleanArchitecture reported 7 notification
+  handlers but 0 notifications; it now reports the events they handle).
+
 ## [0.7.0] - 2026-10-25
 
 ### Added
