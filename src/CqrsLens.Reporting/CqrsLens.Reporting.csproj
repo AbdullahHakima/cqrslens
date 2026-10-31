@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>CqrsLens</RootNamespace>
+    <AssemblyName>CqrsLens.Reporting</AssemblyName>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CqrsLens.Core\CqrsLens.Core.csproj" />
+    <ProjectReference Include="..\CqrsLens.Analysis\CqrsLens.Analysis.csproj" />
+  </ItemGroup>
+
+</Project>

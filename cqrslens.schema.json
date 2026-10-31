@@ -71,6 +71,11 @@
       "additionalProperties": false,
       "properties": {
         "MissingHandler": { "$ref": "#/$defs/severity" },
+        "MultipleHandlers": { "$ref": "#/$defs/severity" },
+        "ApplicationLayerViolation": { "$ref": "#/$defs/severity" },
+        "CircularProjectDependency": { "$ref": "#/$defs/severity" },
+        "OrphanValidator": { "$ref": "#/$defs/severity" },
+        "OrphanNotification": { "$ref": "#/$defs/severity" },
         "LayerViolation": { "$ref": "#/$defs/severity" },
         "CommandWithoutValidator": { "$ref": "#/$defs/severity" },
         "AmbiguousProjectName": { "$ref": "#/$defs/severity" }
