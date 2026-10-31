@@ -4,8 +4,29 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-31
+
+First NuGet release since 0.6.0; also includes everything from the GitHub-only
+0.7.0 tag below.
+
 ### Added
 
+- **Dispatch call-site tracking & flow graph**:
+  - Finds `Send` / `Publish` call sites across MediatR, martinothamar Mediator
+    and Wolverine, including handler → request chains and handler →
+    notification publishes.
+  - Exports flow edges in `--format json`: `endpoint → request`,
+    `handler → request`, `handler → notification`, and `handler → DbContext`
+    (type level).
+  - Dispatches whose target type cannot be resolved statically are reported
+    as unresolved instead of being guessed.
+- **Reachability checks**:
+  - `UnreachableRequest` (`warning`): flags requests that have a handler but
+    no production call site. Sends from test projects never count as
+    production reachability.
+  - `UnpublishedNotification` (`warning`): flags notifications that have
+    handlers but no production publisher.
+  - Both checks are warning-only; `--strict` outcomes are unchanged.
 - **Built-in Model Context Protocol (MCP) Server (`--mcp`)**:
   - `McpServer` (`cqrslens --mcp [path]`) speaks JSON-RPC 2.0 over `stdio` (supporting both newline-delimited JSON-RPC and `Content-Length` framed messages) with zero external MCP package dependencies and automatic source-timestamp scan caching.
   - Exposes 4 token-efficient MCP tools for AI coding agents (Claude Code, Cursor, Windsurf, Copilot, Antigravity): `get_architecture_dna`, `trace_slice`, `trace_entity_impact`, and `check_architecture`.
@@ -101,6 +122,22 @@ All notable changes to CqrsLens are documented here.
   regexes.
 - Added a checked-in golden corpus that asserts exact shape sets, text/Roslyn
   parity, determinism and decoy suppression independently of either scanner.
+
+### Fixed
+
+- Text-mode scanning no longer stalls on files with very long single lines: a
+  1.5 MB one-line data file that took ~295 s now scans in under a second.
+- Open-generic request wrappers such as `IdentifiedCommand<T, R>` no longer
+  produce false `MultipleHandlers` errors; eShop Ordering passes `--strict`
+  again in both modes.
+- `OrphanValidator` no longer fires on codebases with no CQRS request model
+  (nopCommerce reported 116 false warnings).
+- Layer findings from name-guessed layer models are warnings, not errors;
+  error severity is kept for asserted layer models and configured overrides
+  (ABP went from 1 error / 52 warnings to 0 errors / 4 warnings).
+- Notifications are now inventoried from the handlers that handle them on
+  custom mediator shapes (Ardalis CleanArchitecture reported 7 notification
+  handlers but 0 notifications; it now reports the events they handle).
 
 ## [0.7.0] - 2026-10-25
 
