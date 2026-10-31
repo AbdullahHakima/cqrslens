@@ -44,11 +44,11 @@ jobs:
         shell: bash
         run: |
           mkdir -p artifacts/render-check
-          dotnet run --project src/CqrsLens -c Release --no-build -- \
+          dotnet run --project src/CqrsLens.Cli -c Release --no-build -- \
             samples/SampleShop \
             -o artifacts/render-check/sample.md \
             --generated-at 2026-01-01T00:00:00Z
-          dotnet run --project src/CqrsLens -c Release --no-build -- \
+          dotnet run --project src/CqrsLens.Cli -c Release --no-build -- \
             tests/fixtures/Adversarial \
             -o artifacts/render-check/adversarial.md \
             --generated-at 2026-01-01T00:00:00Z

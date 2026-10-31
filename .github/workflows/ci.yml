@@ -47,7 +47,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dotnet run --project src/CqrsLens -c Release --no-build -- \
+          dotnet run --project src/CqrsLens.Cli -c Release --no-build -- \
             samples/SampleShop \
             --analysis text \
             --strict \
@@ -66,7 +66,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          dotnet run --project src/CqrsLens -c Release --no-build -- \
+          dotnet run --project src/CqrsLens.Cli -c Release --no-build -- \
             tests/fixtures/StrictFailure \
             --generated-at 2026-01-02T03:04:05Z \
             --ci-root "$GITHUB_WORKSPACE" \
@@ -81,11 +81,11 @@ jobs:
           grep -q '"partialFingerprints"' artifacts/strict-smoke.sarif
           grep -q '#### New findings' artifacts/strict-smoke-summary.md
 
-          dotnet run --project src/CqrsLens -c Release --no-build -- \
+          dotnet run --project src/CqrsLens.Cli -c Release --no-build -- \
             tests/fixtures/StrictFailure \
             --write-baseline artifacts/strict-baseline.json \
             -o artifacts/strict-baseline-report.md
-          dotnet run --project src/CqrsLens -c Release --no-build -- \
+          dotnet run --project src/CqrsLens.Cli -c Release --no-build -- \
             tests/fixtures/StrictFailure \
             --baseline artifacts/strict-baseline.json \
             --strict \
