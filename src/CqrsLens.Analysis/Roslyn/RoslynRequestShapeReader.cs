@@ -57,6 +57,15 @@ internal static class RoslynRequestShapeReader
         if (requestInterface is null && markerInterface is null && externalMarker is null)
             return;
 
+        // An open-generic wrapper is never dispatched as-is; MediatR closes it per
+        // inner request. It is not a concrete request, but record the name so
+        // validators that target it are not called orphans.
+        if (symbol.TypeParameters.Length > 0)
+        {
+            result.NonConcreteRequestNames.Add(symbol.Name);
+            return;
+        }
+
         var ns = RoslynSymbolFacts.NamespaceOf(symbol);
         if (result.Requests.Any(r =>
                 r.Name == symbol.Name &&

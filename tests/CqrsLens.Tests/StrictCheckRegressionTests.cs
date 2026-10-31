@@ -40,6 +40,26 @@ public class StrictCheckRegressionTests : IDisposable
         File.WriteAllText(path, code);
     }
 
+    /// <summary>Source-declared MediatR/FluentValidation contracts so Roslyn mode compiles.</summary>
+    private void WriteContracts()
+    {
+        WriteFile("App/Contracts.cs", """
+            namespace MediatR
+            {
+                public interface IRequest { }
+                public interface IRequest<TResponse> { }
+                public interface IRequestHandler<TRequest> { }
+                public interface IRequestHandler<TRequest, TResponse> { }
+            }
+
+            namespace FluentValidation
+            {
+                public abstract class AbstractValidator<T> { }
+                public interface IValidator<T> { }
+            }
+            """);
+    }
+
     [Theory]
     [InlineData("Shop.Domain.Tests", "Shop.Domain.Tests")]
     [InlineData("Shop.UnitTests", "Shop.UnitTests")]
@@ -209,7 +229,7 @@ public class StrictCheckRegressionTests : IDisposable
     }
 
     [Fact]
-    public void GenericRequestAndHandler_LinkByOpenTypeIdentity()
+    public void OpenGenericRequest_IsNotAConcreteRequest()
     {
         WriteProject("App", "App");
         WriteFile("App/GetThing.cs", """
@@ -220,8 +240,86 @@ public class StrictCheckRegressionTests : IDisposable
 
         var result = Analyzer.Analyze(_root);
 
+        // An open-generic request is never dispatched as-is; MediatR closes it per
+        // inner request. It is a wrapper shape, not a concrete request, and its
+        // open-generic handler is not part of the concrete handler inventory.
+        Assert.Empty(result.Requests);
+        Assert.Empty(result.Handlers);
+    }
+
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void MultipleHandlers_StillFiresOnConcreteNonGenericRequest(AnalysisMode mode)
+    {
+        WriteProject("App", "App");
+        WriteContracts();
+        WriteFile("App/Feature.cs", """
+            using MediatR;
+
+            namespace App.Features;
+            public sealed record DuplicatedCommand : IRequest<int>;
+            public sealed class FirstDuplicatedHandler : IRequestHandler<DuplicatedCommand, int> { }
+            public sealed class SecondDuplicatedHandler : IRequestHandler<DuplicatedCommand, int> { }
+            """);
+
+        var result = Analyzer.Analyze(_root, mode);
+
+        var finding = Assert.Single(
+            result.Checks,
+            c => c.Code == ArchitectureChecker.MultipleHandlersCode);
+        Assert.Equal(CheckSeverity.Error, finding.Severity);
+        Assert.Equal("App.Features.DuplicatedCommand", finding.Target);
+        Assert.Equal(2, result.Requests.Single(r => r.Name == "DuplicatedCommand").Handlers.Count);
+    }
+
+    [Theory]
+    [InlineData(AnalysisMode.Text)]
+    [InlineData(AnalysisMode.Roslyn)]
+    public void OpenGenericCommandWrapper_IsNotInventoriedAndDoesNotRaiseMultipleHandlers(AnalysisMode mode)
+    {
+        WriteProject("App", "App");
+        WriteContracts();
+        WriteFile("App/Identified.cs", """
+            using MediatR;
+            using FluentValidation;
+
+            namespace App.Features;
+
+            public sealed record CreateThingCommand : IRequest<bool>;
+            public sealed class CreateThingHandler : IRequestHandler<CreateThingCommand, bool> { }
+            public sealed class CreateThingValidator : AbstractValidator<CreateThingCommand> { }
+
+            public class IdentifiedCommand<T, R> : IRequest<R>
+                where T : IRequest<R>
+            {
+                public T? Command { get; }
+            }
+
+            public abstract class IdentifiedCommandHandler<T, R> : IRequestHandler<IdentifiedCommand<T, R>, R>
+                where T : IRequest<R>
+            {
+            }
+
+            public sealed class CreateThingIdentifiedCommandHandler
+                : IdentifiedCommandHandler<CreateThingCommand, bool> { }
+            public sealed class ShipThingIdentifiedCommandHandler
+                : IdentifiedCommandHandler<CreateThingCommand, bool> { }
+
+            public sealed class IdentifiedCommandValidator
+                : AbstractValidator<IdentifiedCommand<CreateThingCommand, bool>> { }
+            """);
+
+        var result = Analyzer.Analyze(_root, mode);
+
+        // The open-generic wrapper is not a concrete request, and the handlers of a
+        // wrapper are not collapsed into a bogus multi-handler request. The wrapper
+        // validator stays discovered but is not an orphan.
         var request = Assert.Single(result.Requests);
-        Assert.Equal("GetThing", request.Name);
-        Assert.Equal(new[] { "App.Features.GetThingHandler" }, request.Handlers);
+        Assert.Equal("CreateThingCommand", request.Name);
+        Assert.Equal(new[] { "App.Features.CreateThingHandler" }, request.Handlers);
+        Assert.DoesNotContain(result.Checks, c => c.Code == ArchitectureChecker.MultipleHandlersCode);
+        Assert.DoesNotContain(result.Checks, c => c.Code == ArchitectureChecker.OrphanValidatorCode);
+        Assert.Equal(2, result.Validators.Count);
     }
 }

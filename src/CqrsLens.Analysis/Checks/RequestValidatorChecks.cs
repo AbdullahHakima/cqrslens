@@ -46,7 +46,8 @@ internal static class RequestValidatorChecks
         {
             if (linkedValidators.Contains(validator.FullName) ||
                 linkedValidators.Contains(validator.Name) ||
-                ambiguousTargets.Contains(validator.TargetType))
+                ambiguousTargets.Contains(validator.TargetType) ||
+                result.NonConcreteRequestNames.Contains(validator.TargetType))
                 continue;
 
             var targetDisplay = string.IsNullOrEmpty(validator.TargetNamespace)

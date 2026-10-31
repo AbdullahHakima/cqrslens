@@ -85,6 +85,14 @@ internal static class MarkerRequestDiscoverer
             if (!reached.Contains("IRequest") && !reached.Any(markers.Contains))
                 continue;
 
+            // Open-generic marker requests are wrappers too: never dispatched as-is,
+            // so they are not concrete requests.
+            if (declaration.TypeParameters.Count > 0)
+            {
+                result.NonConcreteRequestNames.Add(declaration.Name);
+                continue;
+            }
+
             var via = reached.FirstOrDefault(m => m != "IRequest")
                       ?? declaration.BaseRawNames.FirstOrDefault(b => b != "IRequest");
 

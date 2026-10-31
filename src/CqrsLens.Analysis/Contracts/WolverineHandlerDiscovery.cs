@@ -64,6 +64,12 @@ internal static partial class WolverineHandlerDiscovery
 
                     var (msgDecl, msgFile) = message.Value;
                     if (IsHandlerName(msgDecl.Name)) continue;
+                    // Open-generic messages are wrapper shapes, not concrete requests.
+                    if (msgDecl.TypeParameters.Count > 0)
+                    {
+                        result.NonConcreteRequestNames.Add(msgDecl.Name);
+                        continue;
+                    }
                     if (!addedPairs.Add((decl.FullName, msgDecl.FullName))) continue;
 
                     if (!requestsByFullName.TryGetValue(msgDecl.FullName, out var request))

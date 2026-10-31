@@ -10,6 +10,8 @@ internal static class RequestLinker
 {
     public static void Link(AnalysisResult result)
     {
+        DropNonConcreteHandlerTargets(result);
+
         var index = new LinkIndex<CqrsRequest>(
             result.Requests,
             request => request.FullName,
@@ -30,6 +32,25 @@ internal static class RequestLinker
             var byName = string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
             return byName != 0 ? byName : string.Compare(a.FullName, b.FullName, StringComparison.Ordinal);
         });
+    }
+
+    /// <summary>
+    /// Handlers that only serve an open-generic wrapper target a request shape that
+    /// is not in the concrete inventory, so they are not concrete-request handlers.
+    /// A same-named concrete request keeps its handlers.
+    /// </summary>
+    private static void DropNonConcreteHandlerTargets(AnalysisResult result)
+    {
+        if (result.NonConcreteRequestNames.Count == 0 || result.Handlers.Count == 0)
+            return;
+
+        var concreteNames = new HashSet<string>(
+            result.Requests.Select(request => request.Name),
+            StringComparer.Ordinal);
+
+        result.Handlers.RemoveAll(handler =>
+            result.NonConcreteRequestNames.Contains(handler.RequestName) &&
+            !concreteNames.Contains(handler.RequestName));
     }
 
     private static void LinkHandlers(AnalysisResult result, LinkIndex<CqrsRequest> index)

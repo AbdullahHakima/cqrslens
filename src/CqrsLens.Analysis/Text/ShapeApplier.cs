@@ -56,7 +56,14 @@ internal static partial class ShapeApplier
             if (!decl.IsAbstract && decl.BaseRawNames.Contains("IRequest"))
             {
                 var response = CSharpSyntax.ExtractGenericArguments(decl.BaseList, "IRequest")?.FirstOrDefault();
-                if (identities.TryAddRequest(decl, projectName))
+                // An open-generic wrapper is never dispatched as-is; MediatR closes
+                // it per inner request. It is not a concrete request, but record the
+                // name so validators that target it are not called orphans.
+                if (decl.TypeParameters.Count > 0)
+                {
+                    result.NonConcreteRequestNames.Add(decl.Name);
+                }
+                else if (identities.TryAddRequest(decl, projectName))
                 {
                     var request = new CqrsRequest
                     {

@@ -6,6 +6,15 @@ public sealed class AnalysisResult
     public List<ProjectInfo> Projects { get; } = new();
     public List<CqrsRequest> Requests { get; } = new();
     public List<HandlerInfo> Handlers { get; } = new();
+
+    /// <summary>
+    /// Simple names of request declarations discovered as open generics. An open
+    /// generic type is never dispatched as-is (MediatR closes it per inner
+    /// request), so it is not a concrete request and is kept out of
+    /// <see cref="Requests"/>. The identity is still recorded so a validator that
+    /// targets such a wrapper is not misreported as an orphan.
+    /// </summary>
+    internal HashSet<string> NonConcreteRequestNames { get; } = new(StringComparer.Ordinal);
     public List<ValidatorInfo> Validators { get; } = new();
     public List<BehaviorInfo> Behaviors { get; } = new();
     public List<DbContextInfo> DbContexts { get; } = new();
