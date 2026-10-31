@@ -58,6 +58,15 @@ public static class LayerClassifier
         return false;
     }
 
+    /// <summary>
+    /// True when <paramref name="layer"/> is one of the Clean Architecture layer
+    /// names assigned by naming convention (as opposed to "Tests" or a folder
+    /// fallback).
+    /// </summary>
+    internal static bool IsConventionLayer(string? layer)
+        => layer is not null &&
+           ConventionLayers.Contains(layer, StringComparer.OrdinalIgnoreCase);
+
     public static IEnumerable<string> OrderLayers(IEnumerable<string> layers)
     {
         var distinct = layers.Distinct(StringComparer.OrdinalIgnoreCase).ToList();

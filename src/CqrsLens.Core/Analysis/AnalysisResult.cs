@@ -41,6 +41,13 @@ public sealed class AnalysisResult
     /// <summary>Built-in mediator conventions detected in the source (e.g. Mediator, Wolverine).</summary>
     public List<string> Conventions { get; } = new();
 
+    /// <summary>
+    /// True when the caller supplied explicit project layer overrides, so the layer
+    /// model is configured rather than name-guessed and must not be second-guessed
+    /// by the confidence heuristic.
+    /// </summary>
+    internal bool HasConfiguredLayers { get; set; }
+
     /// <summary>Optional custom watermark stamp rendered in console and generated reports.</summary>
     public string? Watermark { get; set; }
 

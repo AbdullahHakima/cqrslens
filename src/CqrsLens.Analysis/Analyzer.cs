@@ -110,6 +110,7 @@ public static class Analyzer
     {
         options.Progress?.Invoke(new ScanProgress("Discovering projects", 0, 4));
         result.Projects.AddRange(CsprojParser.LoadProjects(root));
+        result.HasConfiguredLayers = options.LayerOverrides.Count > 0;
         foreach (var project in result.Projects)
         {
             project.Layer = options.LayerOverrides.TryGetValue(project.Name, out var layerOverride)

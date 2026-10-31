@@ -25,6 +25,18 @@ internal static class ProjectLayerChecks
         IReadOnlyDictionary<string, List<ProjectInfo>> projectsByName,
         List<CheckFinding> findings)
     {
+        // Layer labels are always name-inferred. On a framework-scale solution the
+        // handful of layer-named projects are coincidental, e.g. a
+        // navigation-contracts library whose name contains "UI" or a framework
+        // target project whose name contains "Application", and the intended
+        // reference between them is not a violation. When convention classification
+        // does not describe the solution, an outward reference is still reported but
+        // as a warning: uncertainty in the layer model must not fail --strict. A
+        // conventionally-layered solution keeps error severity.
+        var layerModelAsserted =
+            result.HasConfiguredLayers || LayerModelConfidence.IsAsserted(result.Projects);
+        var violationSeverity = layerModelAsserted ? CheckSeverity.Error : CheckSeverity.Warning;
+
         // Tests are not production layers and may legitimately reference anything.
         foreach (var project in result.Projects)
         {
@@ -48,7 +60,7 @@ internal static class ProjectLayerChecks
                     forbidden.Contains(targets[0].Layer, StringComparer.OrdinalIgnoreCase))
                 {
                     findings.Add(new CheckFinding(
-                        CheckSeverity.Error,
+                        violationSeverity,
                         code,
                         $"{layerLabel} project `{project.Name}` references {targets[0].Layer} project `{targets[0].Name}`.",
                         Target: $"{project.Name} -> {targets[0].Name}",

@@ -16,9 +16,24 @@ internal static class ProjectNameIndex
         IReadOnlyDictionary<string, List<ProjectInfo>> projectsByName,
         List<CheckFinding> findings)
     {
+        // The warning exists because layer checks skip references to a duplicated
+        // project name. Only a reference from a project whose layer is actually
+        // checked (Domain or Application) creates that blind spot; duplicated names
+        // that no such project references are unrelated noise on large repos.
+        var referencedByCheckedLayer = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var project in result.Projects)
+        {
+            if (!string.Equals(project.Layer, "Domain", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(project.Layer, "Application", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            foreach (var reference in project.ReferenceNames)
+                referencedByCheckedLayer.Add(reference);
+        }
+
         foreach (var (name, projects) in projectsByName.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))
         {
-            if (projects.Count <= 1)
+            if (projects.Count <= 1 || !referencedByCheckedLayer.Contains(name))
                 continue;
 
             findings.Add(new CheckFinding(

@@ -33,6 +33,17 @@ internal static class RequestValidatorChecks
         if (result.Validators.Count == 0)
             return;
 
+        // The check's premise is that validators attach to CQRS requests. A
+        // solution that exposes no concrete request through any mediator shape has
+        // no request model for a validator to be orphaned from: its
+        // AbstractValidator<T> types validate view models, DTOs or domain types,
+        // not requests. Flagging every one of them is noise, so orphan detection
+        // only applies once a request inventory exists. A validator whose target
+        // request was renamed or deleted in a MediatR-shaped solution is still an
+        // orphan because such a solution keeps its other requests.
+        if (result.Requests.Count == 0)
+            return;
+
         var linkedValidators = new HashSet<string>(
             result.Requests.SelectMany(r => r.Validators),
             StringComparer.OrdinalIgnoreCase);
