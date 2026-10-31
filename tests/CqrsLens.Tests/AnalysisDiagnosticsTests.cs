@@ -150,11 +150,15 @@ public sealed class AnalysisDiagnosticsTests : IDisposable
     public void AmbiguousLinks_AreDiagnosedAndDisableStrictConfidence()
     {
         File.WriteAllText(Path.Combine(_root, "Requests.cs"), """
-            namespace Alpha;
-            public sealed record PingCommand : IRequest<int>;
+            namespace Alpha
+            {
+                public sealed record PingCommand : IRequest<int>;
+            }
 
-            namespace Beta;
-            public sealed record PingCommand : IRequest<int>;
+            namespace Beta
+            {
+                public sealed record PingCommand : IRequest<int>;
+            }
             """);
         File.WriteAllText(Path.Combine(_root, "Handler.cs"), """
             namespace Handlers;

@@ -525,6 +525,64 @@ public class ReportHardeningTests
     }
 
     [Fact]
+    public void Html_InteractiveExplorer_RendersRequestCardsHandlerValidatorLocationsAndFilterPills()
+    {
+        var result = new AnalysisResult
+        {
+            RootPath = "/tmp/shop",
+            GeneratedAt = new DateTimeOffset(2026, 2, 3, 4, 5, 6, TimeSpan.Zero),
+            ScannerName = "text",
+        };
+        var cmd = new CqrsRequest
+        {
+            Name = "CreateOrderCommand",
+            Namespace = "Shop.Application.Orders",
+            ResponseType = "Guid",
+            ProjectName = "Shop.Application",
+            ViaMarker = "ICommand",
+            Location = new SourceLocation("Orders/CreateOrderCommand.cs", 12, 1),
+        };
+        cmd.Handlers.Add("Shop.Application.Orders.CreateOrderCommandHandler");
+        cmd.Validators.Add("Shop.Application.Orders.CreateOrderCommandValidator");
+        result.Requests.Add(cmd);
+
+        result.Handlers.Add(new HandlerInfo
+        {
+            Name = "CreateOrderCommandHandler",
+            Namespace = "Shop.Application.Orders",
+            RequestName = "CreateOrderCommand",
+            ProjectName = "Shop.Application",
+            Location = new SourceLocation("Orders/CreateOrderCommandHandler.cs", 25, 1),
+        });
+        result.Validators.Add(new ValidatorInfo
+        {
+            Name = "CreateOrderCommandValidator",
+            Namespace = "Shop.Application.Orders",
+            TargetType = "CreateOrderCommand",
+            ProjectName = "Shop.Application",
+            Location = new SourceLocation("Orders/CreateOrderCommandValidator.cs", 8, 1),
+        });
+
+        var mermaidHtml = HtmlReportGenerator.Generate(result, DiagramRenderMode.Mermaid);
+        var svgHtml = HtmlReportGenerator.Generate(result, DiagramRenderMode.Svg);
+
+        foreach (var html in new[] { mermaidHtml, svgHtml })
+        {
+            Assert.Contains("<h2>Interactive CQRS Explorer</h2>", html);
+            Assert.Contains("id=\"explorer-Shop_Application_Orders_CreateOrderCommand\"", html);
+            Assert.Contains("href=\"#explorer-Shop_Application_Orders_CreateOrderCommand\"", html);
+            Assert.Contains("Orders/CreateOrderCommand.cs:12:1", html);
+            Assert.Contains("Orders/CreateOrderCommandHandler.cs:25:1", html);
+            Assert.Contains("Orders/CreateOrderCommandValidator.cs:8:1", html);
+            Assert.Contains("Commands (1)", html);
+            Assert.Contains("Queries (0)", html);
+        }
+
+        Assert.Contains("id=\"cqrs-explorer-search\"", mermaidHtml);
+        Assert.DoesNotContain("<script", svgHtml, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void Json_GeneratesDeterministicMachineReadableArchitectureReport()
     {
         var result = FixedResult("PlaceOrderCommand");

@@ -304,7 +304,7 @@ public class RoslynArchitectureScannerTests
     {
         var result = new AnalysisResult { RootPath = "/tmp" };
         new RoslynArchitectureScanner().Scan(
-            files,
+            SourceWorkspace.FromFiles(files),
             new HashSet<string>(StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal),
             result);

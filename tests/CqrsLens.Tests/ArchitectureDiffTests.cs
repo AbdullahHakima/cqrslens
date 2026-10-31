@@ -138,6 +138,18 @@ public class ArchitectureDiffTests : IDisposable
                 public DbSet<Order> Orders => Set<Order>();
             }
             """);
+        WriteFile(baseDir, "Shop.Application/Dispatcher.cs", """
+            using MediatR;
+
+            namespace Shop.Application;
+
+            public sealed class Dispatcher
+            {
+                private readonly IMediator _mediator;
+                public Dispatcher(IMediator mediator) => _mediator = mediator;
+                public Task Handle() => _mediator.Send(new GetOrderQuery(1));
+            }
+            """);
 
         // --- Head repository state ---
         WriteFile(headDir, "Shop.Domain/Shop.Domain.csproj", """
@@ -204,6 +216,23 @@ public class ArchitectureDiffTests : IDisposable
             {
                 public DbSet<Order> Orders => Set<Order>();
                 public DbSet<Invoice> Invoices => Set<Invoice>();
+            }
+            """);
+        WriteFile(headDir, "Shop.Application/Dispatcher.cs", """
+            using MediatR;
+
+            namespace Shop.Application;
+
+            public sealed class Dispatcher
+            {
+                private readonly IMediator _mediator;
+                public Dispatcher(IMediator mediator) => _mediator = mediator;
+                public async Task Handle()
+                {
+                    await _mediator.Send(new GetOrderQuery(1));
+                    await _mediator.Send(new CreateOrderCommand("sku"));
+                    await _mediator.Send(new CancelOrderCommand(1));
+                }
             }
             """);
 
