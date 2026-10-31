@@ -35,6 +35,10 @@ public static class SarifReportGenerator
                 ("OrphanValidator", "Validator target does not match any discovered CQRS request", "warning"),
             [ArchitectureChecker.OrphanNotificationCode] =
                 ("OrphanNotification", "Notification has no handler", "warning"),
+            [ArchitectureChecker.UnreachableRequestCode] =
+                ("UnreachableRequest", "Request has a handler but no production call site", "warning"),
+            [ArchitectureChecker.UnpublishedNotificationCode] =
+                ("UnpublishedNotification", "Notification has handlers but no production publisher", "warning"),
         };
 
     public static string Generate(AnalysisResult result, string? ciRoot = null)

@@ -27,4 +27,7 @@ internal sealed class JsonReportDocument
     public List<JsonNotification> Notifications { get; set; } = new();
     public List<JsonNotificationHandler> NotificationHandlers { get; set; } = new();
     public List<JsonEndpoint>? Endpoints { get; set; }
+    public List<JsonFlowEdge>? FlowEdges { get; set; }
+    public List<JsonDispatchCallSite>? DispatchCallSites { get; set; }
+    public List<JsonUnresolvedDispatch>? UnresolvedDispatches { get; set; }
 }

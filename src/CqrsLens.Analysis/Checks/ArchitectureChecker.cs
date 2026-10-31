@@ -17,6 +17,8 @@ public static class ArchitectureChecker
     public const string OrphanValidatorCode = "OrphanValidator";
     public const string OrphanNotificationCode = "OrphanNotification";
     public const string AmbiguousProjectNameCode = "AmbiguousProjectName";
+    public const string UnreachableRequestCode = "UnreachableRequest";
+    public const string UnpublishedNotificationCode = "UnpublishedNotification";
 
     public static List<CheckFinding> RunChecks(AnalysisResult result)
     {
@@ -29,6 +31,7 @@ public static class ArchitectureChecker
         ProjectLayerChecks.Run(result, projectsByName, findings);
         RequestValidatorChecks.Run(result, findings);
         NotificationChecks.Run(result, findings);
+        FlowReachabilityChecks.Run(result, findings);
 
         CheckFindingOrdering.Sort(findings);
         return findings;

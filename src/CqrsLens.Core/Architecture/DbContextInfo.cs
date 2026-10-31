@@ -5,6 +5,9 @@ public sealed class DbContextInfo
     public required string Name { get; init; }
     public string Namespace { get; set; } = "";
     public List<string> ContainingTypes { get; } = new();
+
+    public string FullName => TypeFullName.Compose(Namespace, ContainingTypes, Name);
+
     public string? ProjectName { get; set; }
     public SourceLocation? Location { get; set; }
     public List<DbSetInfo> DbSets { get; } = new();

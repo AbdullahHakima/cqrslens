@@ -46,6 +46,9 @@ internal static class JsonReportDocumentFactory
                 Warnings = warningCount,
                 KnownFindings = knownCount,
                 Diagnostics = result.Diagnostics.Count,
+                FlowEdges = result.FlowEdges.Count,
+                DispatchCallSites = result.DispatchCallSites.Count,
+                UnresolvedDispatches = result.UnresolvedDispatches.Count,
             },
             Projects = result.Projects
                 .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
@@ -264,8 +267,54 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
+            FlowEdges = result.FlowEdges.Count > 0
+                ? result.FlowEdges
+                    .Select(e => new JsonFlowEdge
+                    {
+                        Kind = FlowEdgeKindName(e.Kind),
+                        From = e.From,
+                        To = e.To,
+                        Project = e.ProjectName,
+                        Location = ToJsonLocation(e.Location),
+                    })
+                    .ToList()
+                : null,
+            DispatchCallSites = result.DispatchCallSites.Count > 0
+                ? result.DispatchCallSites
+                    .Select(s => new JsonDispatchCallSite
+                    {
+                        Target = s.TargetFullName,
+                        TargetKind = s.TargetKind == DispatchTargetKind.Request ? "request" : "notification",
+                        Sender = s.SenderFullName,
+                        Project = s.ProjectName,
+                        TestProject = s.IsTestProject,
+                        Location = ToJsonLocation(s.Location),
+                    })
+                    .ToList()
+                : null,
+            UnresolvedDispatches = result.UnresolvedDispatches.Count > 0
+                ? result.UnresolvedDispatches
+                    .Select(u => new JsonUnresolvedDispatch
+                    {
+                        Method = u.Method,
+                        Receiver = u.ReceiverName,
+                        Project = u.ProjectName,
+                        Location = ToJsonLocation(u.Location),
+                    })
+                    .ToList()
+                : null,
         };
     }
+
+    private static string FlowEdgeKindName(FlowEdgeKind kind) => kind switch
+    {
+        FlowEdgeKind.EndpointToRequest => "endpointToRequest",
+        FlowEdgeKind.RequestToHandler => "requestToHandler",
+        FlowEdgeKind.HandlerToRequest => "handlerToRequest",
+        FlowEdgeKind.HandlerToNotification => "handlerToNotification",
+        FlowEdgeKind.HandlerToDbContext => "handlerToDbContext",
+        _ => "unknown",
+    };
 
     private static string? EmptyToNull(string? value)
         => string.IsNullOrEmpty(value) ? null : value;

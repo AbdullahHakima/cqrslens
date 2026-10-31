@@ -22,6 +22,33 @@ public sealed class AnalysisResult
     public List<NotificationHandlerInfo> NotificationHandlers { get; } = new();
     public List<EndpointInfo> Endpoints { get; } = new();
 
+    /// <summary>
+    /// Resolved solution-wide flow edges (endpoint → request, request → handler,
+    /// handler → request, handler → notification, handler → DbContext). Populated by
+    /// the flow pass; the JSON report is the contract that exposes them.
+    /// </summary>
+    public List<FlowEdge> FlowEdges { get; } = new();
+
+    /// <summary>
+    /// Every resolved dispatch call site, including senders that are neither handlers
+    /// nor endpoints. Drives production-reachability, so a service that sends a
+    /// command still counts as a call site even though it is not a modelled edge.
+    /// </summary>
+    public List<DispatchCallSite> DispatchCallSites { get; } = new();
+
+    /// <summary>
+    /// Dispatch-looking call sites whose target type could not be resolved. Reported
+    /// as the population that could reach shapes with no resolved call site.
+    /// </summary>
+    public List<UnresolvedDispatch> UnresolvedDispatches { get; } = new();
+
+    /// <summary>
+    /// True once the flow pass has run over a scanned solution. Reachability checks
+    /// are only meaningful for a result produced by a scan; a hand-built model with
+    /// no flow data is not treated as a solution where nothing is ever dispatched.
+    /// </summary>
+    internal bool FlowAnalyzed { get; set; }
+
     public List<CheckFinding> Checks { get; } = new();
 
     /// <summary>True when checks were compared with a baseline file.</summary>

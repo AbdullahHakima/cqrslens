@@ -87,6 +87,14 @@ public static class Analyzer
         DeepSliceAnalyzer.Analyze(workspace, result);
         phases.Record("Deep slice");
 
+        FlowAnalyzer.Analyze(
+            workspace.SuccessfullyParsed
+                .OrderBy(f => f.File.Path, StringComparer.OrdinalIgnoreCase)
+                .Select(f => (f.File, f.Scan!, f.Mask!))
+                .ToList(),
+            result);
+        phases.Record("Flow graph");
+
         result.Checks.AddRange(ArchitectureChecker.ApplyRuleSeverities(
             ArchitectureChecker.RunChecks(result),
             options.RuleSeverities));

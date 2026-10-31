@@ -15,4 +15,7 @@ internal sealed class JsonSummary
     public int Warnings { get; set; }
     public int KnownFindings { get; set; }
     public int Diagnostics { get; set; }
+    public int FlowEdges { get; set; }
+    public int DispatchCallSites { get; set; }
+    public int UnresolvedDispatches { get; set; }
 }

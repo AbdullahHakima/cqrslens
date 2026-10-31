@@ -14,5 +14,7 @@ internal static class KnownRules
         ArchitectureChecker.OrphanValidatorCode,
         ArchitectureChecker.OrphanNotificationCode,
         ArchitectureChecker.AmbiguousProjectNameCode,
+        ArchitectureChecker.UnreachableRequestCode,
+        ArchitectureChecker.UnpublishedNotificationCode,
     };
 }
