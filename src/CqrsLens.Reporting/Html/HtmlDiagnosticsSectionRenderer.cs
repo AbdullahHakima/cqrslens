@@ -26,7 +26,7 @@ internal static class HtmlDiagnosticsSectionRenderer
         html.AppendLine("<h2>Analysis Diagnostics</h2>");
         if (result.Diagnostics.Count == 0)
         {
-            html.AppendLine("<p>No scan diagnostics.</p>");
+            html.AppendLine("<p>No analysis diagnostics.</p>");
         }
         else
         {
@@ -99,12 +99,30 @@ internal static class HtmlDiagnosticsSectionRenderer
                 html.AppendLine($"<p>{errors} error(s), {warnings} warning(s):</p>");
             }
 
-            html.AppendLine("<ul class=\"checks\">");
-            foreach (var check in newChecks)
-                HtmlCheckRenderer.Append(html, check, known: false);
-            foreach (var check in knownChecks)
-                HtmlCheckRenderer.Append(html, check, known: true);
-            html.AppendLine("</ul>");
+            foreach (var group in MarkdownChecksWriter.GroupChecks(newChecks))
+                AppendCheckGroup(html, group, known: false);
+            foreach (var group in MarkdownChecksWriter.GroupChecks(knownChecks))
+                AppendCheckGroup(html, group, known: true);
         }
+    }
+
+    private static void AppendCheckGroup(
+        StringBuilder html,
+        MarkdownChecksWriter.CheckFindingGroup group,
+        bool known)
+    {
+        var icon = known
+            ? "ℹ️"
+            : group.HighestSeverity == CheckSeverity.Error ? "❌" : "⚠️";
+        html.AppendLine("<details class=\"check-group\" open>");
+        html.AppendLine(
+            $"<summary>{icon} <strong>{Encode(group.Code)}</strong> ({group.TotalCount})</summary>");
+        html.AppendLine("<ul class=\"checks\">");
+        foreach (var (note, count) in group.SharedNotes)
+            html.AppendLine($"<li class=\"info\">ℹ️ {Encode(note)} (×{count})</li>");
+        foreach (var (check, displayMessage, repeatCount) in group.Items)
+            HtmlCheckRenderer.Append(html, check, known, displayMessage, repeatCount);
+        html.AppendLine("</ul>");
+        html.AppendLine("</details>");
     }
 }

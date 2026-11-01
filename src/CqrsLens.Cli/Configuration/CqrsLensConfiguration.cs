@@ -10,6 +10,7 @@ internal sealed class CqrsLensConfiguration
 
     public string? Analysis { get; set; }
     public string? Render { get; set; }
+    public string? CqrsMapSplit { get; set; }
     public string? Watermark { get; set; }
     public List<string>? Markers { get; set; }
     public List<string>? HandlerMarkers { get; set; }

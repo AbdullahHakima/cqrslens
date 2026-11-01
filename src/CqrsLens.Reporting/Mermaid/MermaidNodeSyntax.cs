@@ -30,6 +30,14 @@ internal static class MermaidNodeSyntax
             return;
         }
 
+        var parallelogramStart = working.IndexOf("[/\"", StringComparison.Ordinal);
+        if (parallelogramStart > 0 && working.EndsWith("\"/]", StringComparison.Ordinal))
+        {
+            id = working[..parallelogramStart].Trim();
+            label = working[(parallelogramStart + 3)..^3];
+            return;
+        }
+
         var rectStart = working.IndexOf("[\"", StringComparison.Ordinal);
         if (rectStart > 0 && working.EndsWith("\"]", StringComparison.Ordinal))
         {

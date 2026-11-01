@@ -98,7 +98,7 @@ public sealed class NotificationsAndExpandedRulesTests : IDisposable
         Assert.NotNull(notificationMap);
         Assert.Contains("ntf_OrderPlacedNotification[\"OrderPlacedNotification\"]:::clsNotification", notificationMap);
         Assert.Contains("ntf_UnhandledAuditEvent[\"UnhandledAuditEvent\"]:::clsOrphanNotification", notificationMap);
-        Assert.Contains("-->|publishes to|", notificationMap);
+        Assert.Contains("-->|handled by|", notificationMap);
 
         var svg = MermaidSvgRenderer.Render(notificationMap!);
         Assert.Contains("<svg ", svg);

@@ -11,7 +11,7 @@ internal static class ReportWriter
         ReportFormat format,
         ArchitectureDiff? diff)
     {
-        OutputFileWriter.Write(outputs.Report, Render(result, options, format, scan.RenderMode));
+        OutputFileWriter.Write(outputs.Report, Render(result, options, format, scan.RenderMode, scan.CqrsMapSplit));
 
         if (outputs.Sarif is not null)
             OutputFileWriter.Write(outputs.Sarif, SarifReportGenerator.Generate(result, scan.CiRoot));
@@ -24,12 +24,13 @@ internal static class ReportWriter
         AnalysisResult result,
         CliOptions options,
         ReportFormat format,
-        DiagramRenderMode renderMode)
+        DiagramRenderMode renderMode,
+        CqrsMapSplitMode cqrsMapSplit)
         => format switch
         {
-            ReportFormat.Html => HtmlReportGenerator.Generate(result, renderMode),
+            ReportFormat.Html => HtmlReportGenerator.Generate(result, renderMode, cqrsMapSplit),
             ReportFormat.Json => JsonReportGenerator.Generate(result),
             ReportFormat.Agent => AgentReportGenerator.Generate(result, options.SliceFilter),
-            _ => ReportGenerator.Generate(result),
+            _ => ReportGenerator.Generate(result, cqrsMapSplit),
         };
 }

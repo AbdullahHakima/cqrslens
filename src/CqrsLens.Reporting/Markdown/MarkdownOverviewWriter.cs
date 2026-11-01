@@ -41,6 +41,9 @@ internal static class MarkdownOverviewWriter
             md.AppendLine($"| Notifications (domain events) | {result.Notifications.Count} |");
             md.AppendLine($"| Notification handlers | {result.NotificationHandlers.Count} |");
         }
+        var checkErrors = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Error);
+        var checkWarnings = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Warning);
+        md.AppendLine($"| Architecture checks | {checkErrors} error(s), {checkWarnings} warning(s) |");
         md.AppendLine();
     }
 }

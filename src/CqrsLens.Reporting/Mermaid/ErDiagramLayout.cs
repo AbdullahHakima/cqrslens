@@ -10,8 +10,22 @@ internal static class ErDiagramLayout
     private const double ColumnGap = 90.0;
     private const double RowGap = 64.0;
 
+    /// <summary>
+    /// Extra top space reserved when the diagram has a self-referential relationship.
+    /// The self-loop and its label are drawn above the top-row entity box, so without
+    /// this padding they fall outside the viewBox and are clipped.
+    /// </summary>
+    internal const double SelfLoopTopPadding = 48.0;
+
     internal static (double Width, double Height) Apply(ErDiagramModel model)
     {
+        // Only self-loop diagrams need the extra top space; every other ER diagram keeps
+        // its previous geometry (and bytes) unchanged.
+        var topPadding = model.Relationships.Any(r =>
+            string.Equals(r.PrincipalId, r.DependentId, StringComparison.Ordinal))
+            ? SelfLoopTopPadding
+            : 0.0;
+
         foreach (var entity in model.Entities)
         {
             var headerW = entity.Label.Length * 7.8 + 28.0;
@@ -50,7 +64,7 @@ internal static class ErDiagramLayout
             var x = OuterMargin;
             for (var c = 0; c < col; c++)
                 x += colWidths[c] + ColumnGap;
-            var y = OuterMargin;
+            var y = OuterMargin + topPadding;
             for (var r = 0; r < row; r++)
                 y += rowHeights[r] + RowGap;
 
@@ -63,7 +77,7 @@ internal static class ErDiagramLayout
             OuterMargin * 2 + colWidths.Sum() + Math.Max(0, columns - 1) * ColumnGap);
         var canvasHeight = Math.Max(
             100.0,
-            OuterMargin * 2 + rowHeights.Sum() + Math.Max(0, rowCount - 1) * RowGap);
+            OuterMargin * 2 + topPadding + rowHeights.Sum() + Math.Max(0, rowCount - 1) * RowGap);
         return (canvasWidth, canvasHeight);
     }
 }

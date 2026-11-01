@@ -7,6 +7,14 @@ namespace CqrsLens;
 internal static class HtmlCheckRenderer
 {
     internal static void Append(StringBuilder html, CheckFinding check, bool known)
+        => Append(html, check, known, check.Message, repeatCount: 1);
+
+    internal static void Append(
+        StringBuilder html,
+        CheckFinding check,
+        bool known,
+        string displayMessage,
+        int repeatCount)
     {
         var cls = known
             ? "info"
@@ -14,10 +22,11 @@ internal static class HtmlCheckRenderer
         var badge = known
             ? "ℹ️ Known"
             : check.Severity == CheckSeverity.Error ? "❌ Error" : "⚠️ Warning";
+        var repeat = repeatCount > 1 ? $" <strong>(×{repeatCount})</strong>" : "";
         var locality = check.Location is null
             ? ""
             : $" <code>{Encode($"{check.Location.File}:{check.Location.Line}:{check.Location.Column}")}</code>";
         html.AppendLine(
-            $"<li class=\"{cls}\">{badge} <strong>{Encode(check.Code)}</strong> — {Encode(check.Message)}{locality}</li>");
+            $"<li class=\"{cls}\">{badge} <strong>{Encode(check.Code)}</strong> — {Encode(displayMessage)}{repeat}{locality}</li>");
     }
 }

@@ -11,7 +11,8 @@ internal sealed class RequestExplorerIndex
         Dictionary<string, HandlerInfo> handlersBySimpleName,
         Dictionary<string, ValidatorInfo> validatorsByFullName,
         Dictionary<string, ValidatorInfo> validatorsBySimpleName,
-        Dictionary<string, List<CheckFinding>> checksByTarget)
+        Dictionary<string, List<CheckFinding>> checksByTarget,
+        Dictionary<string, List<string>> callersByRequest)
     {
         Anchors = anchors;
         HandlersByFullName = handlersByFullName;
@@ -19,6 +20,7 @@ internal sealed class RequestExplorerIndex
         ValidatorsByFullName = validatorsByFullName;
         ValidatorsBySimpleName = validatorsBySimpleName;
         ChecksByTarget = checksByTarget;
+        CallersByRequest = callersByRequest;
     }
 
     public Dictionary<CqrsRequest, string> Anchors { get; }
@@ -27,6 +29,7 @@ internal sealed class RequestExplorerIndex
     public Dictionary<string, ValidatorInfo> ValidatorsByFullName { get; }
     public Dictionary<string, ValidatorInfo> ValidatorsBySimpleName { get; }
     public Dictionary<string, List<CheckFinding>> ChecksByTarget { get; }
+    public Dictionary<string, List<string>> CallersByRequest { get; }
 
     internal static RequestExplorerIndex Create(AnalysisResult result)
     {
@@ -59,7 +62,19 @@ internal sealed class RequestExplorerIndex
             result.Checks
                 .Where(c => !string.IsNullOrEmpty(c.Target))
                 .GroupBy(c => c.Target!, StringComparer.Ordinal)
-                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal));
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal),
+            result.DispatchCallSites
+                .Where(s => s.TargetKind == DispatchTargetKind.Request &&
+                            !s.IsTestProject &&
+                            !string.IsNullOrEmpty(s.SenderFullName))
+                .GroupBy(s => s.TargetFullName, StringComparer.Ordinal)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Select(s => MermaidDiagramText.ShortTypeName(s.SenderFullName))
+                          .Distinct(StringComparer.Ordinal)
+                          .OrderBy(n => n, StringComparer.Ordinal)
+                          .ToList(),
+                    StringComparer.Ordinal));
     }
 
     internal string BuildSearchBlob(CqrsRequest r)
@@ -73,6 +88,11 @@ internal sealed class RequestExplorerIndex
 
         foreach (var ep in r.Entrypoints)
             sb.Append(ep).Append(' ');
+        if (CallersByRequest.TryGetValue(r.FullName, out var callers))
+        {
+            foreach (var caller in callers)
+                sb.Append(caller).Append(' ');
+        }
         foreach (var prop in r.Properties)
             sb.Append(prop.Name).Append(' ').Append(prop.Type).Append(' ');
         foreach (var entity in r.TouchedEntities)

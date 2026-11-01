@@ -24,6 +24,94 @@ internal static class MermaidDiagramText
         "accTitle", "accDescr", "accDescrMultiline", "call", "href",
     };
 
+    private static readonly HashSet<string> GenericTypeLeafNames = new(StringComparer.Ordinal)
+    {
+        "Handler", "Validator", "Command", "Query", "Request", "Notification",
+        "CommandHandler", "QueryHandler", "RequestHandler", "NotificationHandler",
+    };
+
+    /// <summary>
+    /// Returns a concise display name for a type. When the leaf segment is generic
+    /// (e.g. <c>Handler</c>), includes the enclosing type (<c>CreateCustomerCommand.Handler</c>);
+    /// when the leaf is already specific (<c>UpsertCategoryCommandHandler</c>), keeps it.
+    /// </summary>
+    internal static string ShortTypeName(string? fullName)
+    {
+        if (string.IsNullOrEmpty(fullName))
+            return "";
+
+        var trimmed = fullName.Trim();
+        var dot = trimmed.LastIndexOf('.');
+        if (dot < 0)
+            return trimmed;
+
+        var leaf = trimmed[(dot + 1)..];
+        if (!GenericTypeLeafNames.Contains(leaf))
+            return leaf;
+
+        var prevDot = trimmed.LastIndexOf('.', dot - 1);
+        var enclosing = prevDot < 0 ? trimmed[..dot] : trimmed[(prevDot + 1)..dot];
+        return string.IsNullOrEmpty(enclosing) ? leaf : $"{enclosing}.{leaf}";
+    }
+
+    /// <summary>
+    /// Returns <see cref="ShortTypeName(string?)"/> when unique within <paramref name="allFullNames"/>,
+    /// or the minimal disambiguating suffix when multiple types share a leaf/short name.
+    /// </summary>
+    internal static string ShortTypeName(string? fullName, IEnumerable<string>? allFullNames)
+    {
+        var baseShort = ShortTypeName(fullName);
+        if (string.IsNullOrEmpty(fullName) || allFullNames is null)
+            return baseShort;
+
+        var trimmed = fullName.Trim();
+        var peerMatches = allFullNames
+            .Select(n => n?.Trim() ?? "")
+            .Where(n => n.Length > 0 &&
+                        !string.Equals(n, trimmed, StringComparison.Ordinal) &&
+                        string.Equals(ShortTypeName(n), baseShort, StringComparison.Ordinal))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (peerMatches.Count == 0)
+            return baseShort;
+
+        var segments = trimmed.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        var baseSegmentCount = baseShort.Contains('.', StringComparison.Ordinal) ? 2 : 1;
+        if (segments.Length <= baseSegmentCount)
+            return trimmed;
+
+        var peerSegments = peerMatches
+            .Select(p => p.Split('.', StringSplitOptions.RemoveEmptyEntries))
+            .ToList();
+
+        // Walk right-to-left above the base short name to find the nearest ancestor
+        // segment that distinguishes this type from its colliding peers.
+        for (var offset = baseSegmentCount + 1; offset <= segments.Length; offset++)
+        {
+            var candidateSegment = segments[^offset];
+            var candidate = $"{candidateSegment}.{baseShort}";
+            var collides = peerSegments.Any(ps =>
+                ps.Length >= offset &&
+                string.Equals(ps[^offset], candidateSegment, StringComparison.Ordinal));
+            if (!collides)
+                return candidate;
+        }
+
+        // Fallback if one path is a strict suffix of another: use increasing suffix length.
+        for (var take = baseSegmentCount + 1; take <= segments.Length; take++)
+        {
+            var suffix = string.Join(".", segments[^take..]);
+            var collides = peerSegments.Any(ps =>
+                ps.Length >= take &&
+                string.Equals(string.Join(".", ps[^take..]), suffix, StringComparison.Ordinal));
+            if (!collides)
+                return suffix;
+        }
+
+        return trimmed;
+    }
+
     /// <summary>
     /// Makes an ASCII-only, Mermaid-safe base id from an arbitrary name. Reserved
     /// words are prefixed with <c>n_</c>; diagram builders add role prefixes.
