@@ -4,6 +4,32 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-02
+
+The reporting release: the flow data the scanner already collected is now
+drawn as diagrams, and every diagram can be exported on its own. JSON
+output is unchanged from 0.8.0.
+
+### Added
+
+- **Flow diagrams** in Markdown and HTML reports: endpoint → request →
+  handler → DbContext, rendered as Mermaid and inline SVG. Dispatches the
+  scanner cannot resolve statically are counted in the diagram caption,
+  never drawn as edges.
+- **Behavior chain** visual: the pipeline behaviors around a request drawn
+  as one chain, in the order they were found in the code.
+- **CQRS map splitting**: `--cqrs-map-split count|feature|unsplit`, or the
+  `cqrsMapSplit` key in `.cqrslens.json`. The flag overrides the config
+  file; unknown values are rejected with an error.
+- **Standalone SVG export**: `--export-svg <directory>` writes one .svg
+  file per diagram in the report.
+
+### Changed
+
+- Report diagrams carry captions that say what to look at, and diagram
+  labels use full request and handler names instead of shortened ones.
+
+
 ## [0.8.0] - 2026-10-31
 
 First NuGet release since 0.6.0; also includes everything from the GitHub-only
