@@ -5,7 +5,7 @@ where they exist; the dates are not promises.
 
 ## Done
 
-**1.0.0** (November 2026)
+**0.9.0** (November 2026)
 
 - **Flow diagrams**: the report now draws the dispatch flow it already
   tracked — endpoint → request → handler → DbContext — in Markdown and

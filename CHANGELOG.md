@@ -4,7 +4,7 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
-## [1.0.0] - 2026-11-02
+## [0.9.0] - 2026-11-02
 
 The reporting release: the flow data the scanner already collected is now
 drawn as diagrams, and every diagram can be exported on its own. JSON
