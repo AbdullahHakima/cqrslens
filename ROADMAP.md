@@ -5,6 +5,21 @@ where they exist; the dates are not promises.
 
 ## Done
 
+**1.0.0** (November 2026)
+
+- **Flow diagrams**: the report now draws the dispatch flow it already
+  tracked — endpoint → request → handler → DbContext — in Markdown and
+  HTML (Mermaid and inline SVG), each diagram captioned with what to look
+  at; dispatches the scanner cannot resolve are counted in the caption,
+  never drawn as edges
+- **Behavior chain**: the pipeline behaviors around a request drawn as one
+  chain, in the order they were found in the code
+- **CQRS map splitting**: `--cqrs-map-split count|feature|unsplit` (or
+  `cqrsMapSplit` in the config file) — one diagram per feature, or a
+  single unsplit map per project
+- **Standalone SVG export**: `--export-svg <directory>` writes every
+  diagram in the report as its own .svg file, for docs and READMEs
+
 **0.8.0** (October 2026)
 
 - **Dispatch call-site tracking & flow graph**: find `Send` / `Publish` call
