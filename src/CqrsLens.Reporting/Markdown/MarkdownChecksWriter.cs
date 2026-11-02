@@ -9,14 +9,15 @@ internal static class MarkdownChecksWriter
     {
         md.AppendLine("## Architecture Checks");
         md.AppendLine();
-        AppendChecksMarkdown(md, result.Checks, result.BaselineApplied);
+        AppendChecksMarkdown(md, result.Checks, result.BaselineApplied, result);
         md.AppendLine();
     }
 
     internal static void AppendChecksMarkdown(
         StringBuilder md,
         IReadOnlyList<CheckFinding> checks,
-        bool baselineApplied = false)
+        bool baselineApplied = false,
+        AnalysisResult? result = null)
     {
         if (checks.Count == 0)
         {
@@ -63,6 +64,57 @@ internal static class MarkdownChecksWriter
             md.AppendLine();
             foreach (var group in GroupChecks(knownChecks))
                 AppendCheckGroupMarkdown(md, group, known: true);
+        }
+
+        if (result is not null && newChecks.Count > 0)
+            AppendFindingsMetrics(md, FindingsClustering.Analyze(newChecks, result));
+    }
+
+    /// <summary>
+    /// Appends the aggregate metrics and module/feature clustering tables. The
+    /// numbers are computed from the same <see cref="FindingsClustering"/> data the
+    /// HTML report renders, so the two formats agree.
+    /// </summary>
+    internal static void AppendFindingsMetrics(StringBuilder md, FindingsClustering.FindingsMetrics metrics)
+    {
+        md.AppendLine();
+        md.AppendLine($"**Findings summary:** {metrics.Total} finding(s) — " +
+                      $"{metrics.Errors} error(s), {metrics.Warnings} warning(s) across " +
+                      $"{metrics.ByModule.Count} module(s) and {metrics.Clusters.Count} cluster(s).");
+        md.AppendLine();
+
+        md.AppendLine("### Findings by rule");
+        md.AppendLine();
+        md.AppendLine("| Rule | Errors | Warnings | Total |");
+        md.AppendLine("| --- | ---: | ---: | ---: |");
+        foreach (var rule in metrics.ByRule)
+            md.AppendLine($"| {MarkdownEscaping.TableCell(rule.Code)} | {rule.Errors} | {rule.Warnings} | {rule.Total} |");
+        md.AppendLine();
+
+        md.AppendLine("### Findings by module");
+        md.AppendLine();
+        md.AppendLine("| Module | Errors | Warnings | Total |");
+        md.AppendLine("| --- | ---: | ---: | ---: |");
+        foreach (var module in metrics.ByModule)
+            md.AppendLine($"| {MarkdownEscaping.TableCell(module.Module)} | {module.Errors} | {module.Warnings} | {module.Total} |");
+        md.AppendLine();
+
+        md.AppendLine("### Findings by module and feature");
+        md.AppendLine();
+        md.AppendLine("_Each row is one module (project) and feature cluster; every finding is counted exactly " +
+                      "once. Findings whose target has no resolvable feature appear under `(unassigned)`._");
+        md.AppendLine();
+        md.AppendLine("| Module | Feature | Rules | Errors | Warnings | Total |");
+        md.AppendLine("| --- | --- | --- | ---: | ---: | ---: |");
+        foreach (var cluster in metrics.Clusters)
+        {
+            var rules = cluster.Rules.Count == 0
+                ? "—"
+                : string.Join(", ", cluster.Rules.Select(r => $"{r.Code} {r.Total}"));
+            md.AppendLine($"| {MarkdownEscaping.TableCell(cluster.Module)} | " +
+                          $"{MarkdownEscaping.TableCell(cluster.Feature)} | " +
+                          $"{MarkdownEscaping.TableCell(rules)} | " +
+                          $"{cluster.Errors} | {cluster.Warnings} | {cluster.Total} |");
         }
     }
 

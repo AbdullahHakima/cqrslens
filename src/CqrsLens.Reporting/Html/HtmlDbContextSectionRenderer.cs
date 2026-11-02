@@ -37,6 +37,8 @@ internal static class HtmlDbContextSectionRenderer
             html.AppendLine("</tbody>");
             html.AppendLine("</table>");
 
+            HtmlDataModelRenderer.Append(html, DataModelView.Build(result));
+
             foreach (var ctx in orderedContexts)
             {
                 var erDiagram = DiagramBuilder.ErDiagram(ctx);

@@ -103,6 +103,9 @@ internal static class HtmlDiagnosticsSectionRenderer
                 AppendCheckGroup(html, group, known: false);
             foreach (var group in MarkdownChecksWriter.GroupChecks(knownChecks))
                 AppendCheckGroup(html, group, known: true);
+
+            if (newChecks.Count > 0)
+                HtmlFindingsClusterRenderer.Append(html, FindingsClustering.Analyze(newChecks, result));
         }
     }
 
