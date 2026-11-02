@@ -13,7 +13,8 @@ public static class HtmlReportGenerator
 {
     public static string Generate(
         AnalysisResult result,
-        DiagramRenderMode renderMode = DiagramRenderMode.Mermaid)
+        DiagramRenderMode renderMode = DiagramRenderMode.Mermaid,
+        CqrsMapSplitMode cqrsMapSplit = CqrsMapSplitMode.Count)
     {
         var rootName = new DirectoryInfo(result.RootPath).Name;
         var html = new StringBuilder();
@@ -47,16 +48,19 @@ public static class HtmlReportGenerator
         // ---- Stat cards ------------------------------------------------------
         html.AppendLine("<section class=\"cards\">");
         AppendCard(html, "Projects", result.Projects.Count);
-        AppendCard(html, "Requests", result.Requests.Count);
+        AppendCard(html, "Requests (commands + queries)", result.Requests.Count);
         AppendCard(html, "Handlers", result.Handlers.Count);
         AppendCard(html, "Validators", result.Validators.Count);
         AppendCard(html, "Pipeline behaviors", result.Behaviors.Count);
         AppendCard(html, "DbContexts", result.DbContexts.Count);
         if (result.Notifications.Count > 0 || result.NotificationHandlers.Count > 0)
         {
-            AppendCard(html, "Notifications", result.Notifications.Count);
+            AppendCard(html, "Notifications (domain events)", result.Notifications.Count);
             AppendCard(html, "Notification handlers", result.NotificationHandlers.Count);
         }
+        var checkErrors = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Error);
+        var checkWarnings = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Warning);
+        AppendCard(html, "Architecture checks", $"{checkErrors} error(s), {checkWarnings} warning(s)");
         html.AppendLine("</section>");
 
         // ---- Diagrams ----------------------------------------------------------
@@ -82,7 +86,8 @@ public static class HtmlReportGenerator
                             "Infrastructure / Api / Web / UI); projects matching no convention are grouped by " +
                             "their top-level folder.</p>");
         }
-        HtmlDiagramSectionRenderer.AppendCqrs(html, result, renderMode);
+        HtmlDiagramSectionRenderer.AppendCqrs(html, result, renderMode, cqrsMapSplit);
+        HtmlDiagramSectionRenderer.AppendFlow(html, result, renderMode);
 
         // ---- Requests table & Interactive Explorer ------------------------------
         HtmlRequestExplorerRenderer.Render(html, result, renderMode);
@@ -90,7 +95,7 @@ public static class HtmlReportGenerator
 
 
         // ---- Behaviors -------------------------------------------------------------
-        HtmlBehaviorSectionRenderer.Append(html, result);
+        HtmlBehaviorSectionRenderer.Append(html, result, renderMode);
 
         // ---- Data model ----------------------------------------------------------------
         HtmlDbContextSectionRenderer.Append(html, result, renderMode);
@@ -127,6 +132,11 @@ public static class HtmlReportGenerator
     private static void AppendCard(StringBuilder html, string label, int value)
     {
         html.AppendLine($"<div class=\"card\"><div class=\"card-value\">{value}</div><div class=\"card-label\">{Encode(label)}</div></div>");
+    }
+
+    private static void AppendCard(StringBuilder html, string label, string value)
+    {
+        html.AppendLine($"<div class=\"card\"><div class=\"card-value\">{Encode(value)}</div><div class=\"card-label\">{Encode(label)}</div></div>");
     }
 
     /// <summary>

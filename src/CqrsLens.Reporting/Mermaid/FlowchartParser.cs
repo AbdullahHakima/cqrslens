@@ -92,7 +92,7 @@ internal static class FlowchartParser
             {
                 var srcNode = EnsureNode(srcSpec, model);
                 var dstNode = EnsureNode(dstSpec, model);
-                model.Edges.Add(new FlowEdge(
+                model.Edges.Add(new FlowchartEdge(
                     srcNode.Id,
                     dstNode.Id,
                     edgeLabel is null ? null : MermaidEntityDecoder.Decode(edgeLabel),

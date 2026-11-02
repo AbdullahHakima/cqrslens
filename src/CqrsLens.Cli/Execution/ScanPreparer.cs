@@ -35,7 +35,10 @@ internal static class ScanPreparer
             options.MarkersSpecified ? options.Markers : settings.Markers,
             options.HandlerMarkersSpecified ? options.HandlerMarkers : settings.HandlerMarkers,
             options.WatermarkSpecified ? options.Watermark : settings.Watermark,
-            options.GeneratedAt);
+            options.GeneratedAt,
+            options.CqrsMapSplitSpecified
+                ? options.CqrsMapSplit
+                : settings.CqrsMapSplit ?? options.CqrsMapSplit);
     }
 
     private static string? ResolveCiRoot(string? raw)

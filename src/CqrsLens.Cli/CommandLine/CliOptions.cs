@@ -16,12 +16,15 @@ public sealed class CliOptions
     public string? DiffOutputPath { get; set; }
     public string? SarifPath { get; set; }
     public string? SummaryPath { get; set; }
+    public string? ExportSvgDirectory { get; set; }
     public string? CiRoot { get; set; }
     public bool GitHubAnnotations { get; set; }
     public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.Text;
     public bool AnalysisModeSpecified { get; set; }
     public DateTimeOffset? GeneratedAt { get; set; }
     public bool Strict { get; set; }
+    public CqrsMapSplitMode CqrsMapSplit { get; set; } = CqrsMapSplitMode.Count;
+    public bool CqrsMapSplitSpecified { get; set; }
     public bool MarkersSpecified { get; set; }
     public HashSet<string> Markers { get; } = new(StringComparer.Ordinal);
     public bool HandlerMarkersSpecified { get; set; }

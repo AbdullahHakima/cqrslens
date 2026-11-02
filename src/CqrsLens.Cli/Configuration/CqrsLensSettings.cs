@@ -11,7 +11,8 @@ public sealed record CqrsLensSettings(
     IReadOnlyDictionary<string, string> LayerOverrides,
     IReadOnlyDictionary<string, CheckSeverity?> RuleSeverities,
     DiagramRenderMode? RenderMode = null,
-    string? Watermark = null)
+    string? Watermark = null,
+    CqrsMapSplitMode? CqrsMapSplit = null)
 {
     public static readonly CqrsLensSettings Empty = new(
         null,

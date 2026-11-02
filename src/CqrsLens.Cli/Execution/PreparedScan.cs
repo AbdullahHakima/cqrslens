@@ -14,7 +14,8 @@ internal sealed record PreparedScan(
     IReadOnlySet<string> Markers,
     IReadOnlySet<string> HandlerMarkers,
     string? Watermark,
-    DateTimeOffset? GeneratedAt)
+    DateTimeOffset? GeneratedAt,
+    CqrsMapSplitMode CqrsMapSplit)
 {
     public AnalysisOptions CreateAnalysisOptions(Action<ScanProgress>? progress = null) => new()
     {

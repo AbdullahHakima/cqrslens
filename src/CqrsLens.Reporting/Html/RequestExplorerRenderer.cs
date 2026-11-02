@@ -74,7 +74,7 @@ internal static class RequestExplorerRenderer
 
         html.AppendLine("<div class=\"explorer-body\">");
         html.AppendLine("<div class=\"explorer-grid\">");
-        WriteContractPanel(html, r);
+        WriteContractPanel(html, r, index);
         WriteHandlersPanel(html, r, index);
         WriteValidatorsPanel(html, r, index);
         html.AppendLine("</div>"); // .explorer-grid
@@ -118,7 +118,7 @@ internal static class RequestExplorerRenderer
         html.AppendLine("</summary>");
     }
 
-    private static void WriteContractPanel(StringBuilder html, CqrsRequest r)
+    private static void WriteContractPanel(StringBuilder html, CqrsRequest r, RequestExplorerIndex index)
     {
         html.AppendLine("<div class=\"explorer-panel\">");
         html.AppendLine("<h4>Request Contract</h4>");
@@ -130,12 +130,14 @@ internal static class RequestExplorerRenderer
         html.AppendLine($"<dt>Source file</dt><dd>{RequestExplorerIndex.FormatLocation(r.Location)}</dd>");
         if (r.Entrypoints.Count > 0)
             html.AppendLine($"<dt>Entrypoints</dt><dd>{string.Join(", ", r.Entrypoints.Select(e => $"<code>{HtmlReportText.Encode(e)}</code>"))}</dd>");
+        if (index.CallersByRequest.TryGetValue(r.FullName, out var callers) && callers.Count > 0)
+            html.AppendLine($"<dt>Dispatched by</dt><dd>{string.Join(", ", callers.Select(c => $"<code>{HtmlReportText.Encode(c)}</code>"))}</dd>");
         if (r.Properties.Count > 0)
             html.AppendLine($"<dt>Payload</dt><dd>{string.Join(", ", r.Properties.Select(p => $"<code>{HtmlReportText.Encode(p.Name)}: {HtmlReportText.Encode(p.Type)}</code>"))}</dd>");
         if (r.TouchedEntities.Count > 0)
             html.AppendLine($"<dt>DbSets</dt><dd>{string.Join(", ", r.TouchedEntities.Select(e => $"<code>{HtmlReportText.Encode(e)}</code>"))}</dd>");
         if (r.PublishedNotifications.Count > 0)
-            html.AppendLine($"<dt>Events</dt><dd>{string.Join(", ", r.PublishedNotifications.Select(n => $"<code>{HtmlReportText.Encode(CSharpScanner.SimpleName(n))}</code>"))}</dd>");
+            html.AppendLine($"<dt>Events</dt><dd>{string.Join(", ", r.PublishedNotifications.Select(n => $"<code>{HtmlReportText.Encode(MermaidDiagramText.ShortTypeName(n))}</code>"))}</dd>");
         html.AppendLine("</dl>");
         html.AppendLine("</div>");
     }
@@ -154,7 +156,7 @@ internal static class RequestExplorerRenderer
             foreach (var handlerName in r.Handlers)
             {
                 var hInfo = index.ResolveHandler(handlerName);
-                var hDisplay = CSharpScanner.SimpleName(handlerName);
+                var hDisplay = MermaidDiagramText.ShortTypeName(handlerName);
                 var hLoc = hInfo?.Location is not null ? $" · {RequestExplorerIndex.FormatLocation(hInfo.Location)}" : "";
                 var hProj = !string.IsNullOrEmpty(hInfo?.ProjectName) ? $" <span class=\"meta-sub\">({HtmlReportText.Encode(hInfo!.ProjectName)})</span>" : "";
                 var hDeps = hInfo is { Dependencies.Count: > 0 } ? $"<br><span class=\"meta-sub\">Deps: <code>{HtmlReportText.Encode(string.Join(", ", hInfo.Dependencies))}</code></span>" : "";
@@ -179,7 +181,7 @@ internal static class RequestExplorerRenderer
             foreach (var validatorName in r.Validators)
             {
                 var vInfo = index.ResolveValidator(validatorName);
-                var vDisplay = CSharpScanner.SimpleName(validatorName);
+                var vDisplay = MermaidDiagramText.ShortTypeName(validatorName);
                 var vLoc = vInfo?.Location is not null ? $" · {RequestExplorerIndex.FormatLocation(vInfo.Location)}" : "";
                 var vProj = !string.IsNullOrEmpty(vInfo?.ProjectName) ? $" <span class=\"meta-sub\">({HtmlReportText.Encode(vInfo!.ProjectName)})</span>" : "";
                 html.AppendLine($"<li><strong>{HtmlReportText.Encode(vDisplay)}</strong>{vProj}<br><span class=\"meta-sub\"><code>{HtmlReportText.Encode(vInfo?.FullName ?? validatorName)}</code>{vLoc}</span></li>");

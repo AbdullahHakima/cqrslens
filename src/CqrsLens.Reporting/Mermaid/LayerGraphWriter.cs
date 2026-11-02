@@ -10,7 +10,10 @@ internal static class LayerGraphWriter
         var projectsByLayer = data.Projects
             .GroupBy(p => p.Layer, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
-        var layers = LayerClassifier.OrderLayers(data.Projects.Select(p => p.Layer)).ToList();
+        // Outer dependents on top, core at the bottom, so dependency arrows flow
+        // consistently top-to-bottom: Tests → Api/Web/UI → ad-hoc folders (Src) →
+        // Infrastructure → Application → Domain. ProjectInfo.Layer is not changed.
+        var layers = OrderLayersOuterToCore(data.Projects.Select(p => p.Layer)).ToList();
         var ids = new MermaidIdAllocator();
         var projectIds = data.Projects.ToDictionary(
             p => p.FilePath,
@@ -44,5 +47,28 @@ internal static class LayerGraphWriter
         ProjectDiagramSyntax.EmitLinkStyles(sb, linkIndexes);
         ProjectDiagramSyntax.EmitLayerClassDefs(sb);
         return sb.ToString().TrimEnd();
+    }
+
+    private static IEnumerable<string> OrderLayersOuterToCore(IEnumerable<string> layers)
+        => layers
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(LayoutRank)
+            .ThenBy(layer => layer, StringComparer.OrdinalIgnoreCase);
+
+    private static int LayoutRank(string layer)
+    {
+        if (string.Equals(layer, "Tests", StringComparison.OrdinalIgnoreCase))
+            return 0;
+        if (layer.Equals("Api", StringComparison.OrdinalIgnoreCase) ||
+            layer.Equals("Web", StringComparison.OrdinalIgnoreCase) ||
+            layer.Equals("UI", StringComparison.OrdinalIgnoreCase))
+            return 1;
+        if (layer.Equals("Infrastructure", StringComparison.OrdinalIgnoreCase))
+            return 3;
+        if (layer.Equals("Application", StringComparison.OrdinalIgnoreCase))
+            return 4;
+        if (layer.Equals("Domain", StringComparison.OrdinalIgnoreCase))
+            return 5;
+        return 2; // ad-hoc folders such as Src, Persistence, Common
     }
 }

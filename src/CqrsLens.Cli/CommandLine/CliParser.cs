@@ -88,6 +88,14 @@ public static class CliParser
                 case "--summary":
                     options.SummaryPath = reader.ReadValue("--summary", "a value, e.g. --summary cqrslens-summary.md");
                     break;
+                case "--export-svg":
+                    options.ExportSvgDirectory = ReadExportSvgDirectory(reader);
+                    break;
+                case "--cqrs-map-split":
+                    options.CqrsMapSplit = ParseCqrsMapSplit(
+                        reader.ReadValue("--cqrs-map-split", "a value: count, feature or unsplit"));
+                    options.CqrsMapSplitSpecified = true;
+                    break;
                 case "--ci-root":
                     options.CiRoot = reader.ReadValue("--ci-root", "a value, e.g. --ci-root $GITHUB_WORKSPACE");
                     break;
@@ -149,6 +157,15 @@ public static class CliParser
         return slice;
     }
 
+    private static string ReadExportSvgDirectory(ArgumentReader reader)
+    {
+        var directory = reader.ReadValue("--export-svg", "a directory, e.g. --export-svg diagrams").Trim();
+        if (directory.Length == 0)
+            throw new CliParseException("error: --export-svg directory cannot be empty.");
+
+        return directory;
+    }
+
     private static string ReadWatermark(ArgumentReader reader)
     {
         var watermark = reader.ReadValue("--watermark", "a value, e.g. --watermark \"ACME CORP\"");
@@ -172,6 +189,12 @@ public static class CliParser
 
         return generatedAt;
     }
+
+    private static CqrsMapSplitMode ParseCqrsMapSplit(string value)
+        => CqrsMapSplitValues.TryParse(value, out var mode)
+            ? mode
+            : throw new CliParseException(
+                $"error: unknown --cqrs-map-split value '{value}' - use {CqrsMapSplitValues.Accepted}.");
 
     private static DiagramRenderMode ParseRenderMode(string value)
         => value.ToLowerInvariant() switch

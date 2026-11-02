@@ -22,14 +22,17 @@ internal static class ErDiagramSvgWriter
         if (!string.IsNullOrEmpty(model.AccDescr))
             svg.Append($"<desc>{E(model.AccDescr)}</desc>");
 
-        WriteRelationships(svg, model);
+        // Connector lines first, entities next, labels last so a relationship label is
+        // never painted underneath an opaque entity box.
+        WriteRelationshipLines(svg, model);
         WriteEntities(svg, model);
+        WriteRelationshipLabels(svg, model);
 
         svg.Append("</svg></div>");
         return svg.ToString();
     }
 
-    private static void WriteRelationships(StringBuilder svg, ErDiagramModel model)
+    private static void WriteRelationshipLines(StringBuilder svg, ErDiagramModel model)
     {
         foreach (var rel in model.Relationships)
         {
@@ -37,23 +40,75 @@ internal static class ErDiagramSvgWriter
                 !model.EntityById.TryGetValue(rel.DependentId, out var dependent))
                 continue;
 
-            var x1 = principal.X + principal.Width / 2.0;
-            var y1 = principal.Y + principal.Height / 2.0;
-            var x2 = dependent.X + dependent.Width / 2.0;
-            var y2 = dependent.Y + dependent.Height / 2.0;
-            var midX = (x1 + x2) / 2.0;
-            var midY = (y1 + y2) / 2.0;
-
             svg.Append(
                 $"<g class=\"er-relationship\" data-principal=\"{E(rel.PrincipalId)}\" " +
                 $"data-dependent=\"{E(rel.DependentId)}\" data-connector=\"{E(rel.Connector)}\">");
-            svg.Append(
-                $"<path d=\"M {F(x1)} {F(y1)} L {F(x2)} {F(y2)}\" " +
-                "fill=\"none\" stroke=\"#475569\" stroke-width=\"1.5\"/>");
+
+            if (string.Equals(rel.PrincipalId, rel.DependentId, StringComparison.Ordinal))
+            {
+                // Self-referential relationship: a small loop above the entity box.
+                var loopLeftX = principal.X + principal.Width * 0.3;
+                var loopRightX = principal.X + principal.Width * 0.7;
+                var loopTopY = principal.Y - 28;
+                svg.Append(
+                    $"<path d=\"M {F(loopLeftX)} {F(principal.Y)} L {F(loopLeftX)} {F(loopTopY)} " +
+                    $"L {F(loopRightX)} {F(loopTopY)} L {F(loopRightX)} {F(principal.Y)}\" " +
+                    "fill=\"none\" stroke=\"#475569\" stroke-width=\"1.5\"/>");
+            }
+            else
+            {
+                var x1 = principal.X + principal.Width / 2.0;
+                var y1 = principal.Y + principal.Height / 2.0;
+                var x2 = dependent.X + dependent.Width / 2.0;
+                var y2 = dependent.Y + dependent.Height / 2.0;
+                svg.Append(
+                    $"<path d=\"M {F(x1)} {F(y1)} L {F(x2)} {F(y2)}\" " +
+                    "fill=\"none\" stroke=\"#475569\" stroke-width=\"1.5\"/>");
+            }
+
+            svg.Append("</g>");
+        }
+    }
+
+    private static void WriteRelationshipLabels(StringBuilder svg, ErDiagramModel model)
+    {
+        foreach (var rel in model.Relationships)
+        {
+            if (!model.EntityById.TryGetValue(rel.PrincipalId, out var principal) ||
+                !model.EntityById.TryGetValue(rel.DependentId, out var dependent))
+                continue;
 
             var displayLabel = $"{rel.Label} ({FormatCardinality(rel.Connector)})";
             var pillWidth = Math.Max(64.0, Math.Ceiling(displayLabel.Length * 6.6 + 16.0));
             const double pillHeight = 20.0;
+
+            double midX;
+            double midY;
+            if (string.Equals(rel.PrincipalId, rel.DependentId, StringComparison.Ordinal))
+            {
+                midX = principal.X + principal.Width / 2.0;
+                midY = principal.Y - 36;
+            }
+            else
+            {
+                midX = (principal.X + principal.Width / 2.0 + dependent.X + dependent.Width / 2.0) / 2.0;
+                midY = (principal.Y + principal.Height / 2.0 + dependent.Y + dependent.Height / 2.0) / 2.0;
+
+                // If the midpoint lands inside an entity box, lift the label above it.
+                foreach (var entity in model.Entities)
+                {
+                    if (midX >= entity.X && midX <= entity.X + entity.Width &&
+                        midY >= entity.Y && midY <= entity.Y + entity.Height)
+                    {
+                        midY = entity.Y - 14;
+                        break;
+                    }
+                }
+            }
+
+            svg.Append(
+                $"<g class=\"er-relationship-label\" data-principal=\"{E(rel.PrincipalId)}\" " +
+                $"data-dependent=\"{E(rel.DependentId)}\">");
             svg.Append(
                 $"<rect x=\"{F(midX - pillWidth / 2.0)}\" y=\"{F(midY - pillHeight / 2.0)}\" " +
                 $"width=\"{F(pillWidth)}\" height=\"{F(pillHeight)}\" rx=\"4\" " +

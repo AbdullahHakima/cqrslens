@@ -103,22 +103,16 @@ internal static class CqrsDiagramWriter
         List<string> handlerFqns,
         MermaidIdAllocator ids)
     {
-        var handlerCounts = handlerFqns
-            .GroupBy(CSharpScanner.SimpleName, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
         var handlerIds = handlerFqns.ToDictionary(
             h => h,
             h => ids.Allocate(
                 "handler:" + h,
                 "hdl",
-                handlerCounts[CSharpScanner.SimpleName(h)] > 1
-                    ? h
-                    : CSharpScanner.SimpleName(h)),
+                CqrsDiagramBuilder.ShortNodeLabel(h, handlerFqns)),
             StringComparer.Ordinal);
         foreach (var handler in handlerFqns)
         {
-            var handlerName = CSharpScanner.SimpleName(handler);
-            var handlerLabel = handlerCounts[handlerName] > 1 ? handler : handlerName;
+            var handlerLabel = CqrsDiagramBuilder.ShortNodeLabel(handler, handlerFqns);
             sb.AppendLine(
                 $"    {handlerIds[handler]}([\"{MermaidDiagramText.MermaidLabel(handlerLabel)}\"])" +
                 ":::clsHandler");
@@ -132,22 +126,16 @@ internal static class CqrsDiagramWriter
         List<string> validatorFqns,
         MermaidIdAllocator ids)
     {
-        var validatorCounts = validatorFqns
-            .GroupBy(CSharpScanner.SimpleName, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
         var validatorIds = validatorFqns.ToDictionary(
             v => v,
             v => ids.Allocate(
                 "validator:" + v,
                 "val",
-                validatorCounts[CSharpScanner.SimpleName(v)] > 1
-                    ? v
-                    : CSharpScanner.SimpleName(v)),
+                CqrsDiagramBuilder.ShortNodeLabel(v, validatorFqns)),
             StringComparer.Ordinal);
         foreach (var validator in validatorFqns)
         {
-            var validatorName = CSharpScanner.SimpleName(validator);
-            var validatorLabel = validatorCounts[validatorName] > 1 ? validator : validatorName;
+            var validatorLabel = CqrsDiagramBuilder.ShortNodeLabel(validator, validatorFqns);
             sb.AppendLine(
                 $"    {validatorIds[validator]}[\"{MermaidDiagramText.MermaidLabel(validatorLabel)}\"]" +
                 ":::clsValidator");

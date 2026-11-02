@@ -6,13 +6,18 @@ namespace CqrsLens;
 internal static class MarkdownReportWriter
 {
     internal static string Generate(AnalysisResult result)
+        => Generate(result, CqrsMapSplitMode.Count);
+
+    internal static string Generate(AnalysisResult result, CqrsMapSplitMode cqrsMapSplit)
     {
         var md = new StringBuilder();
 
         MarkdownOverviewWriter.Write(md, result);
         MarkdownDiagramWriter.WriteProjectGraph(md, result);
         MarkdownDiagramWriter.WriteLayers(md, result);
-        MarkdownCqrsWriter.Write(md, result);
+        MarkdownCqrsWriter.Write(md, result, cqrsMapSplit);
+        MarkdownDiagramWriter.WriteFlow(md, result);
+        MarkdownCqrsWriter.WriteRequestsTable(md, result);
         MarkdownNotificationWriter.Write(md, result);
         MarkdownBehaviorWriter.Write(md, result);
         MarkdownDbContextWriter.Write(md, result);

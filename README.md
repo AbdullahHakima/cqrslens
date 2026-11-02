@@ -47,7 +47,7 @@ dotnet tool install -g CqrsLens
 ## Usage
 
 ```bash
-cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--profile] [--strict]
+cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--cqrs-map-split count|feature|unsplit] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--profile] [--strict]
 ```
 
 - The folder is searched recursively for `.csproj` and `.cs` files (`bin`, `obj`, `.git` are skipped).
@@ -90,6 +90,15 @@ cqrslens <path> --format json
   - `--render svg`: compiles every diagram (`flowchart TD`, `flowchart LR`, and
     `erDiagram`) to deterministic inline `<svg>` ahead of time and omits all
     `<script>` tags, producing a 100% zero-JavaScript, offline-ready HTML report.
+- **CQRS map splitting (`--cqrs-map-split`, or `"cqrsMapSplit"` in
+  `.cqrslens.json`)** controls how the CQRS map is split into diagrams:
+  - `count` (default): group by declaring project, then balance each project's
+    requests into bounded parts that stay within GitHub's Mermaid limits.
+  - `feature`: one diagram per feature (the namespace segment the requests live in).
+  - `unsplit`: one diagram per project, split further only when a project's map
+    would exceed the renderer's safety limit. Every request still appears exactly
+    once; the CLI flag overrides the config key. JSON output is unaffected by this
+    setting.
 - **JSON (`--format json`)**: A deterministic, schema-versioned `ARCHITECTURE.json`
   document containing summary counts, projects, requests, handlers, validators,
   pipeline behaviors, DbContexts (with entities and relationships), architecture
@@ -212,6 +221,7 @@ root (`--config FILE` selects another file):
   "$schema": "https://raw.githubusercontent.com/AbdullahHakima/cqrslens/main/cqrslens.schema.json",
   "analysis": "text",
   "render": "mermaid",
+  "cqrsMapSplit": "count",
   "watermark": "CONTOSO ARCHITECTURE",
   "markers": ["ICommand", "IQuery"],
   "include": ["src/**"],
