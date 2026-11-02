@@ -41,6 +41,15 @@ public static class DiagramBuilder
     public static IReadOnlyList<DiagramSection> CqrsMapSections(AnalysisResult result)
         => CqrsDiagramBuilder.CqrsMapSections(result);
 
+    /// <summary>
+    /// Builds CQRS map sections using the requested split mode: the default
+    /// fixed-count split, or an opt-in group-by-feature split.
+    /// </summary>
+    public static IReadOnlyList<DiagramSection> CqrsMapSections(
+        AnalysisResult result,
+        CqrsMapSplitMode split)
+        => CqrsDiagramBuilder.CqrsMapSections(result, split);
+
     /// <summary>Whether a Mermaid source is safely inside GitHub's renderer limits.</summary>
     internal static bool IsWithinMermaidLimits(string source)
         => MermaidDiagramText.IsWithinMermaidLimits(source);
@@ -51,6 +60,20 @@ public static class DiagramBuilder
     /// when no notifications were discovered.
     /// </summary>
     public static string? NotificationMap(AnalysisResult result) => NotificationDiagramBuilder.NotificationMap(result);
+
+    /// <summary>
+    /// Builds bounded flow diagrams from the Phase 4 flow edges. Every flow edge
+    /// appears in exactly one section; unresolved dispatches are never drawn.
+    /// </summary>
+    public static IReadOnlyList<FlowDiagramSection> FlowDiagramSections(AnalysisResult result)
+        => FlowDiagramPlanner.Sections(result);
+
+    /// <summary>
+    /// Builds the pipeline behavior chain, in the order the model lists the
+    /// behaviors (registered order, not resolved execution order).
+    /// </summary>
+    public static string? BehaviorChain(AnalysisResult result)
+        => BehaviorChainDiagramBuilder.BehaviorChain(result);
 
     /// <summary>
     /// Builds a Mermaid <c>erDiagram</c> for one <see cref="DbContextInfo"/>,

@@ -6,10 +6,13 @@ namespace CqrsLens;
 internal static class MarkdownCqrsWriter
 {
     internal static void Write(StringBuilder md, AnalysisResult result)
+        => Write(md, result, CqrsMapSplitMode.Count);
+
+    internal static void Write(StringBuilder md, AnalysisResult result, CqrsMapSplitMode cqrsMapSplit)
     {
         md.AppendLine("## CQRS Map");
         md.AppendLine();
-        var cqrsSections = DiagramBuilder.CqrsMapSections(result);
+        var cqrsSections = DiagramBuilder.CqrsMapSections(result, cqrsMapSplit);
         if (cqrsSections.Count == 0)
         {
             md.AppendLine("_No MediatR requests found._");
@@ -18,8 +21,7 @@ internal static class MarkdownCqrsWriter
         {
             md.AppendLine(CqrsLegend(result));
             md.AppendLine();
-            md.AppendLine("_Requests are grouped by declaring project. Handler and validator nodes are shown " +
-                          "where linked and may be declared in a different project._");
+            md.AppendLine(GroupingNote(cqrsMapSplit));
             md.AppendLine();
 
             if (cqrsSections.Count > 1)
@@ -30,8 +32,7 @@ internal static class MarkdownCqrsWriter
                     .Count();
                 var projectText = projectCount == 1 ? "1 project" : $"{projectCount} projects";
                 md.AppendLine($"_{result.Requests.Count} requests across {projectText}. " +
-                              "Diagrams are split by project and balanced so each stays within GitHub's " +
-                              "rendering limits; every request appears exactly once._");
+                              SplitNote(cqrsMapSplit) + "_");
                 md.AppendLine();
             }
 
@@ -57,26 +58,63 @@ internal static class MarkdownCqrsWriter
                 }
                 md.AppendLine();
             }
-
-            WriteRequestsTable(md, result);
         }
         md.AppendLine();
     }
 
-    private static void WriteRequestsTable(StringBuilder md, AnalysisResult result)
+    /// <summary>
+    /// Writes the request inventory table. Rendered as a top-level section after the
+    /// Flow section so the section order matches the HTML report.
+    /// </summary>
+    internal static void WriteRequestsTable(StringBuilder md, AnalysisResult result)
     {
-        md.AppendLine("### Requests");
+        var callersByRequest = result.DispatchCallSites
+            .Where(s => s.TargetKind == DispatchTargetKind.Request &&
+                        !s.IsTestProject &&
+                        !string.IsNullOrEmpty(s.SenderFullName))
+            .GroupBy(s => s.TargetFullName, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(s => MermaidDiagramText.ShortTypeName(s.SenderFullName))
+                      .Distinct(StringComparer.Ordinal)
+                      .OrderBy(n => n, StringComparer.Ordinal)
+                      .ToList(),
+                StringComparer.Ordinal);
+
+        md.AppendLine("## Requests");
         md.AppendLine();
-        md.AppendLine("| Request | Type | Response | Handler | Validators | Project |");
-        md.AppendLine("| --- | --- | --- | --- | --- | --- |");
+        md.AppendLine("| Request | Type | Response | Handler | Validators | Dispatched by | Project |");
+        md.AppendLine("| --- | --- | --- | --- | --- | --- | --- |");
         foreach (var r in result.Requests)
         {
+            callersByRequest.TryGetValue(r.FullName, out var callers);
+            var dispatchedBy = callers is { Count: > 0 } ? string.Join(", ", callers) : "—";
             md.AppendLine($"| {MarkdownEscaping.TableCell(r.Name)} | {MarkdownEscaping.TableCell(r.Kind)} | {MarkdownEscaping.TableCell(r.ResponseType ?? "—")} | " +
-                          $"{MarkdownEscaping.TableCell(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers.Select(CSharpScanner.SimpleName)) : "—")} | " +
-                          $"{MarkdownEscaping.TableCell(r.Validators.Count > 0 ? string.Join(", ", r.Validators.Select(CSharpScanner.SimpleName)) : "—")} | " +
+                          $"{MarkdownEscaping.TableCell(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers.Select(MermaidDiagramText.ShortTypeName)) : "—")} | " +
+                          $"{MarkdownEscaping.TableCell(r.Validators.Count > 0 ? string.Join(", ", r.Validators.Select(MermaidDiagramText.ShortTypeName)) : "—")} | " +
+                          $"{MarkdownEscaping.TableCell(dispatchedBy)} | " +
                           $"{MarkdownEscaping.TableCell(r.ProjectName ?? "—")} |");
         }
     }
+
+    private static string GroupingNote(CqrsMapSplitMode split)
+        => split == CqrsMapSplitMode.Feature
+            ? "_Requests are grouped by feature. Handler and validator nodes are shown " +
+              "where linked and may be declared in a different project._"
+            : "_Requests are grouped by declaring project. Handler and validator nodes are shown " +
+              "where linked and may be declared in a different project._";
+
+    private static string SplitNote(CqrsMapSplitMode split) => split switch
+    {
+        CqrsMapSplitMode.Feature =>
+            "Diagrams are split by feature; every request appears exactly once.",
+        CqrsMapSplitMode.Unsplit =>
+            "Diagrams are grouped by project and only split further when a map exceeds GitHub's " +
+            "rendering limits; every request appears exactly once.",
+        _ =>
+            "Diagrams are split by project and balanced so each stays within GitHub's " +
+            "rendering limits; every request appears exactly once.",
+    };
 
     private static string CqrsLegend(AnalysisResult result)
     {

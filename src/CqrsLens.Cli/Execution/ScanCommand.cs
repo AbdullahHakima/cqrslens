@@ -19,6 +19,8 @@ internal static class ScanCommand
         if (console.StreamsSlice)
         {
             stdout.Write(AgentReportGenerator.Generate(result, options.SliceFilter));
+            if (options.ExportSvgDirectory is not null)
+                SvgExporter.Export(result, options.ExportSvgDirectory, scan.CqrsMapSplit);
             return ExitCodes.Success;
         }
 
@@ -37,6 +39,9 @@ internal static class ScanCommand
             scan.CiRoot);
 
         ReportWriter.Write(result, options, scan, outputs, format, diff);
+
+        if (options.ExportSvgDirectory is not null)
+            SvgExporter.Export(result, options.ExportSvgDirectory, scan.CqrsMapSplit);
 
         if (options.GitHubAnnotations)
             GitHubAnnotations.Write(result, stdout, scan.CiRoot);

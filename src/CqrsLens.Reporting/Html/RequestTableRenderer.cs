@@ -18,8 +18,8 @@ internal static class RequestTableRenderer
                 $"<td><a class=\"req-link\" href=\"#{HtmlReportText.Encode(anchor)}\">{HtmlReportText.Encode(r.Name)}</a></td>" +
                 $"<td>{HtmlReportText.Encode(r.Kind)}</td>" +
                 $"<td>{HtmlReportText.Encode(r.ResponseType ?? "—")}</td>" +
-                $"<td>{HtmlReportText.Encode(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers.Select(CSharpScanner.SimpleName)) : "—")}</td>" +
-                $"<td>{HtmlReportText.Encode(r.Validators.Count > 0 ? string.Join(", ", r.Validators.Select(CSharpScanner.SimpleName)) : "—")}</td>" +
+                $"<td>{HtmlReportText.Encode(r.Handlers.Count > 0 ? string.Join(", ", r.Handlers.Select(MermaidDiagramText.ShortTypeName)) : "—")}</td>" +
+                $"<td>{HtmlReportText.Encode(r.Validators.Count > 0 ? string.Join(", ", r.Validators.Select(MermaidDiagramText.ShortTypeName)) : "—")}</td>" +
                 $"<td>{HtmlReportText.Encode(r.ProjectName ?? "—")}</td>" +
                 "</tr>");
         }

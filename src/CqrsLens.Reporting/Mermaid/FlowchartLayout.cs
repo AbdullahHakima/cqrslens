@@ -7,6 +7,8 @@ internal static class FlowchartLayout
     private const double NodeHeight = 38.0;
     private const double NodeMinWidth = 110.0;
     private const double NodeHorizontalPadding = 28.0;
+    private const double MaxRowWidth = 1200.0;
+    private const double InnerRowGap = 24.0;
 
     internal static (double Width, double Height) Apply(FlowchartModel model)
     {
@@ -28,7 +30,7 @@ internal static class FlowchartLayout
         bool isLeftToRight,
         List<FlowNode> nodeOrder,
         List<FlowSubgraph> subgraphs,
-        List<FlowEdge> edges)
+        List<FlowchartEdge> edges)
     {
         const double outerMargin = 20.0;
         const double hGap = 40.0;
@@ -45,10 +47,43 @@ internal static class FlowchartLayout
         if (!isLeftToRight && populatedSubgraphs.Count > 0)
             return LayoutTopDownBands(nodeOrder, populatedSubgraphs, outerMargin, hGap, vGap, sgPadX, sgPadTop, sgPadBottom);
 
-        if (isLeftToRight && populatedSubgraphs.Count > 0)
+        if (isLeftToRight && populatedSubgraphs.Count > 0 && nodeOrder.Any(n => n.Subgraph is null))
             return LayoutLeftToRightMap(nodeOrder, populatedSubgraphs, edges, outerMargin, sgPadX, sgPadTop, sgPadBottom);
 
-        return LayoutByRank(isLeftToRight, nodeOrder, edges, outerMargin, hGap, vGap);
+        return LayoutByRank(isLeftToRight, nodeOrder, populatedSubgraphs, edges, outerMargin, hGap, vGap, sgPadX, sgPadTop, sgPadBottom);
+    }
+
+    private static List<List<FlowNode>> WrapIntoRows(
+        IReadOnlyList<FlowNode> nodes,
+        double hGap,
+        double maxRowWidth = MaxRowWidth)
+    {
+        var rows = new List<List<FlowNode>>();
+        if (nodes.Count == 0)
+            return rows;
+
+        var currentRow = new List<FlowNode>();
+        var currentWidth = 0.0;
+        foreach (var node in nodes)
+        {
+            var addedWidth = currentRow.Count == 0 ? node.Width : hGap + node.Width;
+            if (currentRow.Count > 0 && currentWidth + addedWidth > maxRowWidth)
+            {
+                rows.Add(currentRow);
+                currentRow = new List<FlowNode> { node };
+                currentWidth = node.Width;
+            }
+            else
+            {
+                currentRow.Add(node);
+                currentWidth += addedWidth;
+            }
+        }
+
+        if (currentRow.Count > 0)
+            rows.Add(currentRow);
+
+        return rows;
     }
 
     private static (double Width, double Height) LayoutTopDownBands(
@@ -61,18 +96,28 @@ internal static class FlowchartLayout
         double sgPadTop,
         double sgPadBottom)
     {
+        var sgWrappedRows = new List<List<List<FlowNode>>>(populatedSubgraphs.Count);
         var rowWidths = new List<double>();
         foreach (var sg in populatedSubgraphs)
         {
-            var nodesWidth = sg.Nodes.Sum(n => n.Width) + Math.Max(0, sg.Nodes.Count - 1) * hGap;
+            var wrapped = WrapIntoRows(sg.Nodes, hGap);
+            sgWrappedRows.Add(wrapped);
+            var nodesWidth = wrapped
+                .Select(r => r.Sum(n => n.Width) + Math.Max(0, r.Count - 1) * hGap)
+                .DefaultIfEmpty(0.0)
+                .Max();
             var labelWidth = sg.Label.Length * CharWidth + 32.0;
             rowWidths.Add(Math.Max(nodesWidth + sgPadX * 2, labelWidth));
         }
 
         var ungrouped = nodeOrder.Where(n => n.Subgraph is null).ToList();
-        if (ungrouped.Count > 0)
+        var ungroupedRows = WrapIntoRows(ungrouped, hGap);
+        if (ungroupedRows.Count > 0)
         {
-            var ungroupedWidth = ungrouped.Sum(n => n.Width) + Math.Max(0, ungrouped.Count - 1) * hGap;
+            var ungroupedWidth = ungroupedRows
+                .Select(r => r.Sum(n => n.Width) + Math.Max(0, r.Count - 1) * hGap)
+                .DefaultIfEmpty(0.0)
+                .Max();
             rowWidths.Add(ungroupedWidth);
         }
 
@@ -83,38 +128,47 @@ internal static class FlowchartLayout
         for (var i = 0; i < populatedSubgraphs.Count; i++)
         {
             var sg = populatedSubgraphs[i];
+            var rows = sgWrappedRows[i];
             var sgWidth = rowWidths[i];
             sg.X = (canvasWidth - sgWidth) / 2.0;
             sg.Y = currentY;
             sg.Width = sgWidth;
-            sg.Height = sgPadTop + NodeHeight + sgPadBottom;
+            var rowsHeight = rows.Count * NodeHeight + Math.Max(0, rows.Count - 1) * InnerRowGap;
+            sg.Height = sgPadTop + rowsHeight + sgPadBottom;
 
-            var totalNodesW = sg.Nodes.Sum(n => n.Width) + Math.Max(0, sg.Nodes.Count - 1) * hGap;
-            var startX = sg.X + (sg.Width - totalNodesW) / 2.0;
             var nodeY = sg.Y + sgPadTop;
-
-            foreach (var node in sg.Nodes)
+            foreach (var row in rows)
             {
-                node.X = startX;
-                node.Y = nodeY;
-                startX += node.Width + hGap;
+                var totalNodesW = row.Sum(n => n.Width) + Math.Max(0, row.Count - 1) * hGap;
+                var startX = sg.X + (sg.Width - totalNodesW) / 2.0;
+                foreach (var node in row)
+                {
+                    node.X = startX;
+                    node.Y = nodeY;
+                    startX += node.Width + hGap;
+                }
+                nodeY += NodeHeight + InnerRowGap;
             }
 
             currentY += sg.Height + vGap;
         }
 
-        if (ungrouped.Count > 0)
+        if (ungroupedRows.Count > 0)
         {
-            var totalNodesW = ungrouped.Sum(n => n.Width) + Math.Max(0, ungrouped.Count - 1) * hGap;
-            var startX = (canvasWidth - totalNodesW) / 2.0;
-            foreach (var node in ungrouped)
+            for (var rIdx = 0; rIdx < ungroupedRows.Count; rIdx++)
             {
-                node.X = startX;
-                node.Y = currentY;
-                startX += node.Width + hGap;
-            }
+                var row = ungroupedRows[rIdx];
+                var totalNodesW = row.Sum(n => n.Width) + Math.Max(0, row.Count - 1) * hGap;
+                var startX = (canvasWidth - totalNodesW) / 2.0;
+                foreach (var node in row)
+                {
+                    node.X = startX;
+                    node.Y = currentY;
+                    startX += node.Width + hGap;
+                }
 
-            currentY += NodeHeight + vGap;
+                currentY += NodeHeight + (rIdx < ungroupedRows.Count - 1 ? InnerRowGap : vGap);
+            }
         }
 
         var canvasHeight = Math.Max(100.0, currentY - vGap + outerMargin);
@@ -124,7 +178,7 @@ internal static class FlowchartLayout
     private static (double Width, double Height) LayoutLeftToRightMap(
         List<FlowNode> nodeOrder,
         List<FlowSubgraph> populatedSubgraphs,
-        List<FlowEdge> edges,
+        List<FlowchartEdge> edges,
         double outerMargin,
         double sgPadX,
         double sgPadTop,
@@ -231,10 +285,14 @@ internal static class FlowchartLayout
     private static (double Width, double Height) LayoutByRank(
         bool isLeftToRight,
         List<FlowNode> nodeOrder,
-        List<FlowEdge> edges,
+        List<FlowSubgraph> populatedSubgraphs,
+        List<FlowchartEdge> edges,
         double outerMargin,
         double hGap,
-        double vGap)
+        double vGap,
+        double sgPadX,
+        double sgPadTop,
+        double sgPadBottom)
     {
         var ranks = ComputeRanks(nodeOrder, edges);
         var rankGroups = nodeOrder
@@ -245,58 +303,91 @@ internal static class FlowchartLayout
 
         if (!isLeftToRight)
         {
-            var maxWidth = rankGroups
-                .Select(g => g.Sum(n => n.Width) + Math.Max(0, g.Count - 1) * hGap)
+            var wrappedRanks = rankGroups.Select(g => WrapIntoRows(g, hGap)).ToList();
+            var maxWidth = wrappedRanks
+                .SelectMany(rows => rows)
+                .Select(r => r.Sum(n => n.Width) + Math.Max(0, r.Count - 1) * hGap)
                 .DefaultIfEmpty(200.0)
                 .Max();
             var canvasWidth = Math.Max(220.0, maxWidth + outerMargin * 2);
             var y = outerMargin;
-            foreach (var group in rankGroups)
+            foreach (var rows in wrappedRanks)
             {
-                var rowW = group.Sum(n => n.Width) + Math.Max(0, group.Count - 1) * hGap;
-                var x = (canvasWidth - rowW) / 2.0;
-                foreach (var node in group)
+                for (var rIdx = 0; rIdx < rows.Count; rIdx++)
                 {
-                    node.X = x;
-                    node.Y = y;
-                    x += node.Width + hGap;
+                    var row = rows[rIdx];
+                    var rowW = row.Sum(n => n.Width) + Math.Max(0, row.Count - 1) * hGap;
+                    var x = (canvasWidth - rowW) / 2.0;
+                    foreach (var node in row)
+                    {
+                        node.X = x;
+                        node.Y = y;
+                        x += node.Width + hGap;
+                    }
+                    y += NodeHeight + (rIdx < rows.Count - 1 ? InnerRowGap : vGap);
                 }
-                y += NodeHeight + vGap;
             }
 
             var canvasHeight = Math.Max(80.0, y - vGap + outerMargin);
             return (canvasWidth, canvasHeight);
         }
 
+        var hasSubgraphs = populatedSubgraphs.Count > 0;
+        var padX = hasSubgraphs ? sgPadX : 0.0;
+        var padTop = hasSubgraphs ? sgPadTop : 0.0;
+        var padBottom = hasSubgraphs ? sgPadBottom : 0.0;
+
+        var maxHeight = rankGroups
+            .Select(g => g.Count * NodeHeight + Math.Max(0, g.Count - 1) * 20.0)
+            .DefaultIfEmpty(NodeHeight)
+            .Max();
+        var canvasHeightLr = Math.Max(80.0, maxHeight + padTop + padBottom + outerMargin * 2);
+        var xLr = outerMargin + padX;
+        foreach (var group in rankGroups)
         {
-            var maxHeight = rankGroups
-                .Select(g => g.Count * NodeHeight + Math.Max(0, g.Count - 1) * 20.0)
-                .DefaultIfEmpty(NodeHeight)
-                .Max();
-            var canvasHeight = Math.Max(80.0, maxHeight + outerMargin * 2);
-            var x = outerMargin;
-            foreach (var group in rankGroups)
+            var colW = group.Max(n => n.Width);
+            var colH = group.Count * NodeHeight + Math.Max(0, group.Count - 1) * 20.0;
+            var y = hasSubgraphs
+                ? outerMargin + padTop + (maxHeight - colH) / 2.0
+                : (canvasHeightLr - colH) / 2.0;
+            foreach (var node in group)
             {
-                var colW = group.Max(n => n.Width);
-                var colH = group.Count * NodeHeight + Math.Max(0, group.Count - 1) * 20.0;
-                var y = (canvasHeight - colH) / 2.0;
-                foreach (var node in group)
-                {
-                    node.X = x + (colW - node.Width) / 2.0;
-                    node.Y = y;
-                    y += NodeHeight + 20.0;
-                }
-                x += colW + 72.0;
+                node.X = xLr + (colW - node.Width) / 2.0;
+                node.Y = y;
+                y += NodeHeight + 20.0;
+            }
+            xLr += colW + 72.0;
+        }
+
+        if (hasSubgraphs)
+        {
+            foreach (var sg in populatedSubgraphs)
+            {
+                var minX = sg.Nodes.Min(n => n.X);
+                var maxX = sg.Nodes.Max(n => n.X + n.Width);
+                var labelW = sg.Label.Length * CharWidth + 32.0;
+                sg.X = minX - sgPadX;
+                sg.Y = outerMargin;
+                sg.Width = Math.Max(maxX - minX + sgPadX * 2, labelW);
+                sg.Height = sgPadTop + maxHeight + sgPadBottom;
             }
 
-            var canvasWidth = Math.Max(220.0, x - 72.0 + outerMargin);
-            return (canvasWidth, canvasHeight);
+            var rightEdge = Math.Max(
+                nodeOrder.Max(n => n.X + n.Width),
+                populatedSubgraphs.Max(s => s.X + s.Width));
+            var bottomEdge = Math.Max(
+                nodeOrder.Max(n => n.Y + n.Height),
+                populatedSubgraphs.Max(s => s.Y + s.Height));
+            return (Math.Max(220.0, rightEdge + outerMargin), Math.Max(80.0, bottomEdge + outerMargin));
         }
+
+        var canvasWidthLr = Math.Max(220.0, xLr - 72.0 + outerMargin);
+        return (canvasWidthLr, canvasHeightLr);
     }
 
     private static Dictionary<string, int> ComputeRanks(
         List<FlowNode> nodeOrder,
-        List<FlowEdge> edges)
+        List<FlowchartEdge> edges)
     {
         var ranks = nodeOrder.ToDictionary(n => n.Id, _ => 0, StringComparer.Ordinal);
         var outgoing = nodeOrder.ToDictionary(n => n.Id, _ => new List<string>(), StringComparer.Ordinal);

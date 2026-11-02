@@ -7,6 +7,7 @@ internal static class ConfigurationValidator
     {
         var analysis = ValidateAnalysisMode(path, config.Analysis);
         var render = ValidateRenderMode(path, config.Render);
+        var cqrsMapSplit = ValidateCqrsMapSplit(path, config.CqrsMapSplit);
         var markers = ValidateMarkerNames(path, "markers", config.Markers);
         var watermark = ValidateWatermark(path, config.Watermark);
         var handlerMarkers = ValidateMarkerNames(path, "handlerMarkers", config.HandlerMarkers);
@@ -25,7 +26,18 @@ internal static class ConfigurationValidator
             layers,
             rules,
             render,
-            watermark);
+            watermark,
+            cqrsMapSplit);
+    }
+
+    private static CqrsMapSplitMode? ValidateCqrsMapSplit(string path, string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return CqrsMapSplitValues.TryParse(value, out var mode)
+            ? mode
+            : throw Invalid(path, $"unknown cqrsMapSplit '{value}' - use {CqrsMapSplitValues.Accepted}");
     }
 
     private static AnalysisMode? ValidateAnalysisMode(string path, string? value)

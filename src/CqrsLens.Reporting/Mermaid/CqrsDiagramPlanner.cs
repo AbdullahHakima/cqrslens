@@ -8,6 +8,17 @@ internal static class CqrsDiagramPlanner
     /// project and then into balanced parts. Every request appears exactly once.
     /// </summary>
     internal static IReadOnlyList<DiagramSection> Sections(AnalysisResult result)
+        => Sections(result, CqrsMapSplitMode.Count);
+
+    /// <summary>
+    /// Builds CQRS map sections. <see cref="CqrsMapSplitMode.Count"/> keeps the
+    /// default project + fixed-size split; <see cref="CqrsMapSplitMode.Feature"/>
+    /// groups requests by the feature segment of their namespace so each feature
+    /// gets its own diagram; <see cref="CqrsMapSplitMode.Unsplit"/> emits one
+    /// diagram per project and only splits a project further when its map exceeds
+    /// the renderer's safety limit. In every mode each request appears exactly once.
+    /// </summary>
+    internal static IReadOnlyList<DiagramSection> Sections(AnalysisResult result, CqrsMapSplitMode split)
     {
         if (result.Requests.Count == 0)
             return Array.Empty<DiagramSection>();
@@ -24,22 +35,28 @@ internal static class CqrsDiagramPlanner
         }
 
         var groups = result.Requests
-            .GroupBy(CqrsRequestOrdering.ProjectKey, StringComparer.Ordinal)
+            .GroupBy(split == CqrsMapSplitMode.Feature
+                ? CqrsRequestOrdering.FeatureKey
+                : CqrsRequestOrdering.ProjectKey, StringComparer.Ordinal)
             .OrderBy(g => g.Key, StringComparer.Ordinal)
             .Select(g => new
             {
-                Project = g.Key,
+                Label = split == CqrsMapSplitMode.Feature
+                    ? CqrsRequestOrdering.FeatureHeading(g.First())
+                    : g.Key,
+                Key = g.Key,
                 Requests = CqrsRequestOrdering.OrderRequests(g),
             })
             .ToList();
 
-        if (result.Requests.Count <= CqrsDiagramBuilder.MaxRequestsPerCqrsDiagram)
+        if (split == CqrsMapSplitMode.Count &&
+            result.Requests.Count <= CqrsDiagramBuilder.MaxRequestsPerCqrsDiagram)
         {
             var requests = groups.SelectMany(g => g.Requests).ToList();
             var stats = CqrsStats.Create(requests, missingHandlers, missingValidators);
             var source = CqrsDiagramWriter.BuildSource(requests, missingHandlers, missingValidators, stats);
-            var projectName = groups.Count == 1 && groups[0].Project != MermaidDiagramText.UnassignedProject
-                ? groups[0].Project
+            var projectName = groups.Count == 1 && groups[0].Key != MermaidDiagramText.UnassignedProject
+                ? groups[0].Label
                 : null;
             return new[]
             {
@@ -61,14 +78,19 @@ internal static class CqrsDiagramPlanner
         foreach (var group in groups)
         {
             var built = new List<(List<CqrsRequest> Requests, string Source, CqrsStats Stats)>();
-            foreach (var chunk in BalancedChunks(group.Requests))
+            // Unsplit: one candidate chunk per project; BuildBounded still splits it
+            // only when the map would exceed the renderer's safety limit.
+            var chunks = split == CqrsMapSplitMode.Unsplit
+                ? (IReadOnlyList<List<CqrsRequest>>)new[] { group.Requests.ToList() }
+                : FeatureChunks(group.Requests);
+            foreach (var chunk in chunks)
                 built.AddRange(BuildBounded(chunk, missingHandlers, missingValidators));
 
             for (var i = 0; i < built.Count; i++)
             {
                 var part = built[i];
                 sections.Add(new DiagramSection(
-                    group.Project == MermaidDiagramText.UnassignedProject ? null : group.Project,
+                    group.Key == MermaidDiagramText.UnassignedProject ? null : group.Label,
                     part.Requests,
                     part.Source,
                     Part: i + 1,
@@ -112,20 +134,61 @@ internal static class CqrsDiagramPlanner
         return result;
     }
 
-    private static IReadOnlyList<List<CqrsRequest>> BalancedChunks(IReadOnlyList<CqrsRequest> requests)
+    /// <summary>
+    /// Splits feature-ordered requests into bounded chunks, keeping whole features
+    /// together so a split point never cuts a feature in half (a feature larger than
+    /// the bound is the only case that is itself split).
+    /// </summary>
+    private static IReadOnlyList<List<CqrsRequest>> FeatureChunks(IReadOnlyList<CqrsRequest> requests)
     {
         if (requests.Count == 0)
             return Array.Empty<List<CqrsRequest>>();
 
-        var partCount = (requests.Count + CqrsDiagramBuilder.MaxRequestsPerCqrsDiagram - 1) /
-                        CqrsDiagramBuilder.MaxRequestsPerCqrsDiagram;
-        if (partCount <= 1)
-            return new[] { requests.ToList() };
+        var max = CqrsDiagramBuilder.MaxRequestsPerCqrsDiagram;
+        var partCount = (requests.Count + max - 1) / max;
+        var target = (requests.Count + partCount - 1) / partCount;
 
-        var partSize = (requests.Count + partCount - 1) / partCount;
-        var chunks = new List<List<CqrsRequest>>(partCount);
-        for (var i = 0; i < requests.Count; i += partSize)
-            chunks.Add(requests.Skip(i).Take(partSize).ToList());
+        var runs = new List<List<CqrsRequest>>();
+        foreach (var request in requests)
+        {
+            if (runs.Count == 0 ||
+                !string.Equals(
+                    CqrsRequestOrdering.FeatureName(runs[^1][0]),
+                    CqrsRequestOrdering.FeatureName(request),
+                    StringComparison.Ordinal))
+            {
+                runs.Add(new List<CqrsRequest>());
+            }
+            runs[^1].Add(request);
+        }
+
+        var chunks = new List<List<CqrsRequest>>();
+        var current = new List<CqrsRequest>();
+        void Flush()
+        {
+            if (current.Count == 0)
+                return;
+            chunks.Add(current);
+            current = new List<CqrsRequest>();
+        }
+
+        foreach (var run in runs)
+        {
+            if (run.Count > max)
+            {
+                // A single feature too large to fit: split it evenly.
+                Flush();
+                for (var i = 0; i < run.Count; i += target)
+                    chunks.Add(run.Skip(i).Take(target).ToList());
+                continue;
+            }
+
+            if (current.Count > 0 && current.Count + run.Count > target)
+                Flush();
+            current.AddRange(run);
+        }
+
+        Flush();
         return chunks;
     }
 }

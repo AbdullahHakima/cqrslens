@@ -13,7 +13,7 @@ internal static class UsageWriter
 
         writer.WriteLine($"CqrsLens {ToolInfo.Version} - see your MediatR codebase.");
         writer.WriteLine();
-        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html|json|agent] [--slice FILTER] [--render mermaid|svg] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--watermark TEXT] [--banner|--no-banner] [--color|--no-color] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--strict]");
+        writer.WriteLine("Usage: cqrslens <path> [-o OUTPUT] [--format md|html|json|agent] [--slice FILTER] [--render mermaid|svg] [--cqrs-map-split count|feature|unsplit] [--config FILE] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--watermark TEXT] [--banner|--no-banner] [--color|--no-color] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--export-svg DIR] [--github-annotations] [--ci-root DIR] [--strict]");
         writer.WriteLine();
         writer.WriteLine("  <path>        Folder of the .NET solution to scan (searched recursively).");
         writer.WriteLine("  -o, --output  Report path. Default: ARCHITECTURE.md (.html or .json) in the current directory.");
@@ -25,6 +25,9 @@ internal static class UsageWriter
         writer.WriteLine("  --mcp         Start the built-in Model Context Protocol (MCP) server over JSON-RPC 2.0 stdio.");
         writer.WriteLine("  --profile     Print per-stage timing and allocation totals to stderr.");
         writer.WriteLine("  --render      HTML diagram rendering: mermaid (default) or svg (zero-JS inline SVG).");
+        writer.WriteLine("  --cqrs-map-split  How the CQRS map is split: count (default; by project then");
+        writer.WriteLine("                size), feature (one diagram per feature), or unsplit (one diagram");
+        writer.WriteLine("                per project). Overrides the cqrsMapSplit config key.");
         writer.WriteLine("  --analysis    Analysis backend: text (default) or roslyn (opt-in).");
         writer.WriteLine("  --generated-at  Fixed ISO-8601 timestamp for reproducible reports (tests/CI);");
         writer.WriteLine("                timing is reported as 0 ms in this mode.");
@@ -48,6 +51,9 @@ internal static class UsageWriter
         writer.WriteLine("  --diff-output Write the architecture diff report (.md for PR comments, or .json).");
         writer.WriteLine("  --sarif       Also write SARIF 2.1.0 for code scanning.");
         writer.WriteLine("  --summary     Also write a compact Markdown job summary.");
+        writer.WriteLine("  --export-svg  Also write every diagram as a standalone .svg file into DIR");
+        writer.WriteLine("                (created when missing). Additive; does not change the report.");
+        writer.WriteLine("                Each file is a complete SVG document (SVG export only; no PNG).");
         writer.WriteLine("  --github-annotations  Emit file/line GitHub Actions annotations.");
         writer.WriteLine("  --ci-root     Repository root used to rebase annotation/SARIF paths.");
         writer.WriteLine("  --strict      Exit with code 4 when architecture checks report an error");

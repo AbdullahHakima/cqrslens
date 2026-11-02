@@ -34,7 +34,7 @@ internal static class MarkdownDiagnosticsWriter
     {
         if (diagnostics.Count == 0)
         {
-            md.AppendLine("No scan diagnostics.");
+            md.AppendLine("No analysis diagnostics.");
             return;
         }
 

@@ -36,9 +36,16 @@ internal static class HtmlDiagramSectionRenderer
         StringBuilder html,
         AnalysisResult result,
         DiagramRenderMode renderMode)
+        => AppendCqrs(html, result, renderMode, CqrsMapSplitMode.Count);
+
+    internal static void AppendCqrs(
+        StringBuilder html,
+        AnalysisResult result,
+        DiagramRenderMode renderMode,
+        CqrsMapSplitMode cqrsMapSplit)
     {
         html.AppendLine("<h2>CQRS Map</h2>");
-        var sections = DiagramBuilder.CqrsMapSections(result);
+        var sections = DiagramBuilder.CqrsMapSections(result, cqrsMapSplit);
         if (sections.Count == 0)
         {
             html.AppendLine("<p><em>No MediatR requests found.</em></p>");
@@ -46,8 +53,7 @@ internal static class HtmlDiagramSectionRenderer
         }
 
         AppendCqrsLegend(html, result);
-        html.AppendLine("<p class=\"note\">Requests are grouped by declaring project. Handler and validator " +
-                        "nodes are shown where linked and may be declared in a different project.</p>");
+        html.AppendLine($"<p class=\"note\">{CqrsGroupingNote(cqrsMapSplit)}</p>");
 
         if (sections.Count > 1)
         {
@@ -57,8 +63,7 @@ internal static class HtmlDiagramSectionRenderer
                 .Count();
             var projectText = projectCount == 1 ? "1 project" : $"{projectCount} projects";
             html.AppendLine($"<p class=\"note\">{result.Requests.Count} requests across {projectText}. " +
-                            "Diagrams are split by project and balanced so each stays within GitHub's " +
-                            "rendering limits; every request appears exactly once.</p>");
+                            CqrsSplitNote(cqrsMapSplit) + "</p>");
         }
 
         foreach (var section in sections)
@@ -80,6 +85,78 @@ internal static class HtmlDiagramSectionRenderer
             html.AppendLine("</figure>");
         }
     }
+
+    internal static void AppendFlow(
+        StringBuilder html,
+        AnalysisResult result,
+        DiagramRenderMode renderMode)
+    {
+        var sections = DiagramBuilder.FlowDiagramSections(result);
+        if (sections.Count == 0)
+            return;
+
+        html.AppendLine("<h2>Flow</h2>");
+        var totalEdges = sections.Sum(s => s.Edges.Count);
+        var edgeText = totalEdges == 1 ? "1 resolved flow edge" : $"{totalEdges} resolved flow edges";
+        var sectionText = sections.Count == 1 ? "1 diagram" : $"{sections.Count} feature/project diagrams";
+        var unresolvedNote = result.UnresolvedDispatches.Count > 0
+            ? $" {result.UnresolvedDispatches.Count} unresolved dispatch call(s) are not drawn as edges."
+            : "";
+        html.AppendLine(
+            $"<p class=\"note\">{Encode(edgeText)} across {Encode(sectionText)} " +
+            "(endpoint → request → handler and onward; DbContext nodes appear only when a handler " +
+            "directly references a discovered DbContext type; " +
+            $"every flow edge appears in exactly one diagram).{Encode(unresolvedNote)}</p>");
+        AppendFlowLegend(html);
+
+        foreach (var section in sections)
+        {
+            if (sections.Count > 1 || section.Label is not null)
+                html.AppendLine($"<h3>{Encode(section.Heading)}</h3>");
+
+            if (!DiagramBuilder.IsWithinMermaidLimits(section.Source))
+            {
+                html.AppendLine($"<p class=\"note\"><em>Diagram omitted: {section.Edges.Count} edges exceed " +
+                                "the CqrsLens safety limit (45,000 characters / 400 edges).</em></p>");
+                continue;
+            }
+
+            html.AppendLine("<figure class=\"diagram\">");
+            html.AppendLine(Render(section.Source, renderMode));
+            html.AppendLine($"<figcaption>{Encode(section.Caption)}</figcaption>");
+            html.AppendLine("</figure>");
+        }
+    }
+
+    private static void AppendFlowLegend(StringBuilder html)
+    {
+        html.AppendLine("<ul class=\"legend\" aria-label=\"Flow map legend\">");
+        html.AppendLine("<li><span class=\"swatch\" style=\"background:#e0f2fe;border-color:#0284c7\" aria-hidden=\"true\"></span>Endpoint</li>");
+        html.AppendLine("<li><span class=\"swatch\" style=\"background:#dbeafe;border-color:#2563eb\" aria-hidden=\"true\"></span>Request</li>");
+        html.AppendLine("<li><span class=\"swatch handler\" aria-hidden=\"true\"></span>Handler</li>");
+        html.AppendLine("<li><span class=\"swatch\" style=\"background:#fdf4ff;border-color:#a21caf\" aria-hidden=\"true\"></span>Notification</li>");
+        html.AppendLine("<li><span class=\"swatch\" style=\"background:#ecfdf5;border-color:#059669\" aria-hidden=\"true\"></span>DbContext</li>");
+        html.AppendLine("</ul>");
+    }
+
+    private static string CqrsGroupingNote(CqrsMapSplitMode split)
+        => split == CqrsMapSplitMode.Feature
+            ? "Requests are grouped by feature. Handler and validator nodes are shown " +
+              "where linked and may be declared in a different project."
+            : "Requests are grouped by declaring project. Handler and validator nodes are shown " +
+              "where linked and may be declared in a different project.";
+
+    private static string CqrsSplitNote(CqrsMapSplitMode split) => split switch
+    {
+        CqrsMapSplitMode.Feature =>
+            "Diagrams are split by feature; every request appears exactly once.",
+        CqrsMapSplitMode.Unsplit =>
+            "Diagrams are grouped by project and only split further when a map exceeds GitHub's " +
+            "rendering limits; every request appears exactly once.",
+        _ =>
+            "Diagrams are split by project and balanced so each stays within GitHub's " +
+            "rendering limits; every request appears exactly once.",
+    };
 
     private static void AppendCqrsLegend(StringBuilder html, AnalysisResult result)
     {

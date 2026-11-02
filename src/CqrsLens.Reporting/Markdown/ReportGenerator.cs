@@ -27,6 +27,13 @@ public static class ReportGenerator
     public static string Generate(AnalysisResult result)
         => MarkdownReportWriter.Generate(result);
 
+    /// <summary>
+    /// Generates the Markdown report with the requested CQRS map split mode
+    /// (<see cref="CqrsMapSplitMode.Count"/> is the default and unchanged).
+    /// </summary>
+    public static string Generate(AnalysisResult result, CqrsMapSplitMode cqrsMapSplit)
+        => MarkdownReportWriter.Generate(result, cqrsMapSplit);
+
     internal static void AppendDiagnosticsMarkdown(
         StringBuilder md,
         IReadOnlyList<AnalysisDiagnostic> diagnostics)
