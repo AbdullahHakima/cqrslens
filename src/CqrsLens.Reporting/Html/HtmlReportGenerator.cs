@@ -91,6 +91,7 @@ public static class HtmlReportGenerator
         HtmlDiagramSectionRenderer.AppendCqrs(html, result, renderMode, cqrsMapSplit);
         HtmlValidationCoverageSectionRenderer.Append(html, result);
         HtmlDiagramSectionRenderer.AppendFlow(html, result, renderMode);
+        HtmlSequenceSectionRenderer.Append(html, result, renderMode);
         HtmlEndpointSectionRenderer.Append(html, result);
 
         // ---- Requests table & Interactive Explorer ------------------------------
