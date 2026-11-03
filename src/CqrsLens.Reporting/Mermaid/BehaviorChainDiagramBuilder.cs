@@ -5,8 +5,10 @@ namespace CqrsLens;
 
 /// <summary>
 /// Builds a Mermaid <c>flowchart LR</c> of the pipeline behavior chain around a
-/// request. Behaviors are drawn in the order the model lists them and the diagram
-/// is labelled "registered order" — CqrsLens does not resolve execution order.
+/// request. Behaviors are drawn in registered order (registration site, then ordinal
+/// within the site), with behaviors that have no resolvable registration site
+/// appended. The diagram is labelled registered order — CqrsLens does not resolve
+/// execution order.
 /// </summary>
 internal static class BehaviorChainDiagramBuilder
 {
@@ -15,7 +17,7 @@ internal static class BehaviorChainDiagramBuilder
         if (result.Behaviors.Count == 0)
             return null;
 
-        var behaviors = result.Behaviors.ToList();
+        var behaviors = BehaviorOrdering.Flattened(result.Behaviors).ToList();
         var nameCounts = behaviors
             .GroupBy(b => CSharpScanner.SimpleName(b.Name), StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Count(), StringComparer.Ordinal);
@@ -24,7 +26,7 @@ internal static class BehaviorChainDiagramBuilder
         var sb = new StringBuilder();
         sb.AppendLine("flowchart LR");
         sb.AppendLine("    accTitle: Pipeline behavior chain");
-        sb.AppendLine($"    accDescr: {CountText(behaviors.Count, "behavior")} in scan order, not resolved execution order.");
+        sb.AppendLine($"    accDescr: {BehaviorPresentationText.ChainCaption(behaviors)}");
 
         sb.AppendLine("    req([\"Request\"]):::clsChainRequest");
         var previous = "req";
