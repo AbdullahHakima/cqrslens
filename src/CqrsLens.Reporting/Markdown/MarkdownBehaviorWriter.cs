@@ -2,7 +2,7 @@ using System.Text;
 
 namespace CqrsLens;
 
-/// <summary>Writes the pipeline behaviors chain diagram and table.</summary>
+/// <summary>Writes the pipeline behaviors registered-order view and chain diagram.</summary>
 internal static class MarkdownBehaviorWriter
 {
     internal static void Write(StringBuilder md, AnalysisResult result)
@@ -16,24 +16,52 @@ internal static class MarkdownBehaviorWriter
             return;
         }
 
-        var chain = DiagramBuilder.BehaviorChain(result);
-        md.AppendLine("_Behaviors wrap every request that flows through the pipeline. The diagram lists " +
-                      "them in the order the model recorded them (scan order, not resolved execution order)._");
+        md.AppendLine($"_{BehaviorPresentationText.RegisteredOrderNote}_");
         md.AppendLine();
+
+        var chain = DiagramBuilder.BehaviorChain(result);
         if (chain is not null)
         {
             MarkdownDiagramWriter.AppendDiagramOrLimitNote(md, chain, "behavior chain");
             md.AppendLine();
         }
 
-        md.AppendLine("| Behavior | Project | Source |");
-        md.AppendLine("| --- | --- | --- |");
-        foreach (var b in result.Behaviors.OrderBy(b => b.Name, StringComparer.OrdinalIgnoreCase))
+        var registered = BehaviorOrdering.Registered(result.Behaviors);
+        if (registered.Count > 0)
         {
-            var loc = b.Location is null ? "—" : MarkdownEscaping.CodeSpan(b.Location.ToString());
-            md.AppendLine(
-                $"| {MarkdownEscaping.TableCell(b.Name)} | {MarkdownEscaping.TableCell(b.ProjectName ?? "—")} | {loc} |");
+            md.AppendLine("### Registered order");
+            md.AppendLine();
+            foreach (var group in registered)
+            {
+                md.AppendLine($"#### {MarkdownEscaping.CodeSpan(group.Site)}");
+                md.AppendLine();
+                md.AppendLine("| # | Behavior | Project | Source |");
+                md.AppendLine("| --- | --- | --- | --- |");
+                foreach (var b in group.Behaviors)
+                {
+                    var loc = b.Location is null ? "—" : MarkdownEscaping.CodeSpan(b.Location.ToString());
+                    md.AppendLine(
+                        $"| {b.RegistrationOrder} | {MarkdownEscaping.TableCell(b.Name)} | " +
+                        $"{MarkdownEscaping.TableCell(b.ProjectName ?? "—")} | {loc} |");
+                }
+                md.AppendLine();
+            }
         }
-        md.AppendLine();
+
+        var unregistered = BehaviorOrdering.Unregistered(result.Behaviors);
+        if (unregistered.Count > 0)
+        {
+            md.AppendLine($"### {BehaviorPresentationText.UnregisteredHeading}");
+            md.AppendLine();
+            md.AppendLine("| Behavior | Project | Source |");
+            md.AppendLine("| --- | --- | --- |");
+            foreach (var b in unregistered)
+            {
+                var loc = b.Location is null ? "—" : MarkdownEscaping.CodeSpan(b.Location.ToString());
+                md.AppendLine(
+                    $"| {MarkdownEscaping.TableCell(b.Name)} | {MarkdownEscaping.TableCell(b.ProjectName ?? "—")} | {loc} |");
+            }
+            md.AppendLine();
+        }
     }
 }

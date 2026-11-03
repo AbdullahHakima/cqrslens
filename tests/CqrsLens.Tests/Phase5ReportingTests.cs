@@ -675,12 +675,16 @@ public sealed class Phase5ReportingTests : IDisposable
         var md = ReportGenerator.Generate(result);
         Assert.Contains("## Pipeline Behaviors", md);
         Assert.Contains("bhv_LoggingBehavior", md);
-        Assert.Contains("scan order, not resolved execution order", md);
+        // The registered-order label replaces the old "scan order" caption; the
+        // behaviors here have no resolvable registration site, so they are listed
+        // under the explicit "not determinable" heading and the disclaimer still holds.
+        Assert.Contains("Execution order is not guaranteed and is not proven by the scan", md);
+        Assert.Contains("Registration site not found — order not determinable", md);
 
         var html = HtmlReportGenerator.Generate(result, DiagramRenderMode.Svg);
         Assert.Contains("Pipeline Behaviors", html);
         Assert.Contains("<title>Pipeline behavior chain</title>", html);
-        Assert.Contains("scan order, not resolved execution order", html);
+        Assert.Contains("Execution order is not guaranteed and is not proven by the scan", html);
         Assert.DoesNotContain("<script", html, StringComparison.OrdinalIgnoreCase);
     }
 
