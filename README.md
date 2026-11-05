@@ -13,28 +13,30 @@ map nobody wrote down.
 ```text
 $ cqrslens samples/SampleShop
 
-   ╭──────╮     ██████╗  ██████╗ ██████╗ ███████╗██╗     ███████╗███╗   ██╗███████╗
-  ╱  ╭──╮  ╲   ██╔════╝ ██╔═══██╗██╔══██╗██╔════╝██║     ██╔════╝████╗  ██║██╔════╝
- │  │ ◆ │  │   ██║      ██║   ██║██████╔╝███████╗██║     █████╗  ██╔██╗ ██║███████╗
-  ╲  ╰──╯  ╱   ██║      ██║▄▄ ██║██╔══██╗╚════██║██║     ██╔══╝  ██║╚██╗██║╚════██║
-   ╰──┬───╯    ╚██████╗ ╚██████╔╝██║  ██║███████║███████╗███████╗██║ ╚████║███████║
-      ╰──►      ╚═════╝  ╚══▀▀═╝ ╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝
-      ── ◆ Static CQRS & Clean Architecture Lens · v0.9.0 ◆ ──
+██       ██    ██▄     ██  ▄██████▄   ▄██████▄  ▄████████▄ ██      ██   ▄████▄
+▄█▀▀▀█▀▀▀█▄    ██▀█▄   ██ ██▀    ▀██ ██▀    ▀▀▀ ▀▀  ██  ▀▀ ██      ██ ▄█▀    ▀█▄
+██ █ █ █ ██    ██  ▀█▄ ██ ██      ██ ██             ██     ██      ██ ██▄▄▄▄▄▄██
+██  ▄▄▄  ██    ██    ▀███ ██▄    ▄██ ██▄    ▄▄▄     ██     ██▄    ▄██ ██▀▀▀▀▀▀██
+ ███ █ ███     ██      ██  ▀██████▀   ▀██████▀      ██      ▀██████▀  ██      ██
+  ▀▀▀▀▀▀▀
 
-╭───────────────────────────────┬────────────────────────────╮
-│ CqrsLens Architecture Summary │ SampleShop                 │
-├───────────────────────────────┼────────────────────────────┤
-│ Projects                      │ 4                          │
-│ Requests (Commands/Queries)   │ 4                          │
-│ Handlers                      │ 4                          │
-│ Validators                    │ 2                          │
-│ Pipeline Behaviors            │ 1                          │
-│ EF Core DbContexts            │ 1                          │
-│ Scanner / Timing              │ text · 18 ms               │
-│ Architecture Checks           │ ✔ Passed (0 issues)        │
-╰───────────────────────────────┴────────────────────────────╯
+          ── ◆ A lens for the CQRS codebase you already have. · v0.9.0
 
-Scanned 4 project(s): 4 request(s), 4 handler(s), 2 validator(s), 1 behavior(s), 1 DbContext(s).
+╭────────────────────────────────────────────────╮
+│  NOCTUA · ARCHITECTURE SUMMARY                 │
+│  SampleShop                                    │
+├────────────────────────────────────────────────┤
+│  Projects                                   4  │
+│  Requests (Commands / Queries)              4  │
+│  Handlers                                   4  │
+│  Validators                                 2  │
+│  Pipeline Behaviors                         1  │
+│  EF Core DbContexts                         1  │
+│  Scanner · Timing               text · 327 ms  │
+├────────────────────────────────────────────────┤
+│  ▲ 4 warning(s) · no errors                    │
+╰────────────────────────────────────────────────╯
+
 Report written to samples/SampleShop/ARCHITECTURE.md
 ```
 
@@ -47,7 +49,7 @@ dotnet tool install -g CqrsLens
 ## Usage
 
 ```bash
-cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--cqrs-map-split count|feature|unsplit] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--profile] [--strict]
+cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html|json] [--render mermaid|svg] [--cqrs-map-split count|feature|unsplit] [--config FILE] [--baseline FILE] [--write-baseline FILE] [--diff PATH_OR_JSON] [--diff-output FILE] [--sarif FILE] [--summary FILE] [--github-annotations] [--ci-root DIR] [--analysis text|roslyn] [--generated-at ISO8601] [--markers ICommand,IQuery] [--handler-markers ICommandHandler,IQueryHandler] [--ascii] [--profile] [--strict]
 ```
 
 - The folder is searched recursively for `.csproj` and `.cs` files (`bin`, `obj`, `.git` are skipped).
@@ -60,6 +62,10 @@ cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html|json] [--render
   without changing the primary report; see [docs/ci.md](docs/ci.md).
 - `--generated-at` pins the report timestamp (and reports 0 ms elapsed) for
   byte-reproducible golden files.
+- `--ascii` swaps the box-drawing and block characters for single-width
+  equivalents. Use it on a terminal with a CJK font, where those code points
+  render two cells wide and shear the card and banner apart; `CQRSLENS_ASCII=1`
+  does the same without the flag. `--unicode` restores the default.
 - Exit codes: `0` ok · `1` usage error · `2` path not found · `3` no projects found ·
   `4` strict check failure (see [Architecture checks](#architecture-checks)).
 

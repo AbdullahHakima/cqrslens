@@ -14,6 +14,9 @@ internal static class ConsoleColorPolicy
         if (string.Equals(Environment.GetEnvironmentVariable("TERM"), "dumb", StringComparison.OrdinalIgnoreCase))
             return false;
 
+        if (ReferenceEquals(writer, Console.Error))
+            return !Console.IsErrorRedirected;
+
         return ReferenceEquals(writer, Console.Out) && !Console.IsOutputRedirected;
     }
 

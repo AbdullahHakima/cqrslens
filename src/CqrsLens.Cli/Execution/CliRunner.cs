@@ -12,7 +12,7 @@ public static class CliRunner
         switch (command.Kind)
         {
             case CliCommandKind.Help:
-                UsageWriter.Write(stdout);
+                UsageWriter.Write(stdout, command.Options);
                 return ExitCodes.Success;
             case CliCommandKind.Version:
                 stdout.WriteLine($"CqrsLens {ToolInfo.Version}");

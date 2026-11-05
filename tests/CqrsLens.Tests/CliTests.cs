@@ -74,7 +74,8 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Success, result.Code);
         Assert.Contains("Usage: cqrslens", result.Stdout);
-        Assert.Contains("--format md|html|json", result.Stdout);
+        Assert.Contains("--format FORMAT", result.Stdout);
+        Assert.Contains("md (default), html, json, or agent", result.Stdout);
         Assert.Contains("--render", result.Stdout);
         Assert.Contains("--handler-markers", result.Stdout);
         Assert.Contains("--version", result.Stdout);
@@ -422,13 +423,13 @@ public class CliTests : IDisposable
 
         var colored = Run(new[] { _root, "-o", output, "--banner", "--color" });
         Assert.Equal(ExitCodes.Success, colored.Code);
-        Assert.Contains("Static CQRS & Clean Architecture Lens", colored.Stdout);
-        Assert.Contains("CqrsLens Architecture Summary", colored.Stdout);
+        Assert.Contains("A lens for the CQRS codebase you already have.", colored.Stdout);
+        Assert.Contains("NOCTUA · ARCHITECTURE SUMMARY", colored.Stdout);
         Assert.Contains("\x1b[38;2;", colored.Stdout);
 
         var noColor = Run(new[] { _root, "-o", output, "--banner", "--no-color" });
         Assert.Equal(ExitCodes.Success, noColor.Code);
-        Assert.Contains("██████╗", noColor.Stdout);
+        Assert.Contains("██████", noColor.Stdout);
         Assert.Contains("╭─", noColor.Stdout);
         Assert.DoesNotContain("\x1b[38;2;", noColor.Stdout, StringComparison.Ordinal);
     }
@@ -468,6 +469,30 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Usage, result.Code);
         Assert.Contains("--watermark cannot be empty", result.Stderr);
+    }
+
+    [Fact]
+    public void AsciiFlag_RendersSingleWidthChrome()
+    {
+        WriteValidFixture();
+
+        var result = Run(new[] { _root, "--banner", "--ascii", "--no-color" });
+
+        Assert.Equal(ExitCodes.Success, result.Code);
+        Assert.Contains("* NOCTUA", result.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain('█', result.Stdout);
+        Assert.DoesNotContain('╭', result.Stdout);
+        Assert.DoesNotContain('·', result.Stdout);
+    }
+
+    [Fact]
+    public void Help_HonoursDisplayFlagsThatFollowIt()
+    {
+        var result = Run(new[] { "--help", "--ascii", "--banner", "--no-color" });
+
+        Assert.Equal(ExitCodes.Success, result.Code);
+        Assert.Contains("* NOCTUA", result.Stdout, StringComparison.Ordinal);
+        Assert.DoesNotContain('█', result.Stdout);
     }
 
     [Fact]

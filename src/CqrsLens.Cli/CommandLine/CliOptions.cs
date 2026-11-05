@@ -33,6 +33,7 @@ public sealed class CliOptions
     public bool WatermarkSpecified { get; set; }
     public bool? Banner { get; set; }
     public bool? Color { get; set; }
+    public bool? Ascii { get; set; }
     public bool Mcp { get; set; }
     public bool Profile { get; set; }
 }

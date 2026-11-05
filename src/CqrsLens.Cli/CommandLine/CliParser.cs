@@ -28,15 +28,19 @@ public static class CliParser
     private static CliCommand Parse(string[] args, ArgumentReader reader)
     {
         var options = new CliOptions();
+        var helpRequested = false;
+        var versionRequested = false;
 
         while (reader.MoveNext())
         {
             switch (reader.Current)
             {
                 case "-h" or "--help":
-                    return new CliCommand(CliCommandKind.Help);
+                    helpRequested = true;
+                    break;
                 case "--version":
-                    return new CliCommand(CliCommandKind.Version);
+                    versionRequested = true;
+                    break;
                 case "-o" or "--output":
                     options.Output = reader.ReadValue("-o", "a value, e.g. -o ARCHITECTURE.md");
                     break;
@@ -121,6 +125,12 @@ public static class CliParser
                 case "--no-color":
                     options.Color = false;
                     break;
+                case "--ascii":
+                    options.Ascii = true;
+                    break;
+                case "--unicode":
+                    options.Ascii = false;
+                    break;
                 case "--mcp":
                     options.Mcp = true;
                     break;
@@ -128,10 +138,22 @@ public static class CliParser
                     options.Profile = true;
                     break;
                 default:
+                    // Help and version are decided after parsing so that the
+                    // display flags around them still apply; stray arguments
+                    // after --help must not turn it into a usage error.
+                    if (helpRequested || versionRequested)
+                        break;
+
                     options.Path = ReadPath(options.Path, reader.Current);
                     break;
             }
         }
+
+        if (helpRequested)
+            return new CliCommand(CliCommandKind.Help, options);
+
+        if (versionRequested)
+            return new CliCommand(CliCommandKind.Version, options);
 
         Validate(options);
         return new CliCommand(CliCommandKind.Run, options);

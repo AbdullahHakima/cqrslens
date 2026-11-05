@@ -9,6 +9,7 @@ internal sealed class ScanConsole
     private readonly CliOptions _options;
     private readonly TextWriter _stdout;
     private readonly bool _useColor;
+    private readonly bool? _ascii;
     private readonly bool _showBanner;
     private readonly bool _isInteractive;
     private int _lastProgressLength;
@@ -19,6 +20,7 @@ internal sealed class ScanConsole
         _stdout = stdout;
         StreamsSlice = options.SliceFilter is not null && options.Output is null && options.Format is null;
         _useColor = ConsoleArtwork.ShouldUseColor(stdout, options.Color);
+        _ascii = options.Ascii;
         _showBanner = !StreamsSlice &&
                       ConsoleArtwork.ShouldShowBanner(stdout, options.Banner, options.GitHubAnnotations);
         _isInteractive = !StreamsSlice &&
@@ -34,10 +36,10 @@ internal sealed class ScanConsole
     {
         if (_showBanner)
         {
-            _stdout.WriteLine(ConsoleArtwork.RenderLogoBanner(ToolInfo.Version, _useColor));
+            _stdout.WriteLine(ConsoleArtwork.RenderLogoBanner(ToolInfo.Version, _useColor, _ascii));
             if (!string.IsNullOrWhiteSpace(watermark))
             {
-                _stdout.WriteLine(ConsoleArtwork.RenderWatermarkStamp(watermark, _useColor));
+                _stdout.WriteLine(ConsoleArtwork.RenderWatermarkStamp(watermark, _useColor, _ascii));
                 _stdout.WriteLine();
             }
 
@@ -49,7 +51,7 @@ internal sealed class ScanConsole
             _options.Banner != false &&
             !_options.GitHubAnnotations)
         {
-            _stdout.WriteLine(ConsoleArtwork.RenderWatermarkStamp(watermark, _useColor));
+            _stdout.WriteLine(ConsoleArtwork.RenderWatermarkStamp(watermark, _useColor, _ascii));
             _stdout.WriteLine();
         }
     }
@@ -61,7 +63,7 @@ internal sealed class ScanConsole
 
         return progress =>
         {
-            var line = ConsoleArtwork.FormatProgressBar(progress, _useColor);
+            var line = ConsoleArtwork.FormatProgressBar(progress, _useColor, ascii: _ascii);
             var padding = Math.Max(0, _lastProgressLength - line.Length);
             _lastProgressLength = line.Length;
             _stdout.Write("\r" + line + new string(' ', padding));
@@ -83,7 +85,7 @@ internal sealed class ScanConsole
         if (!_showBanner)
             return;
 
-        _stdout.WriteLine(ConsoleArtwork.RenderSummaryCard(result, reportPath, _useColor));
+        _stdout.WriteLine(ConsoleArtwork.RenderSummaryCard(result, reportPath, _useColor, _ascii));
         _stdout.WriteLine();
     }
 }
