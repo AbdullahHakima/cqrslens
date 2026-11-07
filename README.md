@@ -10,35 +10,7 @@ your pipeline behaviors, and your EF Core DbContexts.
 Point it at a codebase you just inherited, or your own six months later, and get the
 map nobody wrote down.
 
-```text
-$ cqrslens samples/SampleShop
-
-██       ██    ██▄     ██  ▄██████▄   ▄██████▄  ▄████████▄ ██      ██   ▄████▄
-▄█▀▀▀█▀▀▀█▄    ██▀█▄   ██ ██▀    ▀██ ██▀    ▀▀▀ ▀▀  ██  ▀▀ ██      ██ ▄█▀    ▀█▄
-██ █ █ █ ██    ██  ▀█▄ ██ ██      ██ ██             ██     ██      ██ ██▄▄▄▄▄▄██
-██  ▄▄▄  ██    ██    ▀███ ██▄    ▄██ ██▄    ▄▄▄     ██     ██▄    ▄██ ██▀▀▀▀▀▀██
- ███ █ ███     ██      ██  ▀██████▀   ▀██████▀      ██      ▀██████▀  ██      ██
-  ▀▀▀▀▀▀▀
-
-          ── ◆ A lens for the CQRS codebase you already have. · v1.0.0
-
-╭────────────────────────────────────────────────╮
-│  NOCTUA · ARCHITECTURE SUMMARY                 │
-│  SampleShop                                    │
-├────────────────────────────────────────────────┤
-│  Projects                                   4  │
-│  Requests (Commands / Queries)              4  │
-│  Handlers                                   4  │
-│  Validators                                 2  │
-│  Pipeline Behaviors                         1  │
-│  EF Core DbContexts                         1  │
-│  Scanner · Timing               text · 327 ms  │
-├────────────────────────────────────────────────┤
-│  ▲ 4 warning(s) · no errors                    │
-╰────────────────────────────────────────────────╯
-
-Report written to samples/SampleShop/ARCHITECTURE.md
-```
+![Running CqrsLens on SampleShop: the NOCTUA owl banner, then the architecture summary card (4 projects, 4 requests, 4 handlers, 2 validators, 1 pipeline behavior, 1 DbContext, 4 warnings, no errors)](docs/images/readme/console-run.png)
 
 ## Install
 
