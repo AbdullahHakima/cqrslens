@@ -23,3 +23,6 @@ artifacts/
 !.vscode/extensions.json
 .DS_Store
 Thumbs.db
+
+## Local agent workspace (scratch notes, not part of the tool)
+.workbuddy-ai/
