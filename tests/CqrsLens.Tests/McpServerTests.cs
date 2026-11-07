@@ -33,6 +33,18 @@ public class McpServerTests
     {
         using var temp = CreateSampleCqrsWorkspace();
 
+        var diffRequest = new JsonObject
+        {
+            ["jsonrpc"] = "2.0",
+            ["id"] = 10,
+            ["method"] = "tools/call",
+            ["params"] = new JsonObject
+            {
+                ["name"] = "diff_architecture",
+                ["arguments"] = new JsonObject { ["base"] = temp.Path },
+            },
+        }.ToJsonString();
+
         var requests = new[]
         {
             """{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test-agent","version":"1.0.0"}}}""",
@@ -43,6 +55,9 @@ public class McpServerTests
             """{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"trace_slice","arguments":{"filter":"CreateOrder"}}}""",
             """{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"trace_entity_impact","arguments":{"entity":"Order"}}}""",
             """{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"check_architecture","arguments":{"strict":true}}}""",
+            """{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"verify_claim","arguments":{"subject":"CreateOrderCommand","relation":"has handler","object":"CreateOrderCommandHandler"}}}""",
+            """{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"trace_request_impact","arguments":{"request":"CreateOrderCommand"}}}""",
+            diffRequest,
         };
 
         var input = string.Join("\n", requests) + "\n";
@@ -61,8 +76,8 @@ public class McpServerTests
         var lines = stdout.ToString()
             .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
 
-        // 7 responses expected (notifications/initialized has no id and produces no response)
-        Assert.Equal(7, lines.Length);
+        // 10 responses expected (notifications/initialized has no id and produces no response)
+        Assert.Equal(10, lines.Length);
 
         // 1. initialize
         var initResp = JsonNode.Parse(lines[0])!.AsObject();
@@ -78,12 +93,18 @@ public class McpServerTests
         // 3. tools/list
         var listResp = JsonNode.Parse(lines[2])!.AsObject();
         var tools = listResp["result"]!["tools"]!.AsArray();
-        Assert.Equal(4, tools.Count);
+        Assert.Equal(7, tools.Count);
         var toolNames = tools.Select(t => t!["name"]!.GetValue<string>()).ToList();
         Assert.Contains("get_architecture_dna", toolNames);
         Assert.Contains("trace_slice", toolNames);
         Assert.Contains("trace_entity_impact", toolNames);
         Assert.Contains("check_architecture", toolNames);
+        Assert.Contains("trace_request_impact", toolNames);
+        Assert.Contains("verify_claim", toolNames);
+        Assert.Contains("diff_architecture", toolNames);
+        Assert.All(tools, t => Assert.True(
+            t!["annotations"]!["readOnlyHint"]!.GetValue<bool>(),
+            $"{t["name"]} must carry readOnlyHint"));
 
         // 4. get_architecture_dna
         var dnaResp = JsonNode.Parse(lines[3])!.AsObject();
@@ -119,6 +140,31 @@ public class McpServerTests
         Assert.Contains("# CqrsLens Architecture Checks", checkText);
         Assert.Contains("MissingHandler", checkText);
         Assert.Contains("OrphanDeleteOrderCommand", checkText);
+
+        // 8. verify_claim
+        var claimResp = JsonNode.Parse(lines[7])!.AsObject();
+        Assert.False(claimResp["result"]!["isError"]!.GetValue<bool>());
+        var claimText = claimResp["result"]!["content"]![0]!["text"]!.GetValue<string>();
+        Assert.StartsWith("verdict: supported", claimText);
+        Assert.Contains("lists handler", claimText);
+        Assert.Contains("evidence: ", claimText);
+
+        // 9. trace_request_impact
+        var impactResp = JsonNode.Parse(lines[8])!.AsObject();
+        Assert.False(impactResp["result"]!["isError"]!.GetValue<bool>());
+        var impactText = impactResp["result"]!["content"]![0]!["text"]!.GetValue<string>();
+        Assert.Contains("# CqrsLens Request Impact Trace — `CreateOrderCommand`", impactText);
+        Assert.Contains("`CreateOrderCommandHandler`", impactText);
+        Assert.Contains("`CreateOrderCommandValidator`", impactText);
+        Assert.Contains("`OrderCreatedNotification`", impactText);
+
+        // 10. diff_architecture (base == head -> empty delta)
+        var diffResp = JsonNode.Parse(lines[9])!.AsObject();
+        Assert.False(diffResp["result"]!["isError"]!.GetValue<bool>());
+        var diffText = diffResp["result"]!["content"]![0]!["text"]!.GetValue<string>();
+        Assert.Contains("# CqrsLens Architecture Diff", diffText);
+        Assert.Contains("- **Changed**: no", diffText);
+        Assert.Contains("_No architecture delta:", diffText);
     }
 
     [Fact]

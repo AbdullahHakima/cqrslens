@@ -497,11 +497,13 @@ public class ReportHardeningTests
         Assert.DoesNotContain("mermaid.min.js", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("<pre class=\"mermaid\">", html, StringComparison.OrdinalIgnoreCase);
 
-        Assert.Equal(4, Regex.Count(html, "<div class=\"svg-diagram\"><svg "));
+        // 4 architecture diagrams + the per-request sequence for PlaceOrderCommand.
+        Assert.Equal(5, Regex.Count(html, "<div class=\"svg-diagram\"><svg "));
         Assert.Contains("<title>Project dependency graph</title>", html);
         Assert.Contains("<title>Layer diagram</title>", html);
         Assert.Contains("<title>CQRS map</title>", html);
         Assert.Contains("<title>ShopDbContext ER diagram</title>", html);
+        Assert.Contains("<title>Request sequence: PlaceOrderCommand</title>", html);
         Assert.Contains("PlaceOrderCommand", html);
         Assert.Contains("PlaceOrderHandler", html);
         Assert.Contains("PlaceOrderValidator", html);

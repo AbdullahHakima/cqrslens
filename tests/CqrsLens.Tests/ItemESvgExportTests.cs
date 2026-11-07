@@ -152,6 +152,7 @@ public sealed class ItemESvgExportTests : IDisposable
                 "layers.svg",
                 "notifications.svg",
                 "project-graph.svg",
+                "sequence-CommandA.svg",
             },
             names);
 
