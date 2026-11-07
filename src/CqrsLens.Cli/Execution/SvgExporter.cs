@@ -99,8 +99,37 @@ internal static class SvgExporter
                 .ThenBy(c => c.Namespace, StringComparer.Ordinal)
                 .Select(DiagramBuilder.ErDiagram)
                 .Where(d => d is not null)!);
+        AddSequences(entries, result);
 
         return entries;
+    }
+
+    private static void AddSequences(List<(string Name, string Source)> entries, AnalysisResult result)
+    {
+        var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var sequence in RequestSequenceBuilder.Build(result))
+        {
+            if (!DiagramBuilder.IsWithinMermaidLimits(sequence.Source))
+                continue;
+
+            var baseName = "sequence-" + SanitizeFileName(sequence.RequestName);
+            var name = baseName + ".svg";
+            var suffix = 1;
+            while (!usedNames.Add(name))
+            {
+                suffix++;
+                name = $"{baseName}-{suffix}.svg";
+            }
+
+            entries.Add((name, sequence.Source));
+        }
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        var chars = value.Select(c => char.IsLetterOrDigit(c) || c == '-' || c == '_' ? c : '-').ToArray();
+        var name = new string(chars).Trim('-');
+        return name.Length == 0 ? "request" : name;
     }
 
     private static void AddSingle(List<(string Name, string Source)> entries, string name, string? source)

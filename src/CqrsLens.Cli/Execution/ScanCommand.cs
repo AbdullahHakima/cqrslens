@@ -38,6 +38,8 @@ internal static class ScanCommand
             stdout.Write(AgentReportGenerator.Generate(result, options.SliceFilter));
             if (options.ExportSvgDirectory is not null)
                 SvgExporter.Export(result, options.ExportSvgDirectory, scan.CqrsMapSplit);
+            if (options.ExportMermaidDirectory is not null)
+                MermaidExporter.Export(result, options.ExportMermaidDirectory, scan.CqrsMapSplit);
             return ExitCodes.Success;
         }
 
@@ -59,6 +61,8 @@ internal static class ScanCommand
 
         if (options.ExportSvgDirectory is not null)
             SvgExporter.Export(result, options.ExportSvgDirectory, scan.CqrsMapSplit);
+        if (options.ExportMermaidDirectory is not null)
+            MermaidExporter.Export(result, options.ExportMermaidDirectory, scan.CqrsMapSplit);
 
         if (options.GitHubAnnotations)
             GitHubAnnotations.Write(result, stdout, scan.CiRoot);
