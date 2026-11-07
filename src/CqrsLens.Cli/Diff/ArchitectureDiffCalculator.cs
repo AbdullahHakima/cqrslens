@@ -28,6 +28,11 @@ internal static class ArchitectureDiffCalculator
             Behaviors = BehaviorDiffComparer.Compare(baseline.Behaviors, current.Behaviors),
             DbContexts = DbContextDiffComparer.Compare(baseline.DbContexts, current.DbContexts),
             Checks = CheckDiffComparer.Compare(baseline.Checks, current.Checks),
+            // Not part of the CLI-visible diff surface (JsonIgnore on the section), but computed
+            // by this same calculator so the MCP diff answer shares one diff logic.
+            Endpoints = EndpointDiffComparer.Compare(
+                baseline.Endpoints ?? new List<JsonEndpoint>(),
+                current.Endpoints ?? new List<JsonEndpoint>()),
         };
 
         diff.HasChanges =
