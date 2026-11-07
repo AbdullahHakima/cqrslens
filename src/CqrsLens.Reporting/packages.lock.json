@@ -86,7 +86,7 @@
       "cqrslens.analysis": {
         "type": "Project",
         "dependencies": {
-          "CqrsLens.Core": "[0.7.0, )",
+          "CqrsLens.Core": "[1.0.0, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )"
         }
       },

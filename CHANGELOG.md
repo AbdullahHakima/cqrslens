@@ -2,7 +2,59 @@
 
 All notable changes to CqrsLens are documented here.
 
-## [Unreleased]
+## [1.0.0] - 2026-11-07
+
+### Added
+
+- **`--ascii` / `--unicode`** (or `CQRSLENS_ASCII=1`) switch the console to a
+  single-width character set. Terminals using a CJK font draw box-drawing and
+  block characters two cells wide, which sheared the summary card, the
+  progress bar and the banner apart; ASCII mode substitutes `+ - |` chrome,
+  `#`/`-` bar cells and `+ ! x` status icons, and drops the pixel wordmark and
+  the watermark block art, which have no single-width equivalent. Reports
+  always keep the Unicode frame — they are files, not terminals.
+
+- **Per-request sequence diagrams** in Markdown and HTML reports: one per
+  request with a resolved handler — endpoint → mediator → pipeline behaviors
+  (registered order) → handler → DbContext → published notifications — each
+  captioned with what it is built from.
+- **MCP tools for agent workflows**: `verify_claim` checks a subject /
+  relation / object claim against the scan and answers `supported`,
+  `not supported` or `not determinable` with its evidence;
+  `check_architecture` accepts rule, severity and project filters and can
+  group findings by project; `trace_slice` returns a structured slice;
+  `trace_request_impact` lists what a request reaches; `diff_architecture`
+  diffs two scans. All MCP tools are read-only.
+- **`--export-mermaid <directory>`** writes every diagram in the report as a
+  standalone `.mmd` file, under the same names as the SVG export.
+- **`--export-svg` now includes the sequence diagrams**: one
+  `sequence-<Request>.svg` per handled request, with a numeric suffix when
+  two requests share a name.
+
+### Changed
+
+- `--help` now honours the display flags around it, so `--help --ascii
+  --banner` renders the ASCII banner instead of ignoring both.
+- **Console branding now matches the product identity.** The banner is the
+  owl monogram beside the stepped-pixel `NOCTUA` wordmark, drawn in the
+  lapis / papyrus / saffron palette instead of a cyan-violet gradient. The
+  lockup degrades through four sizes so it never wraps mid-glyph, and
+  `COLUMNS` is honoured as a width override. `NOCTUA` is the display
+  identity only; the `cqrslens` command and the `CqrsLens` package keep
+  their technical names.
+- **Summary card rebuilt** as a single-column lapis plate with right-aligned
+  values and a diagnostic status strip. The card sizes itself to the
+  terminal, and the header no longer truncates long repository names.
+- Scan totals, report paths, warnings, errors and architecture-check counts
+  are colourised. The duplicated `Scanned …` line is dropped when the summary
+  card is shown.
+- Console output adapts to light terminals via `COLORFGBG`, falling back to
+  the deep lapis plate when the background cannot be detected.
+- **`--help` regrouped** into Report / Analysis / Checks and CI / Console /
+  Other, with aligned flag and description columns that wrap to the terminal
+  width instead of one 700-character usage line.
+- The `--watermark` stamp now uses the brand accent-to-ink gradient instead of
+  the previous amber/pink/purple ramp.
 
 ## [0.9.0] - 2026-11-02
 
