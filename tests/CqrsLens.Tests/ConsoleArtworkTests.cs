@@ -10,7 +10,7 @@ namespace CqrsLens.Tests;
 /// </summary>
 public sealed class ConsoleArtworkTests
 {
-    private const string Version = "0.9.0";
+    private const string Version = "1.0.0";
 
     [Theory]
     [InlineData(40)]
@@ -188,6 +188,17 @@ public sealed class ConsoleArtworkTests
 
         AssertPureAscii(bar);
         Assert.Contains("[##########----------]", bar, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AsciiProgressBar_ReplacesTheDetailSeparator()
+    {
+        var progress = new ScanProgress("Analyzing C# shapes", 2, 4, "157 file(s) · text");
+
+        var bar = ConsoleArtwork.FormatProgressBar(progress, useColor: false, barWidth: 20, ascii: true);
+
+        AssertPureAscii(bar);
+        Assert.Contains("157 file(s) - text", bar, StringComparison.Ordinal);
     }
 
     [Fact]

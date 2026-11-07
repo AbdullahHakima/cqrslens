@@ -186,15 +186,15 @@
       "CqrsLens": {
         "type": "Project",
         "dependencies": {
-          "CqrsLens.Analysis": "[0.9.0, )",
-          "CqrsLens.Core": "[0.9.0, )",
-          "CqrsLens.Reporting": "[0.9.0, )"
+          "CqrsLens.Analysis": "[1.0.0, )",
+          "CqrsLens.Core": "[1.0.0, )",
+          "CqrsLens.Reporting": "[1.0.0, )"
         }
       },
       "cqrslens.analysis": {
         "type": "Project",
         "dependencies": {
-          "CqrsLens.Core": "[0.9.0, )",
+          "CqrsLens.Core": "[1.0.0, )",
           "Microsoft.CodeAnalysis.CSharp": "[5.9.0, )"
         }
       },
@@ -204,8 +204,8 @@
       "cqrslens.reporting": {
         "type": "Project",
         "dependencies": {
-          "CqrsLens.Analysis": "[0.9.0, )",
-          "CqrsLens.Core": "[0.9.0, )"
+          "CqrsLens.Analysis": "[1.0.0, )",
+          "CqrsLens.Core": "[1.0.0, )"
         }
       }
     }

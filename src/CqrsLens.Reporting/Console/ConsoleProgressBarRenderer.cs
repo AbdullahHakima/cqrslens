@@ -20,7 +20,10 @@ internal static class ConsoleProgressBarRenderer
 
         var filledBar = Repeat(glyphs.BarFilled, filled);
         var emptyBar = Repeat(glyphs.BarEmpty, empty);
-        var detail = string.IsNullOrWhiteSpace(progress.Detail) ? "" : $" ({progress.Detail})";
+        var detailText = string.IsNullOrWhiteSpace(progress.Detail)
+            ? ""
+            : progress.Detail.Replace("·", glyphs.Separator, StringComparison.Ordinal);
+        var detail = detailText.Length == 0 ? "" : $" ({detailText})";
         var plain = $"  [{filledBar}{emptyBar}] {percent,3}% {glyphs.Separator} {progress.Phase}{detail}";
 
         if (!useColor)

@@ -2,7 +2,7 @@
 
 All notable changes to CqrsLens are documented here.
 
-## [Unreleased]
+## [1.0.0] - 2026-11-07
 
 ### Added
 
@@ -13,6 +13,23 @@ All notable changes to CqrsLens are documented here.
   `#`/`-` bar cells and `+ ! x` status icons, and drops the pixel wordmark and
   the watermark block art, which have no single-width equivalent. Reports
   always keep the Unicode frame — they are files, not terminals.
+
+- **Per-request sequence diagrams** in Markdown and HTML reports: one per
+  request with a resolved handler — endpoint → mediator → pipeline behaviors
+  (registered order) → handler → DbContext → published notifications — each
+  captioned with what it is built from.
+- **MCP tools for agent workflows**: `verify_claim` checks a subject /
+  relation / object claim against the scan and answers `supported`,
+  `not supported` or `not determinable` with its evidence;
+  `check_architecture` accepts rule, severity and project filters and can
+  group findings by project; `trace_slice` returns a structured slice;
+  `trace_request_impact` lists what a request reaches; `diff_architecture`
+  diffs two scans. All MCP tools are read-only.
+- **`--export-mermaid <directory>`** writes every diagram in the report as a
+  standalone `.mmd` file, under the same names as the SVG export.
+- **`--export-svg` now includes the sequence diagrams**: one
+  `sequence-<Request>.svg` per handled request, with a numeric suffix when
+  two requests share a name.
 
 ### Changed
 
