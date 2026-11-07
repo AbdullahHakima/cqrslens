@@ -95,6 +95,9 @@ public static class CliParser
                 case "--export-svg":
                     options.ExportSvgDirectory = ReadExportSvgDirectory(reader);
                     break;
+                case "--export-mermaid":
+                    options.ExportMermaidDirectory = ReadExportMermaidDirectory(reader);
+                    break;
                 case "--cqrs-map-split":
                     options.CqrsMapSplit = ParseCqrsMapSplit(
                         reader.ReadValue("--cqrs-map-split", "a value: count, feature or unsplit"));
@@ -184,6 +187,15 @@ public static class CliParser
         var directory = reader.ReadValue("--export-svg", "a directory, e.g. --export-svg diagrams").Trim();
         if (directory.Length == 0)
             throw new CliParseException("error: --export-svg directory cannot be empty.");
+
+        return directory;
+    }
+
+    private static string ReadExportMermaidDirectory(ArgumentReader reader)
+    {
+        var directory = reader.ReadValue("--export-mermaid", "a directory, e.g. --export-mermaid diagrams").Trim();
+        if (directory.Length == 0)
+            throw new CliParseException("error: --export-mermaid directory cannot be empty.");
 
         return directory;
     }

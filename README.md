@@ -533,6 +533,11 @@ readable and every request appears exactly once.
 
 ### Data access and EF Core ER diagram
 
+A class counts as a context when it derives from a data-context base - `DbContext`
+for EF Core, or the provider equivalent for MongoDB and in-memory contexts - through
+any number of intermediate base classes. Only concrete classes are listed: abstract
+base contexts are not counted on their own.
+
 Every `DbContext` is listed with its `DbSet<T>` properties, followed by a Mermaid
 `erDiagram` built from root `DbSet<T>` entities, transitive keyed entities reached
 through navigation properties, primary/foreign keys, data annotations (`[Key]`,

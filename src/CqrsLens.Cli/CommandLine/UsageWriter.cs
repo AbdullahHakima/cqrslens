@@ -57,6 +57,8 @@ internal static class UsageWriter
                     "HTML diagrams: mermaid (default) or svg (zero-JS inline SVG)."),
                 ("--export-svg DIR",
                     "Also write every diagram as a standalone .svg file into DIR (created when missing)."),
+                ("--export-mermaid DIR",
+                    "Also write every diagram as a standalone .mmd file into DIR (created when missing)."),
                 ("--summary FILE",
                     "Also write a compact Markdown job summary."),
                 ("--generated-at ISO8601",
