@@ -5,6 +5,20 @@ where they exist; the dates are not promises.
 
 ## Done
 
+**1.0.0** (November 2026)
+
+- **Per-request sequence diagrams**: endpoint → mediator → behaviors →
+  handler → DbContext → notifications, drawn per handled request in
+  Markdown and HTML
+- **An MCP layer for agents**: `verify_claim` answers whether a claim
+  about the codebase is supported by the scan, with evidence;
+  `diff_architecture`, filtered and grouped `check_architecture`,
+  structured `trace_slice`, `trace_request_impact` — all read-only
+- **Console identity**: the Noctua owl lockup, lapis palette,
+  single-column summary card, `--ascii` mode for terminals that need it
+- **Diagram exports completed**: sequence diagrams in `--export-svg`,
+  and `--export-mermaid` for standalone .mmd files
+
 **0.9.0** (November 2026)
 
 - **Flow diagrams**: the report now draws the dispatch flow it already
