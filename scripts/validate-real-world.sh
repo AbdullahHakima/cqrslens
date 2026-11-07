@@ -17,7 +17,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 output="${CQRSLENS_VALIDATION_OUTPUT:-$repo_root/artifacts/validation}"
 corpus="${CQRSLENS_VALIDATION_CORPUS:-$repo_root/validation/corpus.tsv}"
-tool="${CQRSLENS_VALIDATION_TOOL:-$repo_root/src/CqrsLens/bin/Release/net8.0/cqrslens.dll}"
+tool="${CQRSLENS_VALIDATION_TOOL:-$repo_root/src/CqrsLens.Cli/bin/Release/net8.0/cqrslens.dll}"
 keep="${CQRSLENS_VALIDATION_KEEP:-0}"
 
 if ! command -v git >/dev/null 2>&1; then
@@ -119,10 +119,10 @@ while IFS=$'\t' read -r name url ref subdir markers handler_markers; do
     fi
 
     if [[ -f "$log" ]]; then
-        scanned_line="$(grep 'Scanned .* project(s):' "$log" | tail -n1 | tr -d '\r' || true)"
+        scanned_line="$(grep 'Scanned .* project(s),' "$log" | tail -n1 | tr -d '\r' || true)"
         if [[ -n "$scanned_line" ]]; then
             parsed_counts="$(printf '%s\n' "$scanned_line" | sed -nE \
-                's/.*Scanned ([0-9]+) project\(s\): ([0-9]+) request\(s\), ([0-9]+) handler\(s\), ([0-9]+) validator\(s\), ([0-9]+) behavior\(s\), ([0-9]+) DbContext\(s\).*/\1 \2 \3 \4 \5 \6/p')"
+                's/.*Scanned ([0-9]+) project\(s\), ([0-9]+) request\(s\), ([0-9]+) handler\(s\), ([0-9]+) validator\(s\), ([0-9]+) behavior\(s\), ([0-9]+) DbContext\(s\).*/\1 \2 \3 \4 \5 \6/p')"
             if [[ -n "$parsed_counts" ]]; then
                 read -r projects requests handlers validators behaviors dbcontexts <<< "$parsed_counts"
             fi
