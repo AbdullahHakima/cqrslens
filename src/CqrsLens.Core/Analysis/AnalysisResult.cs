@@ -18,6 +18,15 @@ public sealed class AnalysisResult
     public List<ValidatorInfo> Validators { get; } = new();
     public List<BehaviorInfo> Behaviors { get; } = new();
     public List<DbContextInfo> DbContexts { get; } = new();
+
+    /// <summary>
+    /// Service-resolution index: interface → implementation, built from concrete class
+    /// declarations and explicit MS-DI/Autofac registrations. Additive model data used
+    /// by consumers to resolve constructor-injected interfaces through DI; it never
+    /// changes an existing count, finding or report field on its own.
+    /// </summary>
+    public List<ServiceResolution> ServiceResolutions { get; } = new();
+
     public List<CqrsNotification> Notifications { get; } = new();
     public List<NotificationHandlerInfo> NotificationHandlers { get; } = new();
     public List<EndpointInfo> Endpoints { get; } = new();
