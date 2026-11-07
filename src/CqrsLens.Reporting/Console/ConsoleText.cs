@@ -88,4 +88,21 @@ internal static class ConsoleText
         var rightPad = totalPad - leftPad;
         return new string(' ', leftPad) + text + new string(' ', rightPad);
     }
+
+    /// <summary>
+    /// Shortens <paramref name="text"/> to exactly <paramref name="width"/>
+    /// characters, reserving room for <paramref name="ellipsis"/>. The marker is
+    /// dropped when it cannot fit, so the result never exceeds the budget.
+    /// </summary>
+    internal static string Truncate(string text, int width, string ellipsis)
+    {
+        if (width <= 0)
+            return string.Empty;
+
+        if (text.Length <= width)
+            return text;
+
+        var marker = ellipsis.Length < width ? ellipsis : string.Empty;
+        return text[..(width - marker.Length)] + marker;
+    }
 }

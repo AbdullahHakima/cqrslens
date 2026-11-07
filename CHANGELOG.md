@@ -4,6 +4,41 @@ All notable changes to CqrsLens are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **`--ascii` / `--unicode`** (or `CQRSLENS_ASCII=1`) switch the console to a
+  single-width character set. Terminals using a CJK font draw box-drawing and
+  block characters two cells wide, which sheared the summary card, the
+  progress bar and the banner apart; ASCII mode substitutes `+ - |` chrome,
+  `#`/`-` bar cells and `+ ! x` status icons, and drops the pixel wordmark and
+  the watermark block art, which have no single-width equivalent. Reports
+  always keep the Unicode frame — they are files, not terminals.
+
+### Changed
+
+- `--help` now honours the display flags around it, so `--help --ascii
+  --banner` renders the ASCII banner instead of ignoring both.
+- **Console branding now matches the product identity.** The banner is the
+  owl monogram beside the stepped-pixel `NOCTUA` wordmark, drawn in the
+  lapis / papyrus / saffron palette instead of a cyan-violet gradient. The
+  lockup degrades through four sizes so it never wraps mid-glyph, and
+  `COLUMNS` is honoured as a width override. `NOCTUA` is the display
+  identity only; the `cqrslens` command and the `CqrsLens` package keep
+  their technical names.
+- **Summary card rebuilt** as a single-column lapis plate with right-aligned
+  values and a diagnostic status strip. The card sizes itself to the
+  terminal, and the header no longer truncates long repository names.
+- Scan totals, report paths, warnings, errors and architecture-check counts
+  are colourised. The duplicated `Scanned …` line is dropped when the summary
+  card is shown.
+- Console output adapts to light terminals via `COLORFGBG`, falling back to
+  the deep lapis plate when the background cannot be detected.
+- **`--help` regrouped** into Report / Analysis / Checks and CI / Console /
+  Other, with aligned flag and description columns that wrap to the terminal
+  width instead of one 700-character usage line.
+- The `--watermark` stamp now uses the brand accent-to-ink gradient instead of
+  the previous amber/pink/purple ramp.
+
 ## [0.9.0] - 2026-11-02
 
 The reporting release: the flow data the scanner already collected is now

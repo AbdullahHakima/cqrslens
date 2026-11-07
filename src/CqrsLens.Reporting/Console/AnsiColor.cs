@@ -15,6 +15,37 @@ internal static class AnsiColor
             : $"\x1b[38;2;{r};{g};{b}m{text}\x1b[0m";
     }
 
+    internal static string Colorize(
+        string text,
+        (byte R, byte G, byte B) color,
+        bool bold = false)
+        => Colorize(text, color.R, color.G, color.B, bold);
+
+    /// <summary>Strips ANSI escapes so rendered lines can be measured.</summary>
+    internal static int VisibleLength(string text)
+    {
+        var length = 0;
+        for (var i = 0; i < text.Length; i++)
+        {
+            if (text[i] != '\x1b')
+            {
+                length++;
+                continue;
+            }
+
+            // Skip a CSI sequence: ESC [ ... final-byte.
+            i++;
+            if (i < text.Length && text[i] == '[')
+            {
+                i++;
+                while (i < text.Length && (text[i] < '@' || text[i] > '~'))
+                    i++;
+            }
+        }
+
+        return length;
+    }
+
     internal static void AppendGradientLine(
         StringBuilder sb,
         string line,
