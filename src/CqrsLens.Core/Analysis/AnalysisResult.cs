@@ -75,6 +75,13 @@ public sealed class AnalysisResult
     /// </summary>
     internal bool HasConfiguredLayers { get; set; }
 
+    /// <summary>
+    /// The resolved configuration this scan ran under, for the reports' declared-vs-actual
+    /// view. Populated from the CLI scan path; it never feeds detection and is not
+    /// part of the JSON contract.
+    /// </summary>
+    public ConfigurationProvenance Configuration { get; set; } = ConfigurationProvenance.Empty;
+
     /// <summary>Optional custom watermark stamp rendered in console and generated reports.</summary>
     public string? Watermark { get; set; }
 

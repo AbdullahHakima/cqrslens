@@ -34,6 +34,9 @@ internal static class MarkdownDbContextWriter
                     $"| {MarkdownEscaping.TableCell(ctx.Name)} | {MarkdownEscaping.TableCell(ctx.ProjectName ?? "—")} | {MarkdownEscaping.TableCell(sets)} |");
             }
 
+            md.AppendLine();
+            MarkdownDataModelWriter.Write(md, DataModelView.Build(result));
+
             foreach (var ctx in orderedContexts)
             {
                 var erDiagram = DiagramBuilder.ErDiagram(ctx);

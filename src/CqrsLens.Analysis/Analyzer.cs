@@ -77,6 +77,11 @@ public static class Analyzer
         ScanShapes(workspace, scanner, markerSet, options, result);
         phases.Record("Scan shapes");
 
+        // Resolve where each behavior is registered (source-text based, so identical
+        // in text and Roslyn modes). Presentation-only: it sets no counts or findings.
+        BehaviorRegistrationResolver.Resolve(workspace, result);
+        phases.Record("Resolve behavior registrations");
+
         RecordSkippedSourceDiagnostics(root, result);
 
         options.Progress?.Invoke(new ScanProgress(

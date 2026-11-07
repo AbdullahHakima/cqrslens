@@ -63,6 +63,8 @@ public static class HtmlReportGenerator
         AppendCard(html, "Architecture checks", $"{checkErrors} error(s), {checkWarnings} warning(s)");
         html.AppendLine("</section>");
 
+        HtmlConfigurationSectionRenderer.Append(html, result);
+
         // ---- Diagrams ----------------------------------------------------------
         HtmlDiagramSectionRenderer.Append(html, "Project Dependency Graph", DiagramBuilder.ProjectGraph(result),
             "No projects found.", renderMode);
@@ -87,7 +89,10 @@ public static class HtmlReportGenerator
                             "their top-level folder.</p>");
         }
         HtmlDiagramSectionRenderer.AppendCqrs(html, result, renderMode, cqrsMapSplit);
+        HtmlValidationCoverageSectionRenderer.Append(html, result);
         HtmlDiagramSectionRenderer.AppendFlow(html, result, renderMode);
+        HtmlSequenceSectionRenderer.Append(html, result, renderMode);
+        HtmlEndpointSectionRenderer.Append(html, result);
 
         // ---- Requests table & Interactive Explorer ------------------------------
         HtmlRequestExplorerRenderer.Render(html, result, renderMode);

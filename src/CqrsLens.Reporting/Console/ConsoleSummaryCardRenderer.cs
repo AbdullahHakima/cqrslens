@@ -3,78 +3,185 @@ using System.Text;
 
 namespace CqrsLens;
 
-/// <summary>Renders the Unicode box-drawing summary card of a scan.</summary>
+/// <summary>
+/// Renders the scan summary as a lapis plate card: brand rule, papyrus labels,
+/// cream values and a diagnostic status strip. The card shrinks to fit the
+/// terminal instead of overflowing.
+/// </summary>
 internal static class ConsoleSummaryCardRenderer
 {
-    internal static string Render(AnalysisResult result, bool useColor)
-    {
-        var errors = result.Checks.Count(c => c.Severity == CheckSeverity.Error);
-        var warnings = result.Checks.Count - errors;
-        var statusText = errors == 0 && warnings == 0
-            ? "✔ Passed (0 issues)"
-            : $"{errors} error(s), {warnings} warning(s)";
+    private const int MaxCardWidth = 78;
+    private const int MinValueWidth = 6;
+    private const int MinLabelWidth = 6;
 
-        var rows = new List<(string Label, string Value, (byte R, byte G, byte B) Color)>
+    internal static string Render(
+        AnalysisResult result,
+        bool useColor,
+        ConsolePalette palette,
+        ConsoleGlyphs glyphs,
+        int width)
+    {
+        var errors = result.Checks.Count(check => check.Severity == CheckSeverity.Error);
+        var warnings = result.Checks.Count - errors;
+        var dot = glyphs.Separator;
+
+        var rows = new (string Label, string Value)[]
         {
-            ("Projects", result.Projects.Count.ToString(CultureInfo.InvariantCulture), (56, 189, 248)),
-            ("Requests (Commands/Queries)", result.Requests.Count.ToString(CultureInfo.InvariantCulture), (99, 102, 241)),
-            ("Handlers", result.Handlers.Count.ToString(CultureInfo.InvariantCulture), (129, 140, 248)),
-            ("Validators", result.Validators.Count.ToString(CultureInfo.InvariantCulture), (168, 85, 247)),
-            ("Pipeline Behaviors", result.Behaviors.Count.ToString(CultureInfo.InvariantCulture), (192, 132, 252)),
-            ("EF Core DbContexts", result.DbContexts.Count.ToString(CultureInfo.InvariantCulture), (232, 121, 249)),
-            ("Scanner / Timing", $"{result.ScannerName} · {result.ElapsedMilliseconds} ms", (148, 163, 184)),
-            ("Architecture Checks", statusText, errors > 0 ? ((byte)251, (byte)113, (byte)133) : warnings > 0 ? ((byte)251, (byte)191, (byte)36) : ((byte)52, (byte)211, (byte)153)),
+            ("Projects", Count(result.Projects.Count)),
+            ("Requests (Commands / Queries)", Count(result.Requests.Count)),
+            ("Handlers", Count(result.Handlers.Count)),
+            ("Validators", Count(result.Validators.Count)),
+            ("Pipeline Behaviors", Count(result.Behaviors.Count)),
+            ("EF Core DbContexts", Count(result.DbContexts.Count)),
+            ($"Scanner {dot} Timing", $"{result.ScannerName} {dot} {result.ElapsedMilliseconds} ms"),
         };
 
-        const int labelWidth = 29;
-        var valueWidth = Math.Max(26, rows.Max(r => r.Value.Length) + 2);
+        var (statusIcon, statusText, statusColor) = Status(errors, warnings, dot, palette, glyphs);
+
+        var labelWidth = rows.Max(row => row.Label.Length);
+        var valueWidth = rows.Max(row => row.Value.Length);
+        var inner = FitInner(labelWidth, valueWidth, width, out labelWidth, out valueWidth);
+
+        var title = $"NOCTUA {dot} ARCHITECTURE SUMMARY";
+        var subtitle = new DirectoryInfo(result.RootPath).Name;
 
         var sb = new StringBuilder();
-        var top = $"╭─{new string('─', labelWidth)}─┬─{new string('─', valueWidth)}─╮";
-        var mid = $"├─{new string('─', labelWidth)}─┼─{new string('─', valueWidth)}─┤";
-        var bot = $"╰─{new string('─', labelWidth)}─┴─{new string('─', valueWidth)}─╯";
 
-        sb.AppendLine(useColor ? AnsiColor.Colorize(top, 100, 116, 139) : top);
-        var headerLeft = "CqrsLens Architecture Summary".PadRight(labelWidth);
-        var headerRight = new DirectoryInfo(result.RootPath).Name;
-        if (headerRight.Length > valueWidth)
-            headerRight = headerRight[..(valueWidth - 1)] + "…";
-        headerRight = headerRight.PadRight(valueWidth);
+        AppendRule(sb, glyphs.TopLeft, glyphs.TopRight, inner, useColor, palette, glyphs);
+        AppendTextRow(sb, title, inner, useColor, palette.Ink, bold: true, palette, glyphs);
+        AppendTextRow(sb, subtitle, inner, useColor, palette.InkMuted, bold: false, palette, glyphs);
+        AppendRule(sb, glyphs.LeftTee, glyphs.RightTee, inner, useColor, palette, glyphs);
 
-        if (useColor)
-        {
-            sb.Append(AnsiColor.Colorize("│ ", 100, 116, 139));
-            sb.Append(AnsiColor.Colorize(headerLeft, 56, 189, 248, bold: true));
-            sb.Append(AnsiColor.Colorize(" │ ", 100, 116, 139));
-            sb.Append(AnsiColor.Colorize(headerRight, 226, 232, 240, bold: true));
-            sb.AppendLine(AnsiColor.Colorize(" │", 100, 116, 139));
-            sb.AppendLine(AnsiColor.Colorize(mid, 100, 116, 139));
-        }
-        else
-        {
-            sb.AppendLine($"│ {headerLeft} │ {headerRight} │");
-            sb.AppendLine(mid);
-        }
+        foreach (var (label, value) in rows)
+            AppendValueRow(sb, label, value, labelWidth, valueWidth, useColor, palette, glyphs);
 
-        foreach (var (label, value, color) in rows)
-        {
-            var paddedLabel = label.PadRight(labelWidth);
-            var paddedValue = value.PadRight(valueWidth);
-            if (useColor)
-            {
-                sb.Append(AnsiColor.Colorize("│ ", 100, 116, 139));
-                sb.Append(AnsiColor.Colorize(paddedLabel, 203, 213, 225));
-                sb.Append(AnsiColor.Colorize(" │ ", 100, 116, 139));
-                sb.Append(AnsiColor.Colorize(paddedValue, color.R, color.G, color.B, bold: true));
-                sb.AppendLine(AnsiColor.Colorize(" │", 100, 116, 139));
-            }
-            else
-            {
-                sb.AppendLine($"│ {paddedLabel} │ {paddedValue} │");
-            }
-        }
+        AppendRule(sb, glyphs.LeftTee, glyphs.RightTee, inner, useColor, palette, glyphs);
+        AppendStatusRow(sb, statusIcon, statusText, statusColor, inner, useColor, palette, glyphs);
+        AppendRule(sb, glyphs.BottomLeft, glyphs.BottomRight, inner, useColor, palette, glyphs);
 
-        sb.AppendLine(useColor ? AnsiColor.Colorize(bot, 100, 116, 139) : bot);
         return sb.ToString().TrimEnd('\r', '\n');
     }
+
+    private static (string Icon, string Text, (byte R, byte G, byte B) Color) Status(
+        int errors,
+        int warnings,
+        string dot,
+        ConsolePalette palette,
+        ConsoleGlyphs glyphs)
+    {
+        if (errors > 0)
+        {
+            return (glyphs.Fail,
+                $"{Count(errors)} error(s) {dot} {Count(warnings)} warning(s)",
+                palette.Error);
+        }
+
+        if (warnings > 0)
+            return (glyphs.Warn, $"{Count(warnings)} warning(s) {dot} no errors", palette.Warn);
+
+        return (glyphs.Pass, $"Passed {dot} no findings", palette.Pass);
+    }
+
+    private static int FitInner(
+        int labelWidth,
+        int valueWidth,
+        int width,
+        out int fittedLabelWidth,
+        out int fittedValueWidth)
+    {
+        var maxInner = Math.Max(24, Math.Min(width - 2, MaxCardWidth) - 2);
+        var inner = Math.Min(labelWidth + valueWidth + 6, maxInner);
+        var budget = Math.Max(MinLabelWidth + MinValueWidth, inner - 6);
+
+        if (labelWidth + valueWidth > budget)
+        {
+            var overflow = labelWidth + valueWidth - budget;
+
+            var reducedValue = Math.Max(MinValueWidth, valueWidth - overflow);
+            overflow -= valueWidth - reducedValue;
+            valueWidth = reducedValue;
+
+            labelWidth = Math.Max(MinLabelWidth, labelWidth - overflow);
+        }
+
+        fittedLabelWidth = labelWidth;
+        fittedValueWidth = valueWidth;
+
+        return labelWidth + valueWidth + 6;
+    }
+
+    private static void AppendRule(
+        StringBuilder sb,
+        string left,
+        string right,
+        int inner,
+        bool useColor,
+        ConsolePalette palette,
+        ConsoleGlyphs glyphs)
+    {
+        var line = left + Repeat(glyphs.Horizontal, inner) + right;
+        sb.AppendLine(useColor ? AnsiColor.Colorize(line, palette.Rule) : line);
+    }
+
+    private static void AppendTextRow(
+        StringBuilder sb,
+        string text,
+        int inner,
+        bool useColor,
+        (byte R, byte G, byte B) color,
+        bool bold,
+        ConsolePalette palette,
+        ConsoleGlyphs glyphs)
+    {
+        var content = "  " + ConsoleText.Truncate(text, inner - 2, glyphs.Ellipsis).PadRight(inner - 2);
+
+        sb.Append(useColor ? AnsiColor.Colorize(glyphs.Vertical, palette.Rule) : glyphs.Vertical);
+        sb.Append(useColor ? AnsiColor.Colorize(content, color, bold) : content);
+        sb.AppendLine(useColor ? AnsiColor.Colorize(glyphs.Vertical, palette.Rule) : glyphs.Vertical);
+    }
+
+    private static void AppendValueRow(
+        StringBuilder sb,
+        string label,
+        string value,
+        int labelWidth,
+        int valueWidth,
+        bool useColor,
+        ConsolePalette palette,
+        ConsoleGlyphs glyphs)
+    {
+        var labelText = ConsoleText.Truncate(label, labelWidth, glyphs.Ellipsis).PadRight(labelWidth);
+        var valueText = ConsoleText.Truncate(value, valueWidth, glyphs.Ellipsis).PadLeft(valueWidth);
+
+        sb.Append(useColor ? AnsiColor.Colorize(glyphs.Vertical, palette.Rule) : glyphs.Vertical);
+        sb.Append("  ");
+        sb.Append(useColor ? AnsiColor.Colorize(labelText, palette.InkMuted) : labelText);
+        sb.Append("  ");
+        sb.Append(useColor ? AnsiColor.Colorize(valueText, palette.Ink, bold: true) : valueText);
+        sb.Append("  ");
+        sb.AppendLine(useColor ? AnsiColor.Colorize(glyphs.Vertical, palette.Rule) : glyphs.Vertical);
+    }
+
+    private static void AppendStatusRow(
+        StringBuilder sb,
+        string icon,
+        string text,
+        (byte R, byte G, byte B) color,
+        int inner,
+        bool useColor,
+        ConsolePalette palette,
+        ConsoleGlyphs glyphs)
+    {
+        var padded = ConsoleText.Truncate($"  {icon} {text}", inner, glyphs.Ellipsis).PadRight(inner);
+
+        sb.Append(useColor ? AnsiColor.Colorize(glyphs.Vertical, palette.Rule) : glyphs.Vertical);
+        sb.Append(useColor ? AnsiColor.Colorize(padded, color, bold: true) : padded);
+        sb.AppendLine(useColor ? AnsiColor.Colorize(glyphs.Vertical, palette.Rule) : glyphs.Vertical);
+    }
+
+    private static string Repeat(string glyph, int count)
+        => string.Concat(Enumerable.Repeat(glyph, count));
+
+    private static string Count(int value)
+        => value.ToString(CultureInfo.InvariantCulture);
 }

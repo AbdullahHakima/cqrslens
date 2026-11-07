@@ -13,10 +13,14 @@ internal static class MarkdownReportWriter
         var md = new StringBuilder();
 
         MarkdownOverviewWriter.Write(md, result);
+        MarkdownConfigurationWriter.Write(md, result);
         MarkdownDiagramWriter.WriteProjectGraph(md, result);
         MarkdownDiagramWriter.WriteLayers(md, result);
         MarkdownCqrsWriter.Write(md, result, cqrsMapSplit);
+        MarkdownValidationCoverageWriter.Write(md, result);
         MarkdownDiagramWriter.WriteFlow(md, result);
+        MarkdownSequenceWriter.Write(md, result);
+        MarkdownEndpointWriter.Write(md, result);
         MarkdownCqrsWriter.WriteRequestsTable(md, result);
         MarkdownNotificationWriter.Write(md, result);
         MarkdownBehaviorWriter.Write(md, result);

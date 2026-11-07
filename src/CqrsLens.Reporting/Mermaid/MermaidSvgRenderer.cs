@@ -16,6 +16,8 @@ public static class MermaidSvgRenderer
             .Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
         var firstLine = lines.FirstOrDefault(l => !string.IsNullOrWhiteSpace(l))?.Trim() ?? "";
+        if (firstLine.StartsWith("sequenceDiagram", StringComparison.Ordinal))
+            return MermaidSequenceRenderer.Render(lines);
         return firstLine.StartsWith("erDiagram", StringComparison.Ordinal)
             ? MermaidErRenderer.Render(lines)
             : MermaidFlowchartRenderer.Render(lines);
