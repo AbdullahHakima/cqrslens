@@ -17,6 +17,7 @@ public sealed class CliOptions
     public string? SarifPath { get; set; }
     public string? SummaryPath { get; set; }
     public string? ExportSvgDirectory { get; set; }
+    public string? ExportMermaidDirectory { get; set; }
     public string? CiRoot { get; set; }
     public bool GitHubAnnotations { get; set; }
     public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.Text;
@@ -33,6 +34,7 @@ public sealed class CliOptions
     public bool WatermarkSpecified { get; set; }
     public bool? Banner { get; set; }
     public bool? Color { get; set; }
+    public bool? Ascii { get; set; }
     public bool Mcp { get; set; }
     public bool Profile { get; set; }
 }

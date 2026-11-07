@@ -10,8 +10,7 @@ internal static class McpScanProvider
         McpScanCache cache)
     {
         var fullRoot = Path.GetFullPath(path);
-        var settings = ConfigurationLoader.Load(fullRoot, defaultOptions.ConfigPath);
-        var mode = ResolveAnalysisMode(analysisOverride, defaultOptions, settings);
+        var (mode, analysisOptions) = ResolveScanInputs(fullRoot, analysisOverride, defaultOptions);
         var cacheKey = $"{fullRoot}|{mode}";
         var fingerprint = McpScanFingerprintCalculator.Calculate(
             fullRoot,
@@ -21,6 +20,29 @@ internal static class McpScanProvider
         if (cache.TryGet(cacheKey, fingerprint, out var cached))
             return cached;
 
+        var result = Analyzer.Analyze(fullRoot, mode, analysisOptions);
+        if (defaultOptions.BaselinePath is not null && File.Exists(defaultOptions.BaselinePath))
+        {
+            var baseline = BaselineStore.Read(defaultOptions.BaselinePath);
+            BaselineMatcher.Apply(result, baseline, defaultOptions.BaselinePath);
+        }
+
+        cache.Set(cacheKey, result, fingerprint);
+        return result;
+    }
+
+    /// <summary>
+    /// Resolves the analysis mode and options the provider would use for a scan, without scanning.
+    /// The MCP diff tool passes these to the CLI's snapshot loader when its base operand is a folder,
+    /// exactly as the CLI's <c>--diff</c> passes the head scan's options.
+    /// </summary>
+    internal static (AnalysisMode Mode, AnalysisOptions Options) ResolveScanInputs(
+        string fullRoot,
+        string? analysisOverride,
+        CliOptions defaultOptions)
+    {
+        var settings = ConfigurationLoader.Load(fullRoot, defaultOptions.ConfigPath);
+        var mode = ResolveAnalysisMode(analysisOverride, defaultOptions, settings);
         var markers = defaultOptions.MarkersSpecified ? defaultOptions.Markers : settings.Markers;
         var handlerMarkers = defaultOptions.HandlerMarkersSpecified
             ? defaultOptions.HandlerMarkers
@@ -36,15 +58,7 @@ internal static class McpScanProvider
             RuleSeverities = settings.RuleSeverities,
         };
 
-        var result = Analyzer.Analyze(fullRoot, mode, analysisOptions);
-        if (defaultOptions.BaselinePath is not null && File.Exists(defaultOptions.BaselinePath))
-        {
-            var baseline = BaselineStore.Read(defaultOptions.BaselinePath);
-            BaselineMatcher.Apply(result, baseline, defaultOptions.BaselinePath);
-        }
-
-        cache.Set(cacheKey, result, fingerprint);
-        return result;
+        return (mode, analysisOptions);
     }
 
     private static AnalysisMode ResolveAnalysisMode(

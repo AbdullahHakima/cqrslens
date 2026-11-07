@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization.Metadata;
 
 namespace CqrsLens;
 
@@ -9,6 +10,7 @@ internal static class McpResponses
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = false,
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
     };
 
     public static string? ReadString(JsonNode? node)

@@ -13,6 +13,23 @@ internal static class ScanCommand
         var analysisOptions = scan.CreateAnalysisOptions(console.CreateProgressCallback());
         var result = Analyzer.Analyze(scan.RootPath, scan.AnalysisMode, analysisOptions);
 
+        // Record the resolved configuration for the reports' declared-vs-actual view.
+        // Facts the scan already resolved; nothing here feeds detection.
+        result.Configuration = new ConfigurationProvenance
+        {
+            ConfigFilePath = scan.Settings.ConfigPath,
+            DeclaredMarkers = MediatorConventions.EffectiveMarkers(scan.Markers, result.Conventions)
+                .OrderBy(m => m, StringComparer.Ordinal).ToList(),
+            DeclaredHandlerMarkers = MediatorConventions.EffectiveHandlerMarkers(scan.HandlerMarkers, result.Conventions)
+                .OrderBy(m => m, StringComparer.Ordinal).ToList(),
+            LayerOverrides = scan.Settings.LayerOverrides
+                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase),
+            IncludeGlobs = scan.Settings.Include.ToList(),
+            ExcludeGlobs = scan.Settings.Exclude.ToList(),
+            RuleOverrides = scan.Settings.RuleSeverities
+                .ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase),
+        };
+
         if (options.Profile)
             ProfileWriter.Write(result, stderr);
 
@@ -21,6 +38,8 @@ internal static class ScanCommand
             stdout.Write(AgentReportGenerator.Generate(result, options.SliceFilter));
             if (options.ExportSvgDirectory is not null)
                 SvgExporter.Export(result, options.ExportSvgDirectory, scan.CqrsMapSplit);
+            if (options.ExportMermaidDirectory is not null)
+                MermaidExporter.Export(result, options.ExportMermaidDirectory, scan.CqrsMapSplit);
             return ExitCodes.Success;
         }
 
@@ -42,6 +61,8 @@ internal static class ScanCommand
 
         if (options.ExportSvgDirectory is not null)
             SvgExporter.Export(result, options.ExportSvgDirectory, scan.CqrsMapSplit);
+        if (options.ExportMermaidDirectory is not null)
+            MermaidExporter.Export(result, options.ExportMermaidDirectory, scan.CqrsMapSplit);
 
         if (options.GitHubAnnotations)
             GitHubAnnotations.Write(result, stdout, scan.CiRoot);
