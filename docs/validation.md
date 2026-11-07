@@ -8,28 +8,32 @@ so an external repository changing or disappearing cannot block a release.
 
 ## Latest snapshot
 
-CqrsLens `0.6.0`, `text` and `roslyn` analysis, 2026-10-25:
+CqrsLens `1.0.0`, `text` analysis, 2026-11-07:
 
-| Repository | Commit | Path | Markers | Handler markers | Projects | Requests | Handlers | Validators | Behaviors | DbContexts | Checks (E/W) | Diagnostics (text / roslyn) |
+| Repository | Commit | Path | Markers | Handler markers | Projects | Requests | Handlers | Validators | Behaviors | DbContexts | Checks (E/W) | Diagnostics |
 | --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 4 | 1 | 0/3 | 0/0/0 · 0/1/0 |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `-` (auto `Mediator`) | `-` (auto `Mediator`) | 22 | 23 | 23 | 21 | 3 | 3 | 0/13 | 0/0/0 · 0/0/0 |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0 | 4 | 0/71 | 0/0/0 · 0/0/0 |
-| [martinothamar/Mediator](https://github.com/martinothamar/Mediator) | `8b87a0ed7474` | `samples` | `-` (auto `Mediator`) | `-` (auto `Mediator`) | 24 | 15 | 15 | 1 | 9 | 0 | 0/3 | 0/0/0 · 0/0/0 |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | `968abf7dc488` | `.` | `-` | `-` | 13 | 11 | 11 | 6 | 4 | 1 | 0/6 | 0/0/0 |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | `e7c79be54ba0` | `.` | `ICommand,IQuery` | `ICommandHandler,IQueryHandler` | 22 | 23 | 23 | 21 | 3 | 3 | 0/38 | 0/0/0 |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | `91c8ef24b4cb` | `src` | `ICommand,IQuery` | `-` | 46 | 105 | 105 | 5 | 0 | 4 | 0/205 | 0/0/0 |
+| [martinothamar/Mediator](https://github.com/martinothamar/Mediator) | `8b87a0ed7474` | `samples` | `-` | `-` | 24 | 15 | 15 | 1 | 9 | 0 | 0/12 | 0/0/0 |
 
 Timings are machine-dependent; counts and commits are the reproducible part.
-The 2026-10-23 rerun kept the scanner counts unchanged while regenerating the
-reports with the visualization hardening. Full Markdown reports, SARIF, logs and
-`results.tsv` come from the workflow artifact. The pinned refs live in
-[`validation/corpus.tsv`](../validation/corpus.tsv). The released `0.4.0`
-snapshot predates these scanner changes and linked far fewer shapes; this table
-is the `0.5.0` release snapshot.
+Full Markdown reports, SARIF, logs and `results.tsv` come from the workflow
+artifact. The pinned refs live in
+[`validation/corpus.tsv`](../validation/corpus.tsv). Against the previous
+(0.6.0) snapshot on the same pins, every shape count is unchanged — the scanner
+finds the same architecture. The warning counts grew because 0.8.0–1.0.0 added
+checks (reachability, orphan validators, orphan and unpublished
+notifications); the bullets below break the new totals down. A separate
+`--analysis roslyn` run over the same four checkouts produces identical shape
+and check counts.
 
 ### What this snapshot says
 
 - **MediatR-native app:** `jasontaylordev/CleanArchitecture` remains fully linked
-  (11 requests, 11 handlers, 6 validators). Its three warnings are commands that
-  genuinely have no validator in the scanned tree.
+  (11 requests, 11 handlers, 6 validators). Three of its six warnings are
+  commands that genuinely have no validator in the scanned tree; the rest are
+  2 `UnreachableRequest` and 1 `UnpublishedNotification` from the newer checks.
 - **External command/handler wrappers:** `ardalis/CleanArchitecture` detects 23
   requests and now links all 23 handlers after configuring
   `ICommandHandler,IQueryHandler` as handler roots. The explicit roots let the
@@ -37,12 +41,13 @@ is the `0.5.0` release snapshot.
   `MissingHandler` errors are gone. Without handler markers the default scan still
   links zero handlers and reports the wrapper gaps instead of guessing; the
   corpus row opts in explicitly.
-- **FastEndpoints validators:** 21 `Validator<T>` classes are now found and
-  linked to their endpoint request DTOs, and the 21 `UnresolvedContract` info
-  items are gone. The 13 `CommandWithoutValidator` warnings remain because they
-  are genuine: those validators target web request DTOs such as
-  `CreateContributorRequest`, while the MediatR commands have no validators in
-  the pinned tree. This is not a missed link.
+- **FastEndpoints validators:** 21 `Validator<T>` classes are found. They
+  validate web request DTOs such as `CreateContributorRequest`, not MediatR
+  requests, so they report as 21 `OrphanValidator` warnings — the validators
+  exist, they just do not belong to the CQRS graph. The 13
+  `CommandWithoutValidator` warnings are the mirror image (the MediatR commands
+  have no validators in the pinned tree), and 4 handled notifications are never
+  published. None of this is a missed link.
 - **Per-module contracts and request bases:** `modular-monolith-with-ddd` now
   finds 105 requests and links all 105 handlers, up from 2 requests and 120
   handlers in the #52 snapshot. The previous extra 15 handlers were duplicate
@@ -52,10 +57,13 @@ is the `0.5.0` release snapshot.
   chains and substitutes concrete response types such as `Guid` and
   `List<MeetingCommentDto>`. Five validators are found and linked through direct
   FluentValidation inheritance.
-- **The 71 modular warnings are real coverage gaps.** The sample defines only
-  five command validators, so `CommandWithoutValidator` correctly reports the
-  remaining discovered commands. There are no `MissingHandler` errors. The
-  warnings are useful validation coverage, not base-class false positives.
+- **The 205 modular warnings are real coverage gaps.** The sample defines only
+  five command validators, so `CommandWithoutValidator` accounts for 71 of
+  them. The rest are the newer checks: 62 `OrphanNotification`, 54
+  `UnreachableRequest` and 18 `UnpublishedNotification` — shapes the modules
+  declare but never wire to a handler, publisher or dispatcher in the scanned
+  source. There are no `MissingHandler` errors. The warnings are useful
+  validation coverage, not base-class false positives.
 - **Diagnostics are informative, not a clean bill of health.** No files were
   skipped and there are no scan diagnostics in this snapshot. The configured
   handler roots and built-in FastEndpoints validator root account for the known
@@ -127,8 +135,9 @@ These are user-facing limits, not promises that the current corpus can fix:
    sources, source generators and assembly references are not evaluated. Text
    mode is intentionally build-free; the Roslyn mode is still a source-only
    opt-in and does not replace a build.
-5. **Notifications, streams and domain events are out of scope.** Only
-   request/response handlers are modeled.
+5. **Streams are not modeled.** Notifications, their handlers and their
+   publish sites are modeled (fan-out diagram, orphan and unpublished checks);
+   streaming requests get no special treatment.
 6. **Layer classification is heuristic.** Non-standard project names can be
    wrong; use the `layers` configuration to override project layers.
 7. **Sample/test projects are scanned.** The corpus scans whole repositories

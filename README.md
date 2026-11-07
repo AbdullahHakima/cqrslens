@@ -60,6 +60,12 @@ cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html|json] [--render
 - `--diff PATH_OR_JSON`, `--diff-output FILE`, `--sarif FILE`, `--summary FILE`,
   `--github-annotations`, and `--ci-root DIR` add CI and architecture diff outputs
   without changing the primary report; see [docs/ci.md](docs/ci.md).
+- `--export-svg DIR` and `--export-mermaid DIR` write every diagram in the
+  report as standalone `.svg` / `.mmd` files: project graph, layers, CQRS map,
+  flow, notifications, behavior chain, ER diagrams, and one sequence diagram
+  per handled request.
+- `--mcp` starts the MCP server for agent workflows instead of scanning;
+  see [MCP server](#mcp-server).
 - `--generated-at` pins the report timestamp (and reports 0 ms elapsed) for
   byte-reproducible golden files.
 - `--ascii` swaps the box-drawing and block characters for single-width
@@ -411,6 +417,32 @@ corpus locally with `bash scripts/validate-real-world.sh` after a Release build.
 A separate non-gating workflow parses and renders the generated Mermaid with
 Mermaid `12.2.0` in Chromium; see [`docs/validation.md`](docs/validation.md#render-check).
 
+## MCP server
+
+`cqrslens --mcp` starts a Model Context Protocol server over stdio
+(JSON-RPC 2.0). Point any MCP client at the installed tool:
+
+```json
+{
+  "mcpServers": {
+    "cqrslens": { "command": "cqrslens", "args": ["--mcp"] }
+  }
+}
+```
+
+The server scans on demand and caches per solution path. Every tool is
+read-only: tools report and verify, they never change code.
+
+| Tool | What it does |
+| --- | --- |
+| `get_architecture_dna` | Compact orientation summary: layer and project topology, CQRS conventions, DbContexts, counts. |
+| `trace_slice` | End-to-end vertical slices for a keyword (request, route, entity, event) with File:Line locations; `format: "json"` returns the structured slice. |
+| `trace_entity_impact` | An entity's schema plus every request, handler and endpoint that touches it. |
+| `trace_request_impact` | What one request touches and what touches it: handler, validators, behaviors in registered order, dispatching endpoints, published notifications, DbContext edges, reverse references. |
+| `check_architecture` | The architecture checks with File:Line locations; filter by rule, severity or target, or group the counts by project. |
+| `verify_claim` | Checks one structured claim (subject / relation / object) against the scan and answers `supported`, `not supported` or `not determinable`, with the evidence it used. It fails closed: anything the scan cannot settle is `not determinable`, never a guess. |
+| `diff_architecture` | Diffs the current scan against a saved report JSON or a second folder, with the same semantics as `--diff`. |
+
 ## What you get
 
 Everything below is **actual output** generated from [`samples/SampleShop`](samples/SampleShop),
@@ -578,6 +610,14 @@ erDiagram
 
 ### …and the rest of the report
 
+- **Flow diagram** — the dispatch flow drawn from the call sites the scan
+  found: endpoint → request → handler → DbContext. Dispatches it cannot
+  resolve are counted in the caption, never drawn as edges.
+- **Notifications** — a fan-out map from each publisher to the notification
+  and its handlers.
+- **Request sequences** — one sequence diagram per request with a resolved
+  handler: endpoint → mediator → pipeline behaviors (registered order) →
+  handler → DbContext → published notifications.
 - **Pipeline behaviors** — every `IPipelineBehavior<...>` implementation, listed by project.
 - **Data access** — every `DbContext` with its `DbSet<T>` properties mapped to their entities
   (e.g. `ShopDbContext`: Orders → Order, Products → Product, Customers → Customer) and its
@@ -588,13 +628,13 @@ erDiagram
 ## On a real codebase
 
 Sample projects are tidy. Real ones are not, so I run CqrsLens on my own
-production backend (the API behind my blog, El-Hakim: 5 projects, 278 files).
+production backend (the API behind my blog, El-Hakim: 8 projects, 295 files).
 Full report: [`docs/elhakim-output/ARCHITECTURE.md`](docs/elhakim-output/ARCHITECTURE.md).
 
 | Metric | Count |
 | --- | ---: |
-| Projects | 5 |
-| Requests (commands + queries) | 62 |
+| Projects | 8 |
+| Requests (commands + queries) | 63 |
 | Handlers | 63 |
 | Validators | 9 |
 | Pipeline behaviors | 1 |
@@ -610,25 +650,26 @@ separate handlers, and the report keeps them separate:
 | TogglePostLikeCommand | Command | bool | TogglePostLikeCommandHandler | ElHakim.Application |
 
 And the checks section told me the truth about my own code: **0 errors,
-32 warnings**, all of them commands without a validator:
+38 warnings** — 33 of them commands without a validator, plus an orphan
+validator and 4 requests nothing in the codebase dispatches:
 
 ```text
 - ⚠️ Warning **CommandWithoutValidator** — Command `ElHakim.Application.Features.Likes.Commands.TogglePostLike.TogglePostLikeCommand` has no validator.
 - ⚠️ Warning **CommandWithoutValidator** — Command `ElHakim.Application.Features.Auth.Commands.RefreshToken.RefreshTokenCommand` has no validator.
 ```
 
-The whole scan took 145 ms.
+The whole scan took 508 ms.
 
 ### Public open-source benchmark gallery
 
-CqrsLens is also tested against 4 well-known open-source .NET repositories (**106 projects**, **154 requests**, **154 handlers**) with **100% shape and check parity between `--analysis text` and `--analysis roslyn`**:
+CqrsLens is also tested against 4 well-known open-source .NET repositories (**105 projects**, **154 requests**, **154 handlers**) with **100% shape and check parity between `--analysis text` and `--analysis roslyn`**:
 
 | Repository | Projects | Requests | Handlers | Validators | Behaviors | DbContexts | Checks (E/W) | Generated Report |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | 13 | 11 | 11 | 6 | 4 | 1 | `0 / 3` | [`jasontaylor-ARCHITECTURE.md`](docs/sample-output/real-world/jasontaylor-ARCHITECTURE.md) |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | 22 | 23 | 23 | 21 | 3 | 3 | `0 / 13` | [`ardalis-ARCHITECTURE.md`](docs/sample-output/real-world/ardalis-ARCHITECTURE.md) |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | 46 | 105 | 105 | 5 | 0 | 4 | `0 / 71` | [`kgrzybek-ddd-ARCHITECTURE.md`](docs/sample-output/real-world/kgrzybek-ddd-ARCHITECTURE.md) |
-| [martinothamar/Mediator](https://github.com/martinothamar/Mediator) (`samples`) | 24 | 15 | 15 | 1 | 9 | 0 | `0 / 3` | [`mediator-ARCHITECTURE.md`](docs/sample-output/real-world/mediator-ARCHITECTURE.md) |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | 13 | 11 | 11 | 6 | 4 | 1 | `0 / 6` | [`jasontaylor-ARCHITECTURE.md`](docs/sample-output/real-world/jasontaylor-ARCHITECTURE.md) |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | 22 | 23 | 23 | 21 | 3 | 3 | `0 / 38` | [`ardalis-ARCHITECTURE.md`](docs/sample-output/real-world/ardalis-ARCHITECTURE.md) |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | 46 | 105 | 105 | 5 | 0 | 4 | `0 / 205` | [`kgrzybek-ddd-ARCHITECTURE.md`](docs/sample-output/real-world/kgrzybek-ddd-ARCHITECTURE.md) |
+| [martinothamar/Mediator](https://github.com/martinothamar/Mediator) (`samples`) | 24 | 15 | 15 | 1 | 9 | 0 | `0 / 12` | [`mediator-ARCHITECTURE.md`](docs/sample-output/real-world/mediator-ARCHITECTURE.md) |
 
 #### Example: `jasontaylordev/CleanArchitecture` CQRS Map (11 Requests, 11 Handlers, 6 Validators)
 
@@ -747,7 +788,7 @@ erDiagram
 | Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation) and `Validator<T>` (FastEndpoints), including source-declared wrappers |
 | Pipeline behaviors | `IPipelineBehavior<...>` implementations |
 | Notifications & domain events | classes/records/structs implementing `INotification` or `IDomainEvent` (directly or through source-declared base classes/interfaces) and their 1-to-many `INotificationHandler<T>` / `IDomainEventHandler<T>` handlers |
-| DbContexts | classes deriving from `DbContext` (incl. `IdentityDbContext`), with their `DbSet<T>`s attributed per class, plus entity properties, keys (`Id`, `<Entity>Id`, `[Key]`, `HasKey`) and relationships (`[ForeignKey]`, `[InverseProperty]`, navigation properties, `OnModelCreating`, `IEntityTypeConfiguration<T>`) |
+| DbContexts | concrete classes deriving from a `DbContext` base (incl. `IdentityDbContext`) — abstract base contexts are not listed on their own, with their `DbSet<T>`s attributed per class, plus entity properties, keys (`Id`, `<Entity>Id`, `[Key]`, `HasKey`) and relationships (`[ForeignKey]`, `[InverseProperty]`, navigation properties, `OnModelCreating`, `IEntityTypeConfiguration<T>`) |
 
 ## How it works / limitations
 
