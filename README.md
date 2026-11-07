@@ -10,35 +10,7 @@ your pipeline behaviors, and your EF Core DbContexts.
 Point it at a codebase you just inherited, or your own six months later, and get the
 map nobody wrote down.
 
-```text
-$ cqrslens samples/SampleShop
-
-██       ██    ██▄     ██  ▄██████▄   ▄██████▄  ▄████████▄ ██      ██   ▄████▄
-▄█▀▀▀█▀▀▀█▄    ██▀█▄   ██ ██▀    ▀██ ██▀    ▀▀▀ ▀▀  ██  ▀▀ ██      ██ ▄█▀    ▀█▄
-██ █ █ █ ██    ██  ▀█▄ ██ ██      ██ ██             ██     ██      ██ ██▄▄▄▄▄▄██
-██  ▄▄▄  ██    ██    ▀███ ██▄    ▄██ ██▄    ▄▄▄     ██     ██▄    ▄██ ██▀▀▀▀▀▀██
- ███ █ ███     ██      ██  ▀██████▀   ▀██████▀      ██      ▀██████▀  ██      ██
-  ▀▀▀▀▀▀▀
-
-          ── ◆ A lens for the CQRS codebase you already have. · v1.0.0
-
-╭────────────────────────────────────────────────╮
-│  NOCTUA · ARCHITECTURE SUMMARY                 │
-│  SampleShop                                    │
-├────────────────────────────────────────────────┤
-│  Projects                                   4  │
-│  Requests (Commands / Queries)              4  │
-│  Handlers                                   4  │
-│  Validators                                 2  │
-│  Pipeline Behaviors                         1  │
-│  EF Core DbContexts                         1  │
-│  Scanner · Timing               text · 327 ms  │
-├────────────────────────────────────────────────┤
-│  ▲ 4 warning(s) · no errors                    │
-╰────────────────────────────────────────────────╯
-
-Report written to samples/SampleShop/ARCHITECTURE.md
-```
+![Running CqrsLens on SampleShop: the NOCTUA owl banner, then the architecture summary card (4 projects, 4 requests, 4 handlers, 2 validators, 1 pipeline behavior, 1 DbContext, 4 warnings, no errors)](docs/images/readme/console-run.png)
 
 ## Install
 
@@ -60,6 +32,12 @@ cqrslens <path-to-solution-folder> [-o OUTPUT] [--format md|html|json] [--render
 - `--diff PATH_OR_JSON`, `--diff-output FILE`, `--sarif FILE`, `--summary FILE`,
   `--github-annotations`, and `--ci-root DIR` add CI and architecture diff outputs
   without changing the primary report; see [docs/ci.md](docs/ci.md).
+- `--export-svg DIR` and `--export-mermaid DIR` write every diagram in the
+  report as standalone `.svg` / `.mmd` files: project graph, layers, CQRS map,
+  flow, notifications, behavior chain, ER diagrams, and one sequence diagram
+  per handled request.
+- `--mcp` starts the MCP server for agent workflows instead of scanning;
+  see [MCP server](#mcp-server).
 - `--generated-at` pins the report timestamp (and reports 0 ms elapsed) for
   byte-reproducible golden files.
 - `--ascii` swaps the box-drawing and block characters for single-width
@@ -411,6 +389,32 @@ corpus locally with `bash scripts/validate-real-world.sh` after a Release build.
 A separate non-gating workflow parses and renders the generated Mermaid with
 Mermaid `12.2.0` in Chromium; see [`docs/validation.md`](docs/validation.md#render-check).
 
+## MCP server
+
+`cqrslens --mcp` starts a Model Context Protocol server over stdio
+(JSON-RPC 2.0). Point any MCP client at the installed tool:
+
+```json
+{
+  "mcpServers": {
+    "cqrslens": { "command": "cqrslens", "args": ["--mcp"] }
+  }
+}
+```
+
+The server scans on demand and caches per solution path. Every tool is
+read-only: tools report and verify, they never change code.
+
+| Tool | What it does |
+| --- | --- |
+| `get_architecture_dna` | Compact orientation summary: layer and project topology, CQRS conventions, DbContexts, counts. |
+| `trace_slice` | End-to-end vertical slices for a keyword (request, route, entity, event) with File:Line locations; `format: "json"` returns the structured slice. |
+| `trace_entity_impact` | An entity's schema plus every request, handler and endpoint that touches it. |
+| `trace_request_impact` | What one request touches and what touches it: handler, validators, behaviors in registered order, dispatching endpoints, published notifications, DbContext edges, reverse references. |
+| `check_architecture` | The architecture checks with File:Line locations; filter by rule, severity or target, or group the counts by project. |
+| `verify_claim` | Checks one structured claim (subject / relation / object) against the scan and answers `supported`, `not supported` or `not determinable`, with the evidence it used. It fails closed: anything the scan cannot settle is `not determinable`, never a guess. |
+| `diff_architecture` | Diffs the current scan against a saved report JSON or a second folder, with the same semantics as `--diff`. |
+
 ## What you get
 
 Everything below is **actual output** generated from [`samples/SampleShop`](samples/SampleShop),
@@ -420,26 +424,7 @@ a small Clean Architecture solution (full report: [`docs/sample-output/ARCHITECT
 
 Parsed from every `.csproj`'s `ProjectReference`s:
 
-```mermaid
-flowchart TD
-    accTitle: Project dependency graph
-    accDescr: 4 projects, 5 references.
-    prj_SampleShop_Api["SampleShop.Api"]:::clsLayerApi
-    prj_SampleShop_Application["SampleShop.Application"]:::clsLayerApplication
-    prj_SampleShop_Domain["SampleShop.Domain"]:::clsLayerDomain
-    prj_SampleShop_Infrastructure["SampleShop.Infrastructure"]:::clsLayerInfrastructure
-    prj_SampleShop_Api --> prj_SampleShop_Application
-    prj_SampleShop_Api --> prj_SampleShop_Infrastructure
-    prj_SampleShop_Application --> prj_SampleShop_Domain
-    prj_SampleShop_Infrastructure --> prj_SampleShop_Application
-    prj_SampleShop_Infrastructure --> prj_SampleShop_Domain
-    classDef clsLayerDomain fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#064e3b
-    classDef clsLayerApplication fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
-    classDef clsLayerInfrastructure fill:#fff7ed,stroke:#c2410c,stroke-width:2px,color:#431407
-    classDef clsLayerApi fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#2e1065
-    classDef clsLayerTests fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#1e293b
-    classDef clsLayerOther fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#1e293b
-```
+![Project dependency graph for SampleShop (4 projects, 5 references)](docs/images/readme/project-dependency-graph.svg)
 
 ### Layers
 
@@ -447,38 +432,7 @@ Projects grouped by Clean Architecture naming convention (Domain / Application /
 Infrastructure / Api / Web / UI) — projects matching no convention fall back to
 their top-level folder:
 
-```mermaid
-flowchart TD
-    accTitle: Layer diagram
-    accDescr: 4 projects, 4 layers, 5 references.
-    subgraph lyr_Api["Api"]
-        prj_SampleShop_Api["SampleShop.Api"]:::clsLayerApi
-    end
-    subgraph lyr_Application["Application"]
-        prj_SampleShop_Application["SampleShop.Application"]:::clsLayerApplication
-    end
-    subgraph lyr_Infrastructure["Infrastructure"]
-        prj_SampleShop_Infrastructure["SampleShop.Infrastructure"]:::clsLayerInfrastructure
-    end
-    subgraph lyr_Domain["Domain"]
-        prj_SampleShop_Domain["SampleShop.Domain"]:::clsLayerDomain
-    end
-    prj_SampleShop_Api --> prj_SampleShop_Application
-    prj_SampleShop_Api --> prj_SampleShop_Infrastructure
-    prj_SampleShop_Application --> prj_SampleShop_Domain
-    prj_SampleShop_Infrastructure --> prj_SampleShop_Application
-    prj_SampleShop_Infrastructure --> prj_SampleShop_Domain
-    style lyr_Api fill:none,stroke:#94a3b8,stroke-dasharray:4 3
-    style lyr_Application fill:none,stroke:#94a3b8,stroke-dasharray:4 3
-    style lyr_Infrastructure fill:none,stroke:#94a3b8,stroke-dasharray:4 3
-    style lyr_Domain fill:none,stroke:#94a3b8,stroke-dasharray:4 3
-    classDef clsLayerDomain fill:#ecfdf5,stroke:#059669,stroke-width:2px,color:#064e3b
-    classDef clsLayerApplication fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e3a8a
-    classDef clsLayerInfrastructure fill:#fff7ed,stroke:#c2410c,stroke-width:2px,color:#431407
-    classDef clsLayerApi fill:#f5f3ff,stroke:#7c3aed,stroke-width:2px,color:#2e1065
-    classDef clsLayerTests fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#1e293b
-    classDef clsLayerOther fill:#f8fafc,stroke:#64748b,stroke-width:1.5px,color:#1e293b
-```
+![Layer diagram for SampleShop (4 projects in Api, Application, Infrastructure and Domain layers)](docs/images/readme/layers.svg)
 
 ### CQRS map
 
@@ -486,35 +440,7 @@ Every request, the handler that answers it, and the validators guarding it.
 The dashed boundary contains only the requests declared in that project; handlers
 and validators stay outside and are shown where linked:
 
-```mermaid
-flowchart LR
-    accTitle: CQRS map
-    accDescr: 4 requests, 4 handlers, 2 validators.
-    subgraph prj_SampleShop_Application["Requests in SampleShop.Application"]
-        req_CreateOrderCommand["CreateOrderCommand"]:::clsCommand
-        req_DeleteOrderCommand["DeleteOrderCommand"]:::clsCommand
-        req_GetOrderDetailsQuery["GetOrderDetailsQuery"]:::clsQuery
-        req_GetProductListQuery["GetProductListQuery"]:::clsQuery
-    end
-    hdl_CreateOrderCommandHandler(["CreateOrderCommandHandler"]):::clsHandler
-    hdl_DeleteOrderCommandHandler(["DeleteOrderCommandHandler"]):::clsHandler
-    hdl_GetOrderDetailsQueryHandler(["GetOrderDetailsQueryHandler"]):::clsHandler
-    hdl_GetProductListQueryHandler(["GetProductListQueryHandler"]):::clsHandler
-    val_CreateOrderCommandValidator["CreateOrderCommandValidator"]:::clsValidator
-    val_DeleteOrderCommandValidator["DeleteOrderCommandValidator"]:::clsValidator
-    req_CreateOrderCommand --> hdl_CreateOrderCommandHandler
-    val_CreateOrderCommandValidator -.->|validates| req_CreateOrderCommand
-    req_DeleteOrderCommand --> hdl_DeleteOrderCommandHandler
-    val_DeleteOrderCommandValidator -.->|validates| req_DeleteOrderCommand
-    req_GetOrderDetailsQuery --> hdl_GetOrderDetailsQueryHandler
-    req_GetProductListQuery --> hdl_GetProductListQueryHandler
-    style prj_SampleShop_Application fill:none,stroke:#94a3b8,stroke-dasharray:4 3
-    classDef clsCommand fill:#e8f1ff,stroke:#2563eb,stroke-width:2px,color:#102a43
-    classDef clsQuery fill:#e6fffa,stroke:#0f766e,stroke-width:2px,color:#0f2e2e
-    classDef clsRequest fill:#f5f3ff,stroke:#6d28d9,stroke-width:2px,color:#2e1065
-    classDef clsHandler fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#1e293b
-    classDef clsValidator fill:#fff7ed,stroke:#c2410c,stroke-width:1.5px,color:#431407
-```
+![CQRS map for SampleShop (4 requests, 4 handlers, 2 validators)](docs/images/readme/cqrs-map.svg)
 
 Red dashed request borders mark `MissingHandler` findings; amber dashed borders
 mark `CommandWithoutValidator` findings. Both styles are added only when the
@@ -545,39 +471,18 @@ through navigation properties, primary/foreign keys, data annotations (`[Key]`,
 Fluent API calls (`HasKey`, `HasOne`/`HasMany`, `WithOne`/`WithMany`,
 `HasForeignKey`, `IsRequired`) in `OnModelCreating` or `IEntityTypeConfiguration<T>`:
 
-```mermaid
-erDiagram
-    accTitle: ShopDbContext ER diagram
-    accDescr: 4 entities, 3 relationships.
-    ent_Customer["Customer"] {
-        int Id PK
-        string Email
-        string Name
-    }
-    ent_Order["Order"] {
-        Guid Id PK
-        int CustomerId FK
-        string Status
-    }
-    ent_OrderLine["OrderLine"] {
-        int Id PK
-        Guid OrderId FK
-        int ProductId FK
-        int Quantity
-        decimal UnitPrice
-    }
-    ent_Product["Product"] {
-        int Id PK
-        string Name
-        decimal Price
-    }
-    ent_Customer ||--o{ ent_Order : "Orders / Customer"
-    ent_Order ||--o{ ent_OrderLine : "Lines / Order"
-    ent_Product ||--o{ ent_OrderLine : "Product"
-```
+![ShopDbContext ER diagram (Customer, Order, OrderLine, Product)](docs/images/readme/er-shopdbcontext.svg)
 
 ### …and the rest of the report
 
+- **Flow diagram** — the dispatch flow drawn from the call sites the scan
+  found: endpoint → request → handler → DbContext. Dispatches it cannot
+  resolve are counted in the caption, never drawn as edges.
+- **Notifications** — a fan-out map from each publisher to the notification
+  and its handlers.
+- **Request sequences** — one sequence diagram per request with a resolved
+  handler: endpoint → mediator → pipeline behaviors (registered order) →
+  handler → DbContext → published notifications.
 - **Pipeline behaviors** — every `IPipelineBehavior<...>` implementation, listed by project.
 - **Data access** — every `DbContext` with its `DbSet<T>` properties mapped to their entities
   (e.g. `ShopDbContext`: Orders → Order, Products → Product, Customers → Customer) and its
@@ -588,13 +493,13 @@ erDiagram
 ## On a real codebase
 
 Sample projects are tidy. Real ones are not, so I run CqrsLens on my own
-production backend (the API behind my blog, El-Hakim: 5 projects, 278 files).
+production backend (the API behind my blog, El-Hakim: 8 projects, 295 files).
 Full report: [`docs/elhakim-output/ARCHITECTURE.md`](docs/elhakim-output/ARCHITECTURE.md).
 
 | Metric | Count |
 | --- | ---: |
-| Projects | 5 |
-| Requests (commands + queries) | 62 |
+| Projects | 8 |
+| Requests (commands + queries) | 63 |
 | Handlers | 63 |
 | Validators | 9 |
 | Pipeline behaviors | 1 |
@@ -610,132 +515,34 @@ separate handlers, and the report keeps them separate:
 | TogglePostLikeCommand | Command | bool | TogglePostLikeCommandHandler | ElHakim.Application |
 
 And the checks section told me the truth about my own code: **0 errors,
-32 warnings**, all of them commands without a validator:
+38 warnings** — 33 of them commands without a validator, plus an orphan
+validator and 4 requests nothing in the codebase dispatches:
 
 ```text
 - ⚠️ Warning **CommandWithoutValidator** — Command `ElHakim.Application.Features.Likes.Commands.TogglePostLike.TogglePostLikeCommand` has no validator.
 - ⚠️ Warning **CommandWithoutValidator** — Command `ElHakim.Application.Features.Auth.Commands.RefreshToken.RefreshTokenCommand` has no validator.
 ```
 
-The whole scan took 145 ms.
+The whole scan took 508 ms.
 
 ### Public open-source benchmark gallery
 
-CqrsLens is also tested against 4 well-known open-source .NET repositories (**106 projects**, **154 requests**, **154 handlers**) with **100% shape and check parity between `--analysis text` and `--analysis roslyn`**:
+CqrsLens is also tested against 4 well-known open-source .NET repositories (**105 projects**, **154 requests**, **154 handlers**) with **100% shape and check parity between `--analysis text` and `--analysis roslyn`**:
 
 | Repository | Projects | Requests | Handlers | Validators | Behaviors | DbContexts | Checks (E/W) | Generated Report |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | 13 | 11 | 11 | 6 | 4 | 1 | `0 / 3` | [`jasontaylor-ARCHITECTURE.md`](docs/sample-output/real-world/jasontaylor-ARCHITECTURE.md) |
-| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | 22 | 23 | 23 | 21 | 3 | 3 | `0 / 13` | [`ardalis-ARCHITECTURE.md`](docs/sample-output/real-world/ardalis-ARCHITECTURE.md) |
-| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | 46 | 105 | 105 | 5 | 0 | 4 | `0 / 71` | [`kgrzybek-ddd-ARCHITECTURE.md`](docs/sample-output/real-world/kgrzybek-ddd-ARCHITECTURE.md) |
-| [martinothamar/Mediator](https://github.com/martinothamar/Mediator) (`samples`) | 24 | 15 | 15 | 1 | 9 | 0 | `0 / 3` | [`mediator-ARCHITECTURE.md`](docs/sample-output/real-world/mediator-ARCHITECTURE.md) |
+| [jasontaylordev/CleanArchitecture](https://github.com/jasontaylordev/CleanArchitecture) | 13 | 11 | 11 | 6 | 4 | 1 | `0 / 6` | [`jasontaylor-ARCHITECTURE.md`](docs/sample-output/real-world/jasontaylor-ARCHITECTURE.md) |
+| [ardalis/CleanArchitecture](https://github.com/ardalis/CleanArchitecture) | 22 | 23 | 23 | 21 | 3 | 3 | `0 / 38` | [`ardalis-ARCHITECTURE.md`](docs/sample-output/real-world/ardalis-ARCHITECTURE.md) |
+| [kgrzybek/modular-monolith-with-ddd](https://github.com/kgrzybek/modular-monolith-with-ddd) | 46 | 105 | 105 | 5 | 0 | 4 | `0 / 205` | [`kgrzybek-ddd-ARCHITECTURE.md`](docs/sample-output/real-world/kgrzybek-ddd-ARCHITECTURE.md) |
+| [martinothamar/Mediator](https://github.com/martinothamar/Mediator) (`samples`) | 24 | 15 | 15 | 1 | 9 | 0 | `0 / 12` | [`mediator-ARCHITECTURE.md`](docs/sample-output/real-world/mediator-ARCHITECTURE.md) |
 
 #### Example: `jasontaylordev/CleanArchitecture` CQRS Map (11 Requests, 11 Handlers, 6 Validators)
 
-```mermaid
-flowchart LR
-    accTitle: CQRS map
-    accDescr: 11 requests, 11 handlers, 6 validators, 3 CommandWithoutValidator.
-    subgraph prj__unassigned_["Unassigned requests"]
-        req_CleanArchitectureUseCaseCommand["CleanArchitectureUseCaseCommand"]:::clsCommand
-        req_CleanArchitectureUseCaseQuery["CleanArchitectureUseCaseQuery"]:::clsQuery
-    end
-    subgraph prj_Application["Requests in Application"]
-        req_CreateTodoItemCommand["CreateTodoItemCommand"]:::clsCommand
-        req_DeleteTodoItemCommand["DeleteTodoItemCommand"]:::clsCommandNoValidator
-        req_UpdateTodoItemCommand["UpdateTodoItemCommand"]:::clsCommand
-        req_UpdateTodoItemDetailCommand["UpdateTodoItemDetailCommand"]:::clsCommandNoValidator
-        req_CreateTodoListCommand["CreateTodoListCommand"]:::clsCommand
-        req_DeleteTodoListCommand["DeleteTodoListCommand"]:::clsCommandNoValidator
-        req_UpdateTodoListCommand["UpdateTodoListCommand"]:::clsCommand
-        req_GetTodosQuery["GetTodosQuery"]:::clsQuery
-        req_GetWeatherForecastsQuery["GetWeatherForecastsQuery"]:::clsQuery
-    end
-    hdl_CleanArchitectureUseCaseCommandHandler(["CleanArchitectureUseCaseCommandHandler"]):::clsHandler
-    hdl_CleanArchitectureUseCaseQueryHandler(["CleanArchitectureUseCaseQueryHandler"]):::clsHandler
-    hdl_CreateTodoItemCommandHandler(["CreateTodoItemCommandHandler"]):::clsHandler
-    hdl_DeleteTodoItemCommandHandler(["DeleteTodoItemCommandHandler"]):::clsHandler
-    hdl_UpdateTodoItemCommandHandler(["UpdateTodoItemCommandHandler"]):::clsHandler
-    hdl_UpdateTodoItemDetailCommandHandler(["UpdateTodoItemDetailCommandHandler"]):::clsHandler
-    hdl_CreateTodoListCommandHandler(["CreateTodoListCommandHandler"]):::clsHandler
-    hdl_DeleteTodoListCommandHandler(["DeleteTodoListCommandHandler"]):::clsHandler
-    hdl_UpdateTodoListCommandHandler(["UpdateTodoListCommandHandler"]):::clsHandler
-    hdl_GetTodosQueryHandler(["GetTodosQueryHandler"]):::clsHandler
-    hdl_GetWeatherForecastsQueryHandler(["GetWeatherForecastsQueryHandler"]):::clsHandler
-    val_CleanArchitectureUseCaseCommandValidator["CleanArchitectureUseCaseCommandValidator"]:::clsValidator
-    val_CleanArchitectureUseCaseQueryValidator["CleanArchitectureUseCaseQueryValidator"]:::clsValidator
-    val_CreateTodoItemCommandValidator["CreateTodoItemCommandValidator"]:::clsValidator
-    val_UpdateTodoItemCommandValidator["UpdateTodoItemCommandValidator"]:::clsValidator
-    val_CreateTodoListCommandValidator["CreateTodoListCommandValidator"]:::clsValidator
-    val_UpdateTodoListCommandValidator["UpdateTodoListCommandValidator"]:::clsValidator
-    req_CleanArchitectureUseCaseCommand --> hdl_CleanArchitectureUseCaseCommandHandler
-    val_CleanArchitectureUseCaseCommandValidator -.->|validates| req_CleanArchitectureUseCaseCommand
-    req_CleanArchitectureUseCaseQuery --> hdl_CleanArchitectureUseCaseQueryHandler
-    val_CleanArchitectureUseCaseQueryValidator -.->|validates| req_CleanArchitectureUseCaseQuery
-    req_CreateTodoItemCommand --> hdl_CreateTodoItemCommandHandler
-    val_CreateTodoItemCommandValidator -.->|validates| req_CreateTodoItemCommand
-    req_DeleteTodoItemCommand --> hdl_DeleteTodoItemCommandHandler
-    req_UpdateTodoItemCommand --> hdl_UpdateTodoItemCommandHandler
-    val_UpdateTodoItemCommandValidator -.->|validates| req_UpdateTodoItemCommand
-    req_UpdateTodoItemDetailCommand --> hdl_UpdateTodoItemDetailCommandHandler
-    req_CreateTodoListCommand --> hdl_CreateTodoItemCommandHandler
-    val_CreateTodoListCommandValidator -.->|validates| req_CreateTodoListCommand
-    req_DeleteTodoListCommand --> hdl_DeleteTodoListCommandHandler
-    req_UpdateTodoListCommand --> hdl_UpdateTodoListCommandHandler
-    val_UpdateTodoListCommandValidator -.->|validates| req_UpdateTodoListCommand
-    req_GetTodosQuery --> hdl_GetTodosQueryHandler
-    req_GetWeatherForecastsQuery --> hdl_GetWeatherForecastsQueryHandler
-    style prj__unassigned_ fill:none,stroke:#94a3b8,stroke-dasharray:4 3
-    style prj_Application fill:none,stroke:#94a3b8,stroke-dasharray:4 3
-    classDef clsCommand fill:#e8f1ff,stroke:#2563eb,stroke-width:2px,color:#102a43
-    classDef clsQuery fill:#e6fffa,stroke:#0f766e,stroke-width:2px,color:#0f2e2e
-    classDef clsRequest fill:#f5f3ff,stroke:#6d28d9,stroke-width:2px,color:#2e1065
-    classDef clsHandler fill:#f8fafc,stroke:#475569,stroke-width:1.5px,color:#1e293b
-    classDef clsValidator fill:#fff7ed,stroke:#c2410c,stroke-width:1.5px,color:#431407
-    classDef clsCommandNoValidator fill:#e8f1ff,stroke:#d97706,stroke-width:2px,stroke-dasharray:4 3,color:#102a43
-```
+![CQRS map of jasontaylordev/CleanArchitecture (11 requests, 11 handlers, 6 validators)](docs/images/readme/cqrs-map-jasontaylor.svg)
 
 #### Example: `kgrzybek/modular-monolith-with-ddd` `MeetingsContext` ER Diagram (10 Entities, 3 Backing-Field Relationships)
 
-```mermaid
-erDiagram
-    accTitle: MeetingsContext ER diagram
-    accDescr: 10 entities, 3 relationships.
-    ent_OutboxMessage["OutboxMessage"] {
-        Guid Id PK
-        string Data
-        DateTime OccurredOn
-        DateTime? ProcessedDate
-        string Type
-    }
-    ent_InternalCommand["InternalCommand"] {
-        Guid Id PK
-        string Data
-        DateTime? ProcessedDate
-        string Type
-    }
-    ent_MeetingCommentingConfiguration["MeetingCommentingConfiguration"]
-    ent_MeetingComment["MeetingComment"]
-    ent_MeetingGroupProposal["MeetingGroupProposal"] {
-        MeetingGroupProposalId Id PK
-    }
-    ent_MeetingGroup["MeetingGroup"] {
-        MeetingGroupId Id PK
-    }
-    ent_MeetingMemberCommentLike["MeetingMemberCommentLike"]
-    ent_Meeting["Meeting"] {
-        MeetingId Id PK
-    }
-    ent_Member["Member"] {
-        MemberId Id PK
-    }
-    ent_MemberSubscription["MemberSubscription"] {
-        MemberSubscriptionId Id PK
-    }
-    ent_MeetingCommentingConfiguration |o--o| ent_Meeting : "_meetingId"
-    ent_MeetingComment |o--o{ ent_MeetingMemberCommentLike : "_meetingCommentId"
-    ent_Member |o--o{ ent_MeetingMemberCommentLike : "_memberId"
-```
+![MeetingsContext ER diagram from kgrzybek/modular-monolith-with-ddd (10 entities)](docs/images/readme/er-meetingscontext.svg)
 
 ## What it detects
 
@@ -747,7 +554,7 @@ erDiagram
 | Validators | `AbstractValidator<T>` or `IValidator<T>` (FluentValidation) and `Validator<T>` (FastEndpoints), including source-declared wrappers |
 | Pipeline behaviors | `IPipelineBehavior<...>` implementations |
 | Notifications & domain events | classes/records/structs implementing `INotification` or `IDomainEvent` (directly or through source-declared base classes/interfaces) and their 1-to-many `INotificationHandler<T>` / `IDomainEventHandler<T>` handlers |
-| DbContexts | classes deriving from `DbContext` (incl. `IdentityDbContext`), with their `DbSet<T>`s attributed per class, plus entity properties, keys (`Id`, `<Entity>Id`, `[Key]`, `HasKey`) and relationships (`[ForeignKey]`, `[InverseProperty]`, navigation properties, `OnModelCreating`, `IEntityTypeConfiguration<T>`) |
+| DbContexts | concrete classes deriving from a `DbContext` base (incl. `IdentityDbContext`) — abstract base contexts are not listed on their own, with their `DbSet<T>`s attributed per class, plus entity properties, keys (`Id`, `<Entity>Id`, `[Key]`, `HasKey`) and relationships (`[ForeignKey]`, `[InverseProperty]`, navigation properties, `OnModelCreating`, `IEntityTypeConfiguration<T>`) |
 
 ## How it works / limitations
 
