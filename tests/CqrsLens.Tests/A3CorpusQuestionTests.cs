@@ -27,17 +27,13 @@ public sealed class A3CorpusQuestionTests
     public static IEnumerable<object[]> ReconciliationCases =>
         FrozenQuestionSet.GroupingReconciliation.Select(r => new object[] { r.Corpus.ToString() });
 
-    [Theory]
+    [SkippableTheory]
     [MemberData(nameof(RequestImpactCases))]
     public void FrozenRequestImpactQuery_MatchesTheRealScan(string id)
     {
         var query = FrozenQuestionSet.GetRequestImpactQuery(id);
         var root = FrozenQuestionSet.Root(query.Corpus);
-        if (!Directory.Exists(root))
-        {
-            _output.WriteLine($"SKIP {id}: corpus root not found at {root}.");
-            throw Xunit.Sdk.SkipException.ForSkip($"corpus not found: {root}");
-        }
+        Skip.If(!Directory.Exists(root), $"corpus not found: {root}");
 
         _output.WriteLine($"derivation: {query.Derivation}");
 
@@ -50,17 +46,13 @@ public sealed class A3CorpusQuestionTests
             Assert.DoesNotContain(marker, text, StringComparison.Ordinal);
     }
 
-    [Theory]
+    [SkippableTheory]
     [MemberData(nameof(GroupingCases))]
     public void FrozenGroupingQuery_MatchesTheRealScan(string id)
     {
         var query = FrozenQuestionSet.GetGroupingQuery(id);
         var root = FrozenQuestionSet.Root(query.Corpus);
-        if (!Directory.Exists(root))
-        {
-            _output.WriteLine($"SKIP {id}: corpus root not found at {root}.");
-            throw Xunit.Sdk.SkipException.ForSkip($"corpus not found: {root}");
-        }
+        Skip.If(!Directory.Exists(root), $"corpus not found: {root}");
 
         _output.WriteLine($"derivation: {query.Derivation}");
 
@@ -83,18 +75,14 @@ public sealed class A3CorpusQuestionTests
             Assert.Equal(query.ExpectedMatching, SumProjectTotals(text));
     }
 
-    [Theory]
+    [SkippableTheory]
     [MemberData(nameof(ReconciliationCases))]
     public void GroupingTotals_ReconcileExactlyWithTheUnfilteredCount(string corpusName)
     {
         var reconciliation = FrozenQuestionSet.GroupingReconciliation
             .First(r => r.Corpus.ToString() == corpusName);
         var root = FrozenQuestionSet.Root(reconciliation.Corpus);
-        if (!Directory.Exists(root))
-        {
-            _output.WriteLine($"SKIP {corpusName}: corpus root not found at {root}.");
-            throw Xunit.Sdk.SkipException.ForSkip($"corpus not found: {root}");
-        }
+        Skip.If(!Directory.Exists(root), $"corpus not found: {root}");
 
         _output.WriteLine($"derivation: {reconciliation.Derivation}");
 

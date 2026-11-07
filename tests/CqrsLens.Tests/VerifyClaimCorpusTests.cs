@@ -19,17 +19,13 @@ public sealed class VerifyClaimCorpusTests
 
     public static IEnumerable<object[]> Cases => FrozenQuestionSet.All.Select(c => new object[] { c.Id });
 
-    [Theory]
+    [SkippableTheory]
     [MemberData(nameof(Cases))]
     public void FrozenClaim_VerdictMatchesTheRealScan(string id)
     {
         var claim = FrozenQuestionSet.Get(id);
         var root = FrozenQuestionSet.Root(claim.Corpus);
-        if (!Directory.Exists(root))
-        {
-            _output.WriteLine($"SKIP {id}: corpus root not found at {root}.");
-            throw Xunit.Sdk.SkipException.ForSkip($"corpus not found: {root}");
-        }
+        Skip.If(!Directory.Exists(root), $"corpus not found: {root}");
 
         var result = McpScanProvider.GetOrRun(
             root, "text", new CliOptions { Path = root, Mcp = true }, Cache);

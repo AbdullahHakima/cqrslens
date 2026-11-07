@@ -33,7 +33,7 @@ public sealed class A4CorpusQuestionTests : IDisposable
     public static IEnumerable<object[]> DiffCases =>
         FrozenQuestionSet.DiffQueries.Select(q => new object[] { q.Id });
 
-    [Theory]
+    [SkippableTheory]
     [MemberData(nameof(DiffCases))]
     public void FrozenDiffQuery_MatchesTheRealDiff(string id)
     {
@@ -51,11 +51,7 @@ public sealed class A4CorpusQuestionTests : IDisposable
         {
             headRoot = FrozenQuestionSet.Root(query.HeadCorpus!.Value);
             basePath = FrozenQuestionSet.Root(query.BaseCorpus!.Value);
-            if (!Directory.Exists(headRoot) || !Directory.Exists(basePath))
-            {
-                _output.WriteLine($"SKIP {id}: corpus root not found at {headRoot} / {basePath}.");
-                throw Xunit.Sdk.SkipException.ForSkip($"corpus not found: {headRoot}");
-            }
+            Skip.If(!Directory.Exists(headRoot) || !Directory.Exists(basePath), $"corpus not found: {headRoot}");
         }
 
         _output.WriteLine($"derivation: {query.Derivation}");

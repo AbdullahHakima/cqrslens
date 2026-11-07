@@ -24,17 +24,13 @@ public sealed class A2CorpusQuestionTests
     public static IEnumerable<object[]> SliceCases =>
         FrozenQuestionSet.SliceQueries.Select(q => new object[] { q.Id });
 
-    [Theory]
+    [SkippableTheory]
     [MemberData(nameof(CheckCases))]
     public void FrozenCheckQuery_MatchesTheRealScan(string id)
     {
         var query = FrozenQuestionSet.GetCheckQuery(id);
         var root = FrozenQuestionSet.Root(query.Corpus);
-        if (!Directory.Exists(root))
-        {
-            _output.WriteLine($"SKIP {id}: corpus root not found at {root}.");
-            throw Xunit.Sdk.SkipException.ForSkip($"corpus not found: {root}");
-        }
+        Skip.If(!Directory.Exists(root), $"corpus not found: {root}");
 
         _output.WriteLine($"derivation: {query.Derivation}");
 
@@ -51,17 +47,13 @@ public sealed class A2CorpusQuestionTests
             Assert.Contains(marker, text, StringComparison.Ordinal);
     }
 
-    [Theory]
+    [SkippableTheory]
     [MemberData(nameof(SliceCases))]
     public void FrozenSliceQuery_MatchesTheRealScan(string id)
     {
         var query = FrozenQuestionSet.GetSliceQuery(id);
         var root = FrozenQuestionSet.Root(query.Corpus);
-        if (!Directory.Exists(root))
-        {
-            _output.WriteLine($"SKIP {id}: corpus root not found at {root}.");
-            throw Xunit.Sdk.SkipException.ForSkip($"corpus not found: {root}");
-        }
+        Skip.If(!Directory.Exists(root), $"corpus not found: {root}");
 
         _output.WriteLine($"derivation: {query.Derivation}");
 

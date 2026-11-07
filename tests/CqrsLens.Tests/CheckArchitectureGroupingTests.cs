@@ -55,8 +55,9 @@ public sealed class CheckArchitectureGroupingTests
             .ToDictionary(m => m.Groups[1].Value, m => int.Parse(m.Groups[2].Value));
         var ruleCounts = new Dictionary<string, int>();
         var current = "";
-        foreach (var line in text.Split('\n'))
+        foreach (var rawLine in text.Split('\n'))
         {
+            var line = rawLine.TrimEnd('\r');
             var project = Regex.Match(line, @"\*\*`([^`]+)`\*\* — \*\*\d+\*\* finding\(s\)");
             if (project.Success)
             {
