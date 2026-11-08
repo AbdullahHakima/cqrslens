@@ -102,6 +102,12 @@ public static class Analyzer
         ServiceResolutionIndexBuilder.Build(parsedFiles, result);
         phases.Record("Resolve services");
 
+        // First consumer: handler → DbContext edges resolved through the index. These
+        // are additive model records kept out of FlowEdges, so no existing count or
+        // surface moves.
+        HandlerDbContextResolver.Build(parsedFiles, result);
+        phases.Record("Resolve handler contexts");
+
         FlowAnalyzer.Analyze(parsedFiles, result);
         phases.Record("Flow graph");
 

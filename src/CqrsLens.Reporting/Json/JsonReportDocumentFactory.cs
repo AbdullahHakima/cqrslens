@@ -279,6 +279,19 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
+            ResolvedEdges = result.ResolvedEdges.Count > 0
+                ? result.ResolvedEdges
+                    .Select(e => new JsonResolvedEdge
+                    {
+                        Kind = ResolvedEdgeKindName(e.Kind),
+                        From = e.From,
+                        Via = e.Via,
+                        To = e.To,
+                        Project = e.ProjectName,
+                        Location = ToJsonLocation(e.Location),
+                    })
+                    .ToList()
+                : null,
             DispatchCallSites = result.DispatchCallSites.Count > 0
                 ? result.DispatchCallSites
                     .Select(s => new JsonDispatchCallSite
@@ -313,6 +326,12 @@ internal static class JsonReportDocumentFactory
         FlowEdgeKind.HandlerToRequest => "handlerToRequest",
         FlowEdgeKind.HandlerToNotification => "handlerToNotification",
         FlowEdgeKind.HandlerToDbContext => "handlerToDbContext",
+        _ => "unknown",
+    };
+
+    private static string ResolvedEdgeKindName(FlowEdgeKind kind) => kind switch
+    {
+        FlowEdgeKind.HandlerToDbContextResolved => "handlerToDbContextResolved",
         _ => "unknown",
     };
 

@@ -39,6 +39,14 @@ public sealed class AnalysisResult
     public List<FlowEdge> FlowEdges { get; } = new();
 
     /// <summary>
+    /// Edges resolved through the service-resolution index rather than written directly
+    /// in source (currently handler → DbContext through an injected interface). Kept
+    /// separate from <see cref="FlowEdges"/> so every existing count, check and report
+    /// surface is unchanged; the additive JSON section exposes them.
+    /// </summary>
+    public List<ResolvedEdge> ResolvedEdges { get; } = new();
+
+    /// <summary>
     /// Every resolved dispatch call site, including senders that are neither handlers
     /// nor endpoints. Drives production-reachability, so a service that sends a
     /// command still counts as a call site even though it is not a modelled edge.

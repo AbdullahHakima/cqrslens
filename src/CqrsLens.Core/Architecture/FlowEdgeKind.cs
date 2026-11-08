@@ -17,4 +17,11 @@ public enum FlowEdgeKind
 
     /// <summary>A handler uses a discovered DbContext type.</summary>
     HandlerToDbContext,
+
+    /// <summary>
+    /// A handler uses a DbContext through an interface it injects, resolved via the
+    /// service-resolution index. Distinct from <see cref="HandlerToDbContext"/>: the
+    /// hop is DI-resolved, not a direct reference, so it is styled and labelled apart.
+    /// </summary>
+    HandlerToDbContextResolved,
 }

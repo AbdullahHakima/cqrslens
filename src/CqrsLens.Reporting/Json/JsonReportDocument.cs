@@ -28,6 +28,14 @@ internal sealed class JsonReportDocument
     public List<JsonNotificationHandler> NotificationHandlers { get; set; } = new();
     public List<JsonEndpoint>? Endpoints { get; set; }
     public List<JsonFlowEdge>? FlowEdges { get; set; }
+
+    /// <summary>
+    /// Additive section: edges resolved through DI (today handler → DbContext via an
+    /// injected interface). Emitted only when non-empty, so reports without resolved
+    /// edges stay byte-identical to the base.
+    /// </summary>
+    public List<JsonResolvedEdge>? ResolvedEdges { get; set; }
+
     public List<JsonDispatchCallSite>? DispatchCallSites { get; set; }
     public List<JsonUnresolvedDispatch>? UnresolvedDispatches { get; set; }
 }

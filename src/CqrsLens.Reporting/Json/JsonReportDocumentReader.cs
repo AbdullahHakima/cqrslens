@@ -62,6 +62,7 @@ internal static class JsonReportDocumentReader
         document.Notifications ??= new List<JsonNotification>();
         document.NotificationHandlers ??= new List<JsonNotificationHandler>();
         document.FlowEdges ??= new List<JsonFlowEdge>();
+        document.ResolvedEdges ??= new List<JsonResolvedEdge>();
         document.DispatchCallSites ??= new List<JsonDispatchCallSite>();
         document.UnresolvedDispatches ??= new List<JsonUnresolvedDispatch>();
         foreach (var notification in document.Notifications)
