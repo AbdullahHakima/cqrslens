@@ -11,13 +11,24 @@ namespace CqrsLens;
 /// </summary>
 internal static class FlowDiagramBuilder
 {
-    internal static string BuildSource(IReadOnlyList<FlowEdge> edges, string? subgraphLabel)
+    internal static string BuildSource(
+        IReadOnlyList<FlowEdge> edges,
+        IReadOnlyList<ResolvedEdge> resolvedEdges,
+        string? subgraphLabel)
     {
         var ordered = edges
             .GroupBy(e => (e.Kind, e.From, e.To))
             .Select(g => g.First())
             .OrderBy(e => e.Kind)
             .ThenBy(e => e.From, StringComparer.Ordinal)
+            .ThenBy(e => e.To, StringComparer.Ordinal)
+            .ToList();
+
+        var orderedResolved = resolvedEdges
+            .GroupBy(e => (e.Kind, e.From, e.Via, e.To))
+            .Select(g => g.First())
+            .OrderBy(e => e.From, StringComparer.Ordinal)
+            .ThenBy(e => e.Via, StringComparer.Ordinal)
             .ThenBy(e => e.To, StringComparer.Ordinal)
             .ToList();
 
@@ -46,6 +57,13 @@ internal static class FlowDiagramBuilder
             Register(toRole, edge.To);
         }
 
+        foreach (var edge in orderedResolved)
+        {
+            var (fromRole, toRole) = Roles(edge.Kind);
+            Register(fromRole, edge.From);
+            Register(toRole, edge.To);
+        }
+
         foreach (var (role, name) in nodeOrder)
         {
             var label = NodeLabel(role, name, roleNames[role]);
@@ -53,7 +71,7 @@ internal static class FlowDiagramBuilder
         }
 
         var description = new StringBuilder();
-        description.Append(CountText(ordered.Count, "edge"));
+        description.Append(CountText(ordered.Count + orderedResolved.Count, "edge"));
         description.Append(", ");
         description.Append(CountText(nodeOrder.Count, "node"));
         description.Append('.');
@@ -83,6 +101,16 @@ internal static class FlowDiagramBuilder
             var fromId = nodeIds[fromRole + "|" + edge.From];
             var toId = nodeIds[toRole + "|" + edge.To];
             sb.AppendLine($"    {fromId} -->|{EdgeLabel(edge.Kind)}| {toId}");
+        }
+
+        // DI-resolved hops are dotted and name the interface they resolve through, so
+        // they are visibly distinct from a direct edge.
+        foreach (var edge in orderedResolved)
+        {
+            var (fromRole, toRole) = Roles(edge.Kind);
+            var fromId = nodeIds[fromRole + "|" + edge.From];
+            var toId = nodeIds[toRole + "|" + edge.To];
+            sb.AppendLine($"    {fromId} -.->|{ResolvedEdgeLabel(edge)}| {toId}");
         }
 
         sb.AppendLine("    classDef clsFlowEndpoint fill:#e0f2fe,stroke:#0284c7,stroke-width:2px,color:#0c4a6e");
@@ -120,6 +148,7 @@ internal static class FlowDiagramBuilder
         FlowEdgeKind.HandlerToRequest => ("handler", "request"),
         FlowEdgeKind.HandlerToNotification => ("handler", "notification"),
         FlowEdgeKind.HandlerToDbContext => ("handler", "dbcontext"),
+        FlowEdgeKind.HandlerToDbContextResolved => ("handler", "dbcontext"),
         _ => ("request", "request"),
     };
 
@@ -152,4 +181,8 @@ internal static class FlowDiagramBuilder
         FlowEdgeKind.HandlerToDbContext => "uses",
         _ => "to",
     };
+
+    /// <summary>Edge label for a DI-resolved hop: names the interface it resolves through.</summary>
+    private static string ResolvedEdgeLabel(ResolvedEdge edge)
+        => $"resolved via {ShortTypeName(edge.Via)}";
 }

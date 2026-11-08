@@ -336,7 +336,16 @@ internal static class AgentRequestImpactGenerator
         sb.AppendLine();
     }
 
-    private static List<FlowEdge> DbContextEdges(AnalysisResult result, IReadOnlyList<HandlerInfo> handlers)
+    private sealed record DbContextEdgeRow(
+        string Kind,
+        string From,
+        string To,
+        string? Via,
+        bool Resolved,
+        SourceLocation? Location,
+        string? Project);
+
+    private static List<DbContextEdgeRow> DbContextEdges(AnalysisResult result, IReadOnlyList<HandlerInfo> handlers)
     {
         var handlerNames = new HashSet<string>(StringComparer.Ordinal);
         foreach (var handler in handlers)
@@ -345,14 +354,31 @@ internal static class AgentRequestImpactGenerator
             handlerNames.Add(handler.Name);
         }
 
-        return result.FlowEdges
-            .Where(e => e.Kind == FlowEdgeKind.HandlerToDbContext && handlerNames.Contains(e.From))
+        var rows = new List<DbContextEdgeRow>();
+        foreach (var edge in result.FlowEdges)
+        {
+            if (edge.Kind == FlowEdgeKind.HandlerToDbContext && handlerNames.Contains(edge.From))
+                rows.Add(new DbContextEdgeRow(
+                    "handlerToDbContext", edge.From, edge.To, Via: null, Resolved: false, edge.Location, edge.ProjectName));
+        }
+
+        // Resolved through the service-resolution index: the interface is named so the
+        // hop is never mistaken for a direct reference.
+        foreach (var edge in result.ResolvedEdges)
+        {
+            if (edge.Kind == FlowEdgeKind.HandlerToDbContextResolved && handlerNames.Contains(edge.From))
+                rows.Add(new DbContextEdgeRow(
+                    "handlerToDbContextResolved", edge.From, edge.To, edge.Via, Resolved: true, edge.Location, edge.ProjectName));
+        }
+
+        return rows
             .OrderBy(e => e.From, StringComparer.Ordinal)
             .ThenBy(e => e.To, StringComparer.Ordinal)
+            .ThenBy(e => e.Via ?? "", StringComparer.Ordinal)
             .ToList();
     }
 
-    private static void AppendDbContextEdges(StringBuilder sb, IReadOnlyList<FlowEdge> edges)
+    private static void AppendDbContextEdges(StringBuilder sb, IReadOnlyList<DbContextEdgeRow> edges)
     {
         sb.AppendLine($"### DbContext edges ({edges.Count})");
         if (edges.Count == 0)
@@ -364,8 +390,11 @@ internal static class AgentRequestImpactGenerator
 
         foreach (var edge in edges)
         {
-            sb.AppendLine($"- `{FlowEdgeKindName(edge.Kind)}` `{edge.From}` → `{edge.To}`{FormatLoc(edge.Location)}" +
-                          ProjectSuffix(edge.ProjectName));
+            var resolved = edge.Resolved
+                ? $" (resolved through DI via `{edge.Via}`)"
+                : "";
+            sb.AppendLine($"- `{edge.Kind}` `{edge.From}` → `{edge.To}`{resolved}{FormatLoc(edge.Location)}" +
+                          ProjectSuffix(edge.Project));
         }
         sb.AppendLine();
     }
@@ -527,16 +556,6 @@ internal static class AgentRequestImpactGenerator
         }
         sb.AppendLine();
     }
-
-    private static string FlowEdgeKindName(FlowEdgeKind kind) => kind switch
-    {
-        FlowEdgeKind.EndpointToRequest => "endpointToRequest",
-        FlowEdgeKind.RequestToHandler => "requestToHandler",
-        FlowEdgeKind.HandlerToRequest => "handlerToRequest",
-        FlowEdgeKind.HandlerToNotification => "handlerToNotification",
-        FlowEdgeKind.HandlerToDbContext => "handlerToDbContext",
-        _ => "unknown",
-    };
 
     private static string ProjectSuffix(string? project)
         => string.IsNullOrEmpty(project) ? "" : $" · project `{project}`";

@@ -59,6 +59,21 @@ internal static class RequestSequenceBuilder
                 g => g.Select(e => e.To).Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.Ordinal).ToList(),
                 StringComparer.Ordinal);
 
+        // DI-resolved handler → DbContext hops, skipping any context already drawn as a
+        // direct edge for that handler so a hop is never shown twice.
+        var handlerResolvedContexts = result.ResolvedEdges
+            .Where(e => e.Kind == FlowEdgeKind.HandlerToDbContextResolved)
+            .Where(e => !handlerDbContexts.TryGetValue(e.From, out var direct) ||
+                        !direct.Contains(e.To, StringComparer.Ordinal))
+            .GroupBy(e => e.From, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .OrderBy(e => e.To, StringComparer.Ordinal)
+                    .ThenBy(e => e.Via, StringComparer.Ordinal)
+                    .ToList(),
+                StringComparer.Ordinal);
+
         var behaviors = BehaviorOrdering.Flattened(result.Behaviors);
 
         var sequences = new List<RequestSequence>();
@@ -74,6 +89,7 @@ internal static class RequestSequenceBuilder
                 contextsByFull,
                 touchedByHandler,
                 handlerDbContexts,
+                handlerResolvedContexts,
                 handlerNotifications,
                 notificationsByFull));
         }
@@ -88,6 +104,7 @@ internal static class RequestSequenceBuilder
         IReadOnlyDictionary<string, DbContextInfo> contextsByFull,
         IReadOnlyDictionary<string, IReadOnlyList<string>> touchedByHandler,
         IReadOnlyDictionary<string, List<string>> handlerDbContexts,
+        IReadOnlyDictionary<string, List<ResolvedEdge>> handlerResolvedContexts,
         IReadOnlyDictionary<string, List<string>> handlerNotifications,
         IReadOnlyDictionary<string, CqrsNotification> notificationsByFull)
     {
@@ -146,6 +163,19 @@ internal static class RequestSequenceBuilder
                     var id = "c" + (contextIds.Count + 1);
                     contextIds[contextFull] = id;
                     participants.Add((id, context?.Name ?? MermaidDiagramText.ShortTypeName(contextFull)));
+                }
+            }
+
+            if (handlerResolvedContexts.TryGetValue(handlerFull, out var resolvedContexts))
+            {
+                foreach (var resolved in resolvedContexts)
+                {
+                    if (contextIds.ContainsKey(resolved.To))
+                        continue;
+                    var context = contextsByFull.TryGetValue(resolved.To, out var c) ? c : null;
+                    var id = "c" + (contextIds.Count + 1);
+                    contextIds[resolved.To] = id;
+                    participants.Add((id, context?.Name ?? MermaidDiagramText.ShortTypeName(resolved.To)));
                 }
             }
 
@@ -210,6 +240,20 @@ internal static class RequestSequenceBuilder
                 {
                     var dsets = TouchedDbSets(contextFull, handlerFull, contextsByFull, touchedByHandler);
                     Arrow(handlerId, contextIds[contextFull], dsets.Count == 0 ? "uses" : $"uses {string.Join(", ", dsets)}");
+                }
+            }
+
+            // DI-resolved hop: dashed and labelled with the injected interface.
+            if (handlerResolvedContexts.TryGetValue(handlerFull, out var resolvedContexts))
+            {
+                foreach (var resolved in resolvedContexts)
+                {
+                    var dsets = TouchedDbSets(resolved.To, handlerFull, contextsByFull, touchedByHandler);
+                    var via = MermaidDiagramText.ShortTypeName(resolved.Via);
+                    var text = dsets.Count == 0
+                        ? $"uses via {via}"
+                        : $"uses {string.Join(", ", dsets)} via {via}";
+                    Arrow(handlerId, contextIds[resolved.To], text, dashed: true);
                 }
             }
 

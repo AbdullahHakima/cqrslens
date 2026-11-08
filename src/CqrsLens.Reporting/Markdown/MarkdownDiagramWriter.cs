@@ -59,20 +59,26 @@ internal static class MarkdownDiagramWriter
 
         md.AppendLine("## Flow");
         md.AppendLine();
-        var totalEdges = sections.Sum(s => s.Edges.Count);
+        var totalEdges = sections.Sum(s => s.Edges.Count + s.ResolvedEdges.Count);
         var edgeText = totalEdges == 1 ? "1 resolved flow edge" : $"{totalEdges} resolved flow edges";
         var sectionText = sections.Count == 1 ? "1 diagram" : $"{sections.Count} feature/project diagrams";
         var unresolvedNote = result.UnresolvedDispatches.Count > 0
             ? $" {result.UnresolvedDispatches.Count} unresolved dispatch call(s) are not drawn as edges."
             : "";
+        var dbContextNote = result.ResolvedEdges.Count > 0
+            ? "DbContext nodes appear when a handler references a discovered DbContext type directly, " +
+              "or through an injected interface resolved through DI"
+            : "DbContext nodes appear only when a handler directly references a discovered DbContext type";
         md.AppendLine(
             $"_{edgeText} across {sectionText} " +
-            "(endpoint → request → handler and onward; DbContext nodes appear only when a handler " +
-            "directly references a discovered DbContext type; " +
+            $"(endpoint → request → handler and onward; {dbContextNote}; " +
             $"every flow edge appears in exactly one diagram).{unresolvedNote}_");
         md.AppendLine();
-        md.AppendLine("**Legend:** blue stadium = endpoint · blue = request · gray = handler · " +
-                      "fuchsia = notification · green = DbContext.");
+        var legend = "**Legend:** blue stadium = endpoint · blue = request · gray = handler · " +
+                     "fuchsia = notification · green = DbContext";
+        if (result.ResolvedEdges.Count > 0)
+            legend += " · dotted = DI-resolved";
+        md.AppendLine(legend + ".");
         md.AppendLine();
 
         foreach (var section in sections)

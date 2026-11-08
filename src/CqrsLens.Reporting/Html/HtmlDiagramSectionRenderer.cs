@@ -96,18 +96,21 @@ internal static class HtmlDiagramSectionRenderer
             return;
 
         html.AppendLine("<h2>Flow</h2>");
-        var totalEdges = sections.Sum(s => s.Edges.Count);
+        var totalEdges = sections.Sum(s => s.Edges.Count + s.ResolvedEdges.Count);
         var edgeText = totalEdges == 1 ? "1 resolved flow edge" : $"{totalEdges} resolved flow edges";
         var sectionText = sections.Count == 1 ? "1 diagram" : $"{sections.Count} feature/project diagrams";
         var unresolvedNote = result.UnresolvedDispatches.Count > 0
             ? $" {result.UnresolvedDispatches.Count} unresolved dispatch call(s) are not drawn as edges."
             : "";
+        var dbContextNote = result.ResolvedEdges.Count > 0
+            ? "DbContext nodes appear when a handler references a discovered DbContext type directly, " +
+              "or through an injected interface resolved through DI"
+            : "DbContext nodes appear only when a handler directly references a discovered DbContext type";
         html.AppendLine(
             $"<p class=\"note\">{Encode(edgeText)} across {Encode(sectionText)} " +
-            "(endpoint → request → handler and onward; DbContext nodes appear only when a handler " +
-            "directly references a discovered DbContext type; " +
+            $"(endpoint → request → handler and onward; {Encode(dbContextNote)}; " +
             $"every flow edge appears in exactly one diagram).{Encode(unresolvedNote)}</p>");
-        AppendFlowLegend(html);
+        AppendFlowLegend(html, result.ResolvedEdges.Count > 0);
 
         foreach (var section in sections)
         {
@@ -128,7 +131,7 @@ internal static class HtmlDiagramSectionRenderer
         }
     }
 
-    private static void AppendFlowLegend(StringBuilder html)
+    private static void AppendFlowLegend(StringBuilder html, bool hasResolvedEdges)
     {
         html.AppendLine("<ul class=\"legend\" aria-label=\"Flow map legend\">");
         html.AppendLine("<li><span class=\"swatch\" style=\"background:#e0f2fe;border-color:#0284c7\" aria-hidden=\"true\"></span>Endpoint</li>");
@@ -136,6 +139,8 @@ internal static class HtmlDiagramSectionRenderer
         html.AppendLine("<li><span class=\"swatch handler\" aria-hidden=\"true\"></span>Handler</li>");
         html.AppendLine("<li><span class=\"swatch\" style=\"background:#fdf4ff;border-color:#a21caf\" aria-hidden=\"true\"></span>Notification</li>");
         html.AppendLine("<li><span class=\"swatch\" style=\"background:#ecfdf5;border-color:#059669\" aria-hidden=\"true\"></span>DbContext</li>");
+        if (hasResolvedEdges)
+            html.AppendLine("<li><span class=\"swatch\" style=\"background:#ffffff;border-color:#7c3aed;border-style:dashed\" aria-hidden=\"true\"></span>DI-resolved (dotted)</li>");
         html.AppendLine("</ul>");
     }
 

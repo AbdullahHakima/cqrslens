@@ -529,14 +529,19 @@ internal static class FrozenQuestionSet
                 "`POST /customers`",
                 "endpointToRequest",
                 "registered order",
-                "### DbContext edges (0)",
+                "### DbContext edges (1)",
+                "handlerToDbContextResolved",
+                "resolved through DI via",
+                "Northwind.Application.Common.Interfaces.INorthwindDbContext",
             ],
             AbsentMarkers: [],
             Derivation: "northwind's CreateCustomerCommand has 1 handler (nested `Handler`), 1 validator " +
                         "(CreateCustomerCommandValidator), 2 pipeline behaviors (RequestPerformanceBehaviour, " +
                         "RequestValidationBehavior at DependencyInjection.cs:15-16), publishes CustomerCreated " +
                         "(handled by CustomerCreatedHandler), and 1 resolved endpoint→request edge from " +
-                        "CustomersController.Create. All corpora hold 0 handlerToDbContext edges, so that section is empty."),
+                        "CustomersController.Create. The handler injects INorthwindDbContext; Stage 1 (CP3) resolves " +
+                        "the interface to NorthwindDbContext through DI, so the section now holds 1 resolved " +
+                        "handler→DbContext edge (0 direct handlerToDbContext edges remain)."),
 
         new FrozenRequestImpactQuery(
             "A3-REQ-02-eshop-no-endpoint", FrozenCorpus.Eshop,

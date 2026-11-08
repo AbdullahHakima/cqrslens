@@ -12,6 +12,13 @@ public sealed record FlowDiagramSection(
     int PartCount,
     int OwnerCount)
 {
+    /// <summary>
+    /// DI-resolved edges drawn in this section (today handler → DbContext through an
+    /// injected interface). Additive: <see cref="Edges"/> still holds only direct flow
+    /// edges, so every existing count and surface is unchanged.
+    /// </summary>
+    public IReadOnlyList<ResolvedEdge> ResolvedEdges { get; init; } = Array.Empty<ResolvedEdge>();
+
     public string Heading => Label is null
         ? PartCount > 1
             ? $"Flow — part {Part} of {PartCount}"
