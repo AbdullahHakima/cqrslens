@@ -176,6 +176,10 @@ internal static class AgentSliceDataGenerator
                 notifHandlersByFull, notifHandlersBySimple),
             ["endpointEdges"] = EndpointEdgeNodes(request, result),
             ["dbContextEdges"] = DbContextEdgeNodes(request, result, handlersByFull, handlersBySimple),
+            ["serviceCallEdges"] = ServiceCallEdgeNodes(
+                request, result, handlersByFull, handlersBySimple,
+                notificationsByFull, notificationsBySimple,
+                notifHandlersByFull, notifHandlersBySimple),
         };
 
         var endpoints = ResolvedEndpointNodes(request, endpointsByRequest, allowSimpleNameEndpointFallback);
@@ -416,6 +420,80 @@ internal static class AgentSliceDataGenerator
             if (!handlerNames.Contains(edge.From))
                 continue;
             nodes.Add(FlowEdgeNode(edge));
+        }
+        return nodes;
+    }
+
+    /// <summary>
+    /// Method-body service-call edges whose From is a member of this slice: one of the
+    /// request's handlers, or a notification handler named under a published notification.
+    /// A service target's own outgoing calls are not members, so no chain is expanded.
+    /// </summary>
+    private static JsonArray ServiceCallEdgeNodes(
+        CqrsRequest request,
+        AnalysisResult result,
+        IReadOnlyDictionary<string, HandlerInfo> handlersByFull,
+        IReadOnlyDictionary<string, HandlerInfo> handlersBySimple,
+        IReadOnlyDictionary<string, CqrsNotification> notificationsByFull,
+        IReadOnlyDictionary<string, CqrsNotification> notificationsBySimple,
+        IReadOnlyDictionary<string, NotificationHandlerInfo> notifHandlersByFull,
+        IReadOnlyDictionary<string, NotificationHandlerInfo> notifHandlersBySimple)
+    {
+        var members = new HashSet<string>(StringComparer.Ordinal);
+        var notificationNames = new List<string>();
+
+        void AddNotification(string name)
+        {
+            if (!notificationNames.Contains(name, StringComparer.Ordinal))
+                notificationNames.Add(name);
+        }
+
+        foreach (var name in request.Handlers)
+        {
+            members.Add(name);
+            var handler = Resolve(name, handlersByFull, handlersBySimple);
+            if (handler is null)
+                continue;
+            members.Add(handler.FullName);
+            foreach (var published in handler.PublishedNotifications)
+                AddNotification(published);
+        }
+
+        foreach (var published in request.PublishedNotifications)
+            AddNotification(published);
+
+        foreach (var name in notificationNames)
+        {
+            var notification = Resolve(name, notificationsByFull, notificationsBySimple);
+            if (notification is null)
+                continue;
+            foreach (var handlerName in notification.Handlers)
+            {
+                members.Add(handlerName);
+                var handler = Resolve(handlerName, notifHandlersByFull, notifHandlersBySimple);
+                if (handler is not null)
+                    members.Add(handler.FullName);
+            }
+        }
+
+        var nodes = new JsonArray();
+        foreach (var edge in result.ServiceCallEdges)
+        {
+            if (!members.Contains(edge.From))
+                continue;
+            var node = new JsonObject
+            {
+                ["kind"] = "serviceCall",
+                ["from"] = edge.From,
+                ["via"] = edge.Via,
+                ["method"] = edge.Method,
+                ["to"] = edge.To,
+            };
+            if (!string.IsNullOrEmpty(edge.ProjectName))
+                node["project"] = edge.ProjectName;
+            if (edge.Location is not null)
+                node["location"] = $"{edge.Location.File}:{edge.Location.Line}";
+            nodes.Add(node);
         }
         return nodes;
     }

@@ -127,6 +127,7 @@ internal static class AgentRequestImpactGenerator
             notificationsByFull, notificationsBySimple);
 
         var dbContextEdges = DbContextEdges(result, handlers);
+        var serviceCalls = ServiceCalls(result, handlers);
         var references = ReverseReach(result, request, allowSimpleNameEndpointFallback);
 
         var registered = BehaviorOrdering.Registered(result.Behaviors);
@@ -146,6 +147,7 @@ internal static class AgentRequestImpactGenerator
         AppendEndpoints(sb, request, endpoints, result);
         AppendNotifications(sb, notifications, notifHandlersByFull, notifHandlersBySimple);
         AppendDbContextEdges(sb, dbContextEdges);
+        AppendServiceCalls(sb, serviceCalls);
         AppendReverseReach(sb, references, result);
     }
 
@@ -394,6 +396,57 @@ internal static class AgentRequestImpactGenerator
                 ? $" (resolved through DI via `{edge.Via}`)"
                 : "";
             sb.AppendLine($"- `{edge.Kind}` `{edge.From}` → `{edge.To}`{resolved}{FormatLoc(edge.Location)}" +
+                          ProjectSuffix(edge.Project));
+        }
+        sb.AppendLine();
+    }
+
+    private sealed record ServiceCallRow(
+        string From,
+        string Via,
+        string Method,
+        string To,
+        SourceLocation? Location,
+        string? Project);
+
+    /// <summary>
+    /// The request handler's OWN method-body service-call edges (Stage 2). Only edges whose
+    /// From is a handler of this request are listed; a service target's own outgoing calls are
+    /// never expanded (no transitive chains).
+    /// </summary>
+    private static List<ServiceCallRow> ServiceCalls(AnalysisResult result, IReadOnlyList<HandlerInfo> handlers)
+    {
+        var handlerNames = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var handler in handlers)
+        {
+            handlerNames.Add(handler.FullName);
+            handlerNames.Add(handler.Name);
+        }
+
+        return result.ServiceCallEdges
+            .Where(edge => handlerNames.Contains(edge.From))
+            .Select(edge => new ServiceCallRow(
+                edge.From, edge.Via, edge.Method, edge.To, edge.Location, edge.ProjectName))
+            .OrderBy(e => e.From, StringComparer.Ordinal)
+            .ThenBy(e => e.Method, StringComparer.Ordinal)
+            .ThenBy(e => e.Via, StringComparer.Ordinal)
+            .ThenBy(e => e.To, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    private static void AppendServiceCalls(StringBuilder sb, IReadOnlyList<ServiceCallRow> edges)
+    {
+        sb.AppendLine($"### Service calls ({edges.Count})");
+        if (edges.Count == 0)
+        {
+            sb.AppendLine("No service-call edge is recorded for this request's handler(s) in the scanned model.");
+            sb.AppendLine();
+            return;
+        }
+
+        foreach (var edge in edges)
+        {
+            sb.AppendLine($"- `{edge.Method}` via `{edge.Via}` → `{edge.To}`{FormatLoc(edge.Location)}" +
                           ProjectSuffix(edge.Project));
         }
         sb.AppendLine();

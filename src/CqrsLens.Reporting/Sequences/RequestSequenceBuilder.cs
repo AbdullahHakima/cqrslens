@@ -74,6 +74,20 @@ internal static class RequestSequenceBuilder
                     .ToList(),
                 StringComparer.Ordinal);
 
+        // The handler's OWN service-call edges (Stage 2). Only edges whose From is a handler
+        // of this request are drawn; a service target's own outgoing calls are never expanded
+        // into the sequence (no transitive chains).
+        var serviceCallsByHandler = result.ServiceCallEdges
+            .GroupBy(e => e.From, StringComparer.Ordinal)
+            .ToDictionary(
+                g => g.Key,
+                g => g
+                    .OrderBy(e => e.Via, StringComparer.Ordinal)
+                    .ThenBy(e => e.Method, StringComparer.Ordinal)
+                    .ThenBy(e => e.To, StringComparer.Ordinal)
+                    .ToList(),
+                StringComparer.Ordinal);
+
         var behaviors = BehaviorOrdering.Flattened(result.Behaviors);
 
         var sequences = new List<RequestSequence>();
@@ -91,7 +105,8 @@ internal static class RequestSequenceBuilder
                 handlerDbContexts,
                 handlerResolvedContexts,
                 handlerNotifications,
-                notificationsByFull));
+                notificationsByFull,
+                serviceCallsByHandler));
         }
 
         return sequences;
@@ -106,7 +121,8 @@ internal static class RequestSequenceBuilder
         IReadOnlyDictionary<string, List<string>> handlerDbContexts,
         IReadOnlyDictionary<string, List<ResolvedEdge>> handlerResolvedContexts,
         IReadOnlyDictionary<string, List<string>> handlerNotifications,
-        IReadOnlyDictionary<string, CqrsNotification> notificationsByFull)
+        IReadOnlyDictionary<string, CqrsNotification> notificationsByFull,
+        IReadOnlyDictionary<string, List<ServiceCallEdge>> serviceCallsByHandler)
     {
         var lines = new List<string>
         {
@@ -121,6 +137,8 @@ internal static class RequestSequenceBuilder
         var behaviorIds = new List<string>();
         var handlerIds = new List<(string Id, string FullName)>();
         var contextIds = new Dictionary<string, string>(StringComparer.Ordinal);
+        var serviceIds = new Dictionary<string, string>(StringComparer.Ordinal);
+        var serviceCounter = 0;
         var notificationIds = new Dictionary<string, string>(StringComparer.Ordinal);
         var notificationHandlerIds = new List<(string Id, string FullName, string NotificationFullName)>();
         var notificationHandlerSeen = new HashSet<string>(StringComparer.Ordinal);
@@ -176,6 +194,27 @@ internal static class RequestSequenceBuilder
                     var id = "c" + (contextIds.Count + 1);
                     contextIds[resolved.To] = id;
                     participants.Add((id, context?.Name ?? MermaidDiagramText.ShortTypeName(resolved.To)));
+                }
+            }
+
+            // Service-call targets become participants (Stage 2). A target that is already a
+            // handler participant reuses that participant id.
+            if (serviceCallsByHandler.TryGetValue(handlerFull, out var serviceCalls))
+            {
+                foreach (var call in serviceCalls)
+                {
+                    if (serviceIds.ContainsKey(call.To))
+                        continue;
+                    var existing = handlerIds.FirstOrDefault(h => string.Equals(h.FullName, call.To, StringComparison.Ordinal));
+                    if (existing.Id is not null)
+                    {
+                        serviceIds[call.To] = existing.Id;
+                        continue;
+                    }
+
+                    var id = "s" + (++serviceCounter);
+                    serviceIds[call.To] = id;
+                    participants.Add((id, MermaidDiagramText.ShortTypeName(call.To)));
                 }
             }
 
@@ -254,6 +293,17 @@ internal static class RequestSequenceBuilder
                         ? $"uses via {via}"
                         : $"uses {string.Join(", ", dsets)} via {via}";
                     Arrow(handlerId, contextIds[resolved.To], text, dashed: true);
+                }
+            }
+
+            // Service-call edges: dashed, labelled with the invoked method and the via
+            // interface, mirroring the DI-resolved hop styling.
+            if (serviceCallsByHandler.TryGetValue(handlerFull, out var serviceCalls))
+            {
+                foreach (var call in serviceCalls)
+                {
+                    var via = MermaidDiagramText.ShortTypeName(call.Via);
+                    Arrow(handlerId, serviceIds[call.To], $"{call.Method} via {via}", dashed: true);
                 }
             }
 
