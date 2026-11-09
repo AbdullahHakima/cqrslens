@@ -554,6 +554,91 @@ public class ServiceCallEdgeTests
             e.To == "IntegrationEventLogService");
     }
 
+    [Fact]
+    public void JsonReport_EmitsTheAdditiveServiceCallEdgesSection()
+    {
+        var result = Scan(
+            """
+            namespace App.Domain
+            {
+                public interface IRepo { void Save(); }
+            }
+
+            namespace App.Infra
+            {
+                public class Repo : App.Domain.IRepo { public void Save() { } }
+            }
+
+            namespace App.Application
+            {
+                using App.Domain;
+                using MediatR;
+
+                public record Ping : IRequest<int>;
+
+                public class PingHandler : IRequestHandler<Ping, int>
+                {
+                    private readonly IRepo _repo;
+                    public PingHandler(IRepo repo) { _repo = repo; }
+                    public int Handle(Ping request) { _repo.Save(); return 0; }
+                }
+            }
+            """);
+
+        var json = JsonReportGenerator.Generate(result);
+
+        Assert.Contains("\"serviceCallEdges\"", json);
+        Assert.Contains("\"kind\": \"serviceCall\"", json);
+        Assert.Contains("\"from\": \"App.Application.PingHandler\"", json);
+        Assert.Contains("\"via\": \"App.Domain.IRepo\"", json);
+        Assert.Contains("\"method\": \"Save\"", json);
+        Assert.Contains("\"to\": \"App.Infra.Repo\"", json);
+        Assert.Contains("\"schemaVersion\": 1", json);
+    }
+
+    [Fact]
+    public void JsonReport_OmitsTheSectionWhenThereAreNoCallEdges()
+    {
+        // A handler whose only invocation is a property chain produces no edge, so the
+        // additive section must be absent.
+        var result = Scan(
+            """
+            namespace App.Domain
+            {
+                public interface IUnitOfWork { void Commit(); }
+                public interface IRepo { IUnitOfWork UnitOfWork { get; } void Save(); }
+            }
+
+            namespace App.Infra
+            {
+                public class Repo : App.Domain.IRepo
+                {
+                    public App.Domain.IUnitOfWork UnitOfWork => null!;
+                    public void Save() { }
+                }
+            }
+
+            namespace App.Application
+            {
+                using App.Domain;
+                using MediatR;
+
+                public record Ping : IRequest<int>;
+
+                public class PingHandler : IRequestHandler<Ping, int>
+                {
+                    private readonly IRepo _repo;
+                    public PingHandler(IRepo repo) { _repo = repo; }
+                    public int Handle(Ping request) { _repo.UnitOfWork.Commit(); return 0; }
+                }
+            }
+            """);
+
+        var json = JsonReportGenerator.Generate(result);
+
+        Assert.DoesNotContain("serviceCallEdges", json);
+    }
+
     [Theory]
     [InlineData(AnalysisMode.Text)]
     [InlineData(AnalysisMode.Roslyn)]

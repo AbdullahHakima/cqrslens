@@ -292,6 +292,20 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
+            ServiceCallEdges = result.ServiceCallEdges.Count > 0
+                ? result.ServiceCallEdges
+                    .Select(e => new JsonServiceCallEdge
+                    {
+                        Kind = "serviceCall",
+                        From = e.From,
+                        Via = e.Via,
+                        Method = e.Method,
+                        To = e.To,
+                        Project = e.ProjectName,
+                        Location = ToJsonLocation(e.Location),
+                    })
+                    .ToList()
+                : null,
             DispatchCallSites = result.DispatchCallSites.Count > 0
                 ? result.DispatchCallSites
                     .Select(s => new JsonDispatchCallSite

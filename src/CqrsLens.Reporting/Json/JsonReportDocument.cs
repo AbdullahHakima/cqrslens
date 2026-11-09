@@ -36,6 +36,13 @@ internal sealed class JsonReportDocument
     /// </summary>
     public List<JsonResolvedEdge>? ResolvedEdges { get; set; }
 
+    /// <summary>
+    /// Additive section: method-body service-call edges (a handler or service invoking a method
+    /// on one of its injected members). Emitted only when non-empty, so reports without call
+    /// edges stay byte-identical to the base.
+    /// </summary>
+    public List<JsonServiceCallEdge>? ServiceCallEdges { get; set; }
+
     public List<JsonDispatchCallSite>? DispatchCallSites { get; set; }
     public List<JsonUnresolvedDispatch>? UnresolvedDispatches { get; set; }
 }
