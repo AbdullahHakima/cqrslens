@@ -110,7 +110,9 @@ internal sealed record FrozenDiffQuery(
 /// modular-monolith and ABP, with the expected verdict of each claim derived from the frozen
 /// scan counts of that corpus. Brief A2 extends it with frozen queries that exercise the filtered
 /// <c>check_architecture</c> view and the structured <c>trace_slice</c> form. It is the stage's
-/// success-test harness.
+/// success-test harness. The Phase 7 exit gate extends the set with DI / service-call
+/// questions: Stage 1 updated A3-REQ-01 for the DI-resolved DbContext hop, and Stage 2
+/// adds A2-SLICE-05..07 and A3-REQ-05..06.
 /// </summary>
 internal static class FrozenQuestionSet
 {
@@ -504,6 +506,58 @@ internal static class FrozenQuestionSet
             AbsentMarkers: ["\"name\":\"CreateProductCommandValidator\""],
             Derivation: "NW-02: CreateProductCommand has no validator, so the structured validators array is empty " +
                         "(absent, not completed). Its handler injects INorthwindDbContext (NW-07)."),
+
+        new FrozenSliceQuery(
+            "A2-SLICE-05-northwind-service-call", FrozenCorpus.Northwind,
+            Query: "GetProductsFileQuery", Limit: 1, ExpectedTotalMatched: 1,
+            ExpectedMarkers:
+            [
+                "\"kind\":\"serviceCall\"",
+                "\"method\":\"BuildProductsFile\"",
+                "\"via\":\"Northwind.Application.Common.Interfaces.ICsvFileBuilder\"",
+                "\"to\":\"Northwind.Infrastructure.Files.CsvFileBuilder\"",
+            ],
+            AbsentMarkers: ["\"kind\":\"handlerToDbContext\""],
+            Derivation: "Stage 2 CP1 pilot (hand-audited, verified exact): GetProductsFileQueryHandler " +
+                        "holds exactly 1 service-call edge - BuildProductsFile via ICsvFileBuilder, resolved " +
+                        "by the Stage 1 index to CsvFileBuilder; northwind holds 3 service-call edges in " +
+                        "total. All corpora hold 0 direct handlerToDbContext edges (the DbContext hop is " +
+                        "DI-resolved, Stage 1)."),
+
+        new FrozenSliceQuery(
+            "A2-SLICE-06-northwind-notification-handler-member", FrozenCorpus.Northwind,
+            Query: "CreateCustomerCommand", Limit: 1, ExpectedTotalMatched: 1,
+            ExpectedMarkers:
+            [
+                "\"kind\":\"serviceCall\"",
+                "\"method\":\"SendAsync\"",
+                "\"from\":\"Northwind.Application.Customers.Commands.CreateCustomer.CustomerCreated.CustomerCreatedHandler\"",
+            ],
+            AbsentMarkers: [],
+            Derivation: "CreateCustomerCommand publishes CustomerCreated; CustomerCreatedHandler is a " +
+                        "slice member (a notification handler named under a published notification), so " +
+                        "its own service-call edge - SendAsync via INotificationService - is included in " +
+                        "the slice (Stage 2 CP3). The request's handler itself holds no service-call edge."),
+
+        new FrozenSliceQuery(
+            "A2-SLICE-07-eshop-service-call-count", FrozenCorpus.Eshop,
+            Query: "CreateOrderCommand", Limit: 1, ExpectedTotalMatched: 1,
+            ExpectedMarkers:
+            [
+                "\"kind\":\"serviceCall\"",
+                "\"method\":\"Add\"",
+                "\"method\":\"AddAndSaveEventAsync\"",
+            ],
+            AbsentMarkers:
+            [
+                "\"from\":\"eShop.Ordering.Infrastructure.Repositories.OrderRepository\"",
+                "\"from\":\"eShop.Ordering.API.Application.IntegrationEvents.OrderingIntegrationEventService\"",
+            ],
+            Derivation: "CreateOrderCommandHandler holds exactly 2 service-call edges (Stage 2 CP1; " +
+                        "eshop holds 32 in total): Add via IOrderRepository and AddAndSaveEventAsync via " +
+                        "IOrderingIntegrationEventService. Only member edges enter the slice - " +
+                        "OrderingIntegrationEventService's own 5 edges start from the service, not from a " +
+                        "member, so no from-service node appears: slices never expand call chains."),
     };
 
     // ------------------------------------------------------- A3: request-level impact
@@ -591,6 +645,37 @@ internal static class FrozenQuestionSet
                         "Administration NewUserRegisteredIntegrationEventHandler records dispatching this command in " +
                         "its DispatchedRequests list (matched by full name, so the same-simple-named Meetings command " +
                         "is not cross-linked)."),
+
+        new FrozenRequestImpactQuery(
+            "A3-REQ-05-northwind-service-call", FrozenCorpus.Northwind,
+            Request: "GetProductsFileQuery", Contains: false, Limit: 0,
+            ExpectedMarkers:
+            [
+                "### Service calls (1)",
+                "`BuildProductsFile` via `Northwind.Application.Common.Interfaces.ICsvFileBuilder`",
+                "`Northwind.Infrastructure.Files.CsvFileBuilder`",
+            ],
+            AbsentMarkers: [],
+            Derivation: "GetProductsFileQuery's handler holds exactly 1 service-call edge (Stage 2 CP1 " +
+                        "pilot, hand-audited): BuildProductsFile via ICsvFileBuilder, resolved to " +
+                        "CsvFileBuilder. Stage 2 CP3 renders the request handler's edges in the impact " +
+                        "trace's Service calls section."),
+
+        new FrozenRequestImpactQuery(
+            "A3-REQ-06-eshop-service-calls", FrozenCorpus.Eshop,
+            Request: "CreateOrderCommand", Contains: false, Limit: 0,
+            ExpectedMarkers:
+            [
+                "### Service calls (2)",
+                "`Add` via `eShop.Ordering.Domain.AggregatesModel.OrderAggregate.IOrderRepository`",
+                "`AddAndSaveEventAsync` via `eShop.Ordering.API.Application.IntegrationEvents.IOrderingIntegrationEventService`",
+            ],
+            AbsentMarkers: [],
+            Derivation: "CreateOrderCommandHandler holds exactly 2 service-call edges (Stage 2 CP1): " +
+                        "Add via IOrderRepository (CreateOrderCommandHandler.cs:49) and " +
+                        "AddAndSaveEventAsync via IOrderingIntegrationEventService (:33). Only the " +
+                        "request's own handler is traced - notification handlers' edges stay out of a " +
+                        "request impact trace."),
     };
 
     // --------------------------------------------------- A3: per-module findings grouping
