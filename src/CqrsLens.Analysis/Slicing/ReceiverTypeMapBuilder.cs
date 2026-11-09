@@ -114,6 +114,57 @@ internal static partial class ReceiverTypeMapBuilder
         return map;
     }
 
+    /// <summary>
+    /// Collects class-level field-style declarations (name → written type) whose declaration
+    /// sits directly in the class body: brace depth 1 and not inside a parameter list. Locals
+    /// (nested braces) and method/constructor parameters (paren depth greater than zero) are
+    /// deliberately excluded, because a call on one of those is not a call on an injected
+    /// member. Reuses the same declaration regex as the receiver map; no parallel parser.
+    /// </summary>
+    internal static void CollectClassLevelDeclarations(
+        CSharpScanner.ClassDecl decl,
+        string code,
+        SourceMask mask,
+        List<CSharpScanner.ClassDecl> classes,
+        List<(string Type, string Name)> target)
+    {
+        if (decl.BodySpan.End <= decl.BodySpan.Start) return;
+
+        var bodyOpen = code.IndexOf('{', decl.BodySpan.Start);
+        if (bodyOpen < 0 || bodyOpen >= decl.BodySpan.End) return;
+        var bodyEnd = Math.Min(code.Length, decl.BodySpan.End);
+
+        foreach (Match m in TypedDeclarationRegex().Matches(code, bodyOpen + 1))
+        {
+            if (m.Index >= bodyEnd) break;
+            if (!mask.IsCode(m.Index)) continue;
+            if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
+
+            var type = m.Groups["type"].Value.Trim();
+            if (NonTypeWords.Contains(type)) continue;
+            if (DepthAt(code, mask, bodyOpen, m.Index, '{', '}') != 1) continue;
+            if (DepthAt(code, mask, bodyOpen, m.Index, '(', ')') != 0) continue;
+
+            var name = m.Groups["name"].Value.TrimStart('@');
+            var normalized = Regex.Replace(type, @"\s+", "");
+            if (normalized.Length == 0 || name.Length == 0) continue;
+            if (target.Contains((normalized, name))) continue;
+            target.Add((normalized, name));
+        }
+    }
+
+    private static int DepthAt(string code, SourceMask mask, int from, int index, char open, char close)
+    {
+        var depth = 0;
+        for (var i = from; i < index && i < code.Length; i++)
+        {
+            if (!mask.IsCode(i)) continue;
+            if (code[i] == open) depth++;
+            else if (code[i] == close && depth > 0) depth--;
+        }
+        return depth;
+    }
+
     private static string? InferInitializerType(
         string initializer,
         Dictionary<string, string> receiverTypes,

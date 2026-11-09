@@ -47,6 +47,15 @@ public sealed class AnalysisResult
     public List<ResolvedEdge> ResolvedEdges { get; } = new();
 
     /// <summary>
+    /// Method-body call edges between scanned classes: a handler or service invoking a method
+    /// on one of its injected members, resolved through the service-resolution index when the
+    /// member is an interface. Kept separate from <see cref="ResolvedEdges"/> (Stage 1
+    /// dependency edges) and <see cref="FlowEdges"/> so every existing count, check and report
+    /// surface is unchanged; the additive JSON section exposes them.
+    /// </summary>
+    public List<ServiceCallEdge> ServiceCallEdges { get; } = new();
+
+    /// <summary>
     /// Every resolved dispatch call site, including senders that are neither handlers
     /// nor endpoints. Drives production-reachability, so a service that sends a
     /// command still counts as a call site even though it is not a modelled edge.

@@ -108,6 +108,11 @@ public static class Analyzer
         HandlerDbContextResolver.Build(parsedFiles, result);
         phases.Record("Resolve handler contexts");
 
+        // Stage 2 consumer: method-body call edges between scanned classes, through injected
+        // members. Additive model data; no existing count or surface reads it yet.
+        ServiceCallEdgeResolver.Build(parsedFiles, result);
+        phases.Record("Resolve service calls");
+
         FlowAnalyzer.Analyze(parsedFiles, result);
         phases.Record("Flow graph");
 

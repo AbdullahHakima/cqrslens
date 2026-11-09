@@ -24,6 +24,44 @@ internal static class DependencyExtractor
         if (!string.IsNullOrWhiteSpace(decl.PrimaryConstructorParameters))
             AddParameterTypes(decl.PrimaryConstructorParameters, dependencies);
 
+        ExtractConstructorParameters(decl, code, mask, classes, (type, _) =>
+        {
+            if (!dependencies.Contains(type, StringComparer.Ordinal))
+                dependencies.Add(type);
+        });
+    }
+
+    /// <summary>
+    /// Collects the (type, name) pair of every constructor parameter — the primary
+    /// constructor when the declaration has one, plus every explicit constructor. This is
+    /// the same parameter capture as <see cref="Extract"/>, retaining the parameter name so
+    /// a caller can map an injected member to its declared type.
+    /// </summary>
+    internal static void ExtractParameters(
+        CSharpScanner.ClassDecl decl,
+        string code,
+        SourceMask mask,
+        List<CSharpScanner.ClassDecl> classes,
+        List<(string Type, string Name)> target)
+    {
+        if (!string.IsNullOrWhiteSpace(decl.PrimaryConstructorParameters))
+            AddParameterMembers(decl.PrimaryConstructorParameters, target);
+
+        ExtractConstructorParameters(decl, code, mask, classes, (type, name) =>
+        {
+            if (name is null) return;
+            if (target.Contains((type, name))) return;
+            target.Add((type, name));
+        });
+    }
+
+    private static void ExtractConstructorParameters(
+        CSharpScanner.ClassDecl decl,
+        string code,
+        SourceMask mask,
+        List<CSharpScanner.ClassDecl> classes,
+        Action<string, string?> onParameter)
+    {
         if (decl.BodySpan.End <= decl.BodySpan.Start)
             return;
 
@@ -47,7 +85,12 @@ internal static class DependencyExtractor
             if (!mask.IsCode(m.Index)) continue;
             if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
 
-            AddParameterTypes(m.Groups["params"].Value, dependencies);
+            foreach (var raw in CSharpScanner.SplitTopLevel(m.Groups["params"].Value))
+            {
+                var paramType = DeepSliceSyntax.ExtractParameterType(raw);
+                if (string.IsNullOrEmpty(paramType)) continue;
+                onParameter(paramType, DeepSliceSyntax.ExtractParameterName(raw));
+            }
         }
     }
 
@@ -59,6 +102,18 @@ internal static class DependencyExtractor
             if (string.IsNullOrEmpty(paramType)) continue;
             if (!target.Contains(paramType, StringComparer.Ordinal))
                 target.Add(paramType);
+        }
+    }
+
+    private static void AddParameterMembers(string rawParameters, List<(string Type, string Name)> target)
+    {
+        foreach (var raw in CSharpScanner.SplitTopLevel(rawParameters))
+        {
+            var paramType = DeepSliceSyntax.ExtractParameterType(raw);
+            var paramName = DeepSliceSyntax.ExtractParameterName(raw);
+            if (string.IsNullOrEmpty(paramType) || string.IsNullOrEmpty(paramName)) continue;
+            if (!target.Contains((paramType, paramName)))
+                target.Add((paramType, paramName));
         }
     }
 }
