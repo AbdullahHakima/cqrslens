@@ -5,6 +5,20 @@ where they exist; the dates are not promises.
 
 ## Done
 
+**1.1.0** (November 2026)
+
+- **DI-resolved DbContext edges**: handlers that depend on a DbContext
+  abstraction resolve through the DI registrations to the concrete
+  context, and the edge is drawn on flow diagrams, per-request
+  sequences, JSON and MCP answers
+- **Direct service calls**: calls a handler makes on injected services
+  are extracted and drawn — a `serviceCallEdges` field in JSON,
+  service-call steps on diagrams and sequences, and service calls in
+  MCP request-impact answers
+- **Faster Resolve phases**: the service-resolution analysis shares
+  one type hierarchy and memoizes type-name resolution, with
+  byte-identical reports
+
 **1.0.0** (November 2026)
 
 - **Per-request sequence diagrams**: endpoint → mediator → behaviors →

@@ -16,7 +16,7 @@ permissions:
 steps:
   - uses: actions/checkout@v4
 
-  - uses: AbdullahHakima/cqrslens@v1.0.0
+  - uses: AbdullahHakima/cqrslens@v1.1.0
     with:
       path: src
       output: ARCHITECTURE.md

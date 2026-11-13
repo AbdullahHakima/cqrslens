@@ -2,6 +2,34 @@
 
 All notable changes to CqrsLens are documented here.
 
+## [1.1.0] - 2026-11-13
+
+### Added
+
+- **Handlers that depend on a DbContext abstraction now resolve to the
+  concrete DbContext.** When a handler takes an `IDbContext` (or any
+  registered abstraction) instead of the concrete context, the scan
+  follows the DI registrations to the implementation and draws the
+  handler → DbContext edge it previously missed. The resolved edges
+  appear on flow diagrams and per-request sequences, in the JSON
+  report, and in the MCP `trace_request_impact` answers.
+- **Direct service calls are now tracked.** Calls a handler makes on an
+  injected service — `repository.Add(...)`,
+  `eventService.Publish(...)` — are extracted and drawn: a
+  `serviceCallEdges` field in the JSON report, service-call steps on
+  flow diagrams and per-request sequences, and service calls in the
+  MCP request-impact answers. Calls through interfaces resolve to
+  their implementations through the same DI registrations; calls the
+  scanner cannot resolve are reported as unresolved, never guessed.
+
+### Changed
+
+- **The Resolve phases run faster with identical output.** The
+  service-resolution and service-call analysis now shares one type
+  hierarchy and memoizes type-name resolution: about a third faster
+  on the largest benchmark codebase, a tenth on a medium one, with
+  byte-identical reports.
+
 ## [1.0.0] - 2026-11-07
 
 ### Added

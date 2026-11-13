@@ -10,7 +10,7 @@ namespace CqrsLens.Tests;
 /// </summary>
 public sealed class ConsoleArtworkTests
 {
-    private const string Version = "1.0.0";
+    private const string Version = "1.1.0";
 
     [Theory]
     [InlineData(40)]
