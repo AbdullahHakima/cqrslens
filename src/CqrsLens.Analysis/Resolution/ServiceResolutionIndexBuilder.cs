@@ -15,7 +15,8 @@ internal static class ServiceResolutionIndexBuilder
 {
     public static void Build(
         IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
-        AnalysisResult result)
+        AnalysisResult result,
+        TypeHierarchy? hierarchy = null)
     {
         if (parsedFiles.Count == 0) return;
 
@@ -23,7 +24,10 @@ internal static class ServiceResolutionIndexBuilder
         var interfaces = parsedFiles.SelectMany(f => f.Scan.InterfaceDecls).ToList();
         if (classes.Count == 0 && interfaces.Count == 0) return;
 
-        var hierarchy = new TypeHierarchy(classes, interfaces);
+        // The hierarchy is a pure function of the scanned declarations and is shared with the
+        // two later resolution consumers; rebuilding it here would duplicate its index and
+        // discard the resolver cache it has already warmed.
+        hierarchy ??= new TypeHierarchy(classes, interfaces);
         var classFiles = new Dictionary<CSharpScanner.ClassDecl, SourceFile>();
         var interfaceLocations = new Dictionary<string, SourceLocation>(StringComparer.Ordinal);
         foreach (var (file, scan, _) in parsedFiles)

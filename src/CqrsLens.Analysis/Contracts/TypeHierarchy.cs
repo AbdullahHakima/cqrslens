@@ -94,7 +94,12 @@ internal sealed class TypeHierarchy
         CSharpScanner.ClassDecl declaration,
         List<ImplementedInterface> results)
     {
-        var openParameters = new HashSet<string>(declaration.TypeParameters, StringComparer.Ordinal);
+        // No base list means no interface can be reached; skip the hash sets and key.
+        if (string.IsNullOrWhiteSpace(declaration.BaseList)) return;
+
+        var openParameters = declaration.TypeParameters.Count == 0
+            ? EmptyOpenParameters
+            : new HashSet<string>(declaration.TypeParameters, StringComparer.Ordinal);
         VisitClassInterfaces(
             declaration,
             GenericBindings.Empty,
@@ -103,6 +108,9 @@ internal sealed class TypeHierarchy
             0,
             results);
     }
+
+    private static readonly IReadOnlySet<string> EmptyOpenParameters =
+        new HashSet<string>(StringComparer.Ordinal);
 
     private void VisitClassInterfaces(
         CSharpScanner.ClassDecl declaration,
@@ -120,7 +128,11 @@ internal sealed class TypeHierarchy
         foreach (var part in CSharpScanner.SplitTopLevel(declaration.BaseList))
         {
             var (name, rawArgs) = CSharpScanner.ParseTypeReference(part);
-            var args = rawArgs.Select(argument => GenericBindings.Substitute(argument, bindings)).ToList();
+            // With no outer bindings the arguments are used as written, so the mapped
+            // copy is skipped entirely (the common case).
+            var args = bindings.Count == 0
+                ? rawArgs
+                : rawArgs.Select(argument => GenericBindings.Substitute(argument, bindings)).ToList();
 
             var interfaceDecl = _names.ResolveInterfaceDecl(
                 name, declaration.Namespace, declaration.Usings, declaration.ContainingTypes,
@@ -130,7 +142,7 @@ internal sealed class TypeHierarchy
                 RecordInterface(interfaceDecl, args, openParameters, results);
                 VisitInterfaceInterfaces(
                     interfaceDecl,
-                    GenericBindings.Bind(interfaceDecl.TypeParameters, args, GenericBindings.Empty),
+                    GenericBindings.Bind(interfaceDecl.TypeParameters, args),
                     openParameters,
                     visited,
                     depth + 1,
@@ -144,7 +156,7 @@ internal sealed class TypeHierarchy
             if (classDecl is null) continue;
             VisitClassInterfaces(
                 classDecl,
-                GenericBindings.Bind(classDecl.TypeParameters, args, GenericBindings.Empty),
+                GenericBindings.Bind(classDecl.TypeParameters, args),
                 openParameters,
                 visited,
                 depth + 1,
@@ -168,7 +180,9 @@ internal sealed class TypeHierarchy
         foreach (var part in CSharpScanner.SplitTopLevel(declaration.BaseList))
         {
             var (name, rawArgs) = CSharpScanner.ParseTypeReference(part);
-            var args = rawArgs.Select(argument => GenericBindings.Substitute(argument, bindings)).ToList();
+            var args = bindings.Count == 0
+                ? rawArgs
+                : rawArgs.Select(argument => GenericBindings.Substitute(argument, bindings)).ToList();
 
             var interfaceDecl = _names.ResolveInterfaceDecl(
                 name, declaration.Namespace, declaration.Usings, declaration.ContainingTypes,
@@ -178,7 +192,7 @@ internal sealed class TypeHierarchy
             RecordInterface(interfaceDecl, args, openParameters, results);
             VisitInterfaceInterfaces(
                 interfaceDecl,
-                GenericBindings.Bind(interfaceDecl.TypeParameters, args, GenericBindings.Empty),
+                GenericBindings.Bind(interfaceDecl.TypeParameters, args),
                 openParameters,
                 visited,
                 depth + 1,

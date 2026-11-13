@@ -8,14 +8,17 @@ internal static class GenericBindings
     public static readonly IReadOnlyDictionary<string, string> Empty =
         new Dictionary<string, string>(StringComparer.Ordinal);
 
-    public static Dictionary<string, string> Bind(
+    public static IReadOnlyDictionary<string, string> Bind(
         IReadOnlyList<string> parameters,
         IReadOnlyList<string> arguments,
-        IReadOnlyDictionary<string, string> outer)
+        IReadOnlyDictionary<string, string>? outer = null)
     {
+        // An empty or arity-mismatched bind is the shared empty map: callers only read it,
+        // and allocating a fresh dictionary here was a per-interface cost on large scans.
         if (parameters.Count == 0 || parameters.Count != arguments.Count)
-            return new Dictionary<string, string>(Empty, StringComparer.Ordinal);
+            return Empty;
 
+        outer ??= Empty;
         var bindings = new Dictionary<string, string>(parameters.Count, StringComparer.Ordinal);
         for (var i = 0; i < parameters.Count; i++)
             bindings[parameters[i]] = Substitute(arguments[i], outer);

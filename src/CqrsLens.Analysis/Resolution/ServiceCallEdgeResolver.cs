@@ -29,7 +29,8 @@ internal static partial class ServiceCallEdgeResolver
 
     public static void Build(
         IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
-        AnalysisResult result)
+        AnalysisResult result,
+        TypeHierarchy? hierarchy = null)
     {
         if (parsedFiles.Count == 0) return;
 
@@ -51,7 +52,8 @@ internal static partial class ServiceCallEdgeResolver
         }
         if (classes.Count == 0) return;
 
-        var hierarchy = new TypeHierarchy(classes, interfaces);
+        // Reuse the shared hierarchy and its warmed resolver cache when the caller provides one.
+        hierarchy ??= new TypeHierarchy(classes, interfaces);
 
         var resolutionBySignature = new Dictionary<string, ServiceResolution>(StringComparer.Ordinal);
         foreach (var resolution in result.ServiceResolutions)

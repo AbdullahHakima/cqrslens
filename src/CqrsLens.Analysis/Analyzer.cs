@@ -97,20 +97,27 @@ public static class Analyzer
         // its own; the first consumer (handler → DbContext through DI) reads it.
         var parsedFiles = workspace.SuccessfullyParsed
             .OrderBy(f => f.File.Path, StringComparer.OrdinalIgnoreCase)
-            .Select(f => (f.File, f.Scan!, f.Mask!))
+            .Select(f => (File: f.File, Scan: f.Scan!, Mask: f.Mask!))
             .ToList();
-        ServiceResolutionIndexBuilder.Build(parsedFiles, result);
+
+        // The three resolution consumers below share one hierarchy (and its memoised type
+        // resolver). It is a pure function of the scanned declarations, so building it once
+        // cannot change any output.
+        var serviceHierarchy = new TypeHierarchy(
+            parsedFiles.SelectMany(f => f.Scan.Classes),
+            parsedFiles.SelectMany(f => f.Scan.InterfaceDecls));
+        ServiceResolutionIndexBuilder.Build(parsedFiles, result, serviceHierarchy);
         phases.Record("Resolve services");
 
         // First consumer: handler → DbContext edges resolved through the index. These
         // are additive model records kept out of FlowEdges, so no existing count or
         // surface moves.
-        HandlerDbContextResolver.Build(parsedFiles, result);
+        HandlerDbContextResolver.Build(parsedFiles, result, serviceHierarchy);
         phases.Record("Resolve handler contexts");
 
         // Stage 2 consumer: method-body call edges between scanned classes, through injected
         // members. Additive model data; no existing count or surface reads it yet.
-        ServiceCallEdgeResolver.Build(parsedFiles, result);
+        ServiceCallEdgeResolver.Build(parsedFiles, result, serviceHierarchy);
         phases.Record("Resolve service calls");
 
         FlowAnalyzer.Analyze(parsedFiles, result);

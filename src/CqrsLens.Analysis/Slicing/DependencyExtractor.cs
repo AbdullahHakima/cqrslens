@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Text.RegularExpressions;
 
 namespace CqrsLens;
@@ -8,11 +7,17 @@ namespace CqrsLens;
 /// Only dependency type names are captured; the caller decides whether they represent
 /// repositories, DbContexts or ordinary services.
 /// </summary>
-internal static class DependencyExtractor
+internal static partial class DependencyExtractor
 {
-    /// <summary>Constructor signatures are per-class regexes because the class name is part of the
-    /// pattern. Cache them so deep-slice scans do not recompile one regex per class declaration.</summary>
-    private static readonly ConcurrentDictionary<string, Regex> ConstructorRegexCache = new(StringComparer.Ordinal);
+    // A constructor declaration: an access modifier followed directly by an identifier and a
+    // parameter list. The name is captured rather than baked into the pattern so one compiled
+    // regex serves every declaration; callers keep only the match whose name is their class.
+    // The old per-class-name pattern compiled (and cached) a fresh Regex for every distinct
+    // class name — thousands on a large corpus.
+    [GeneratedRegex(
+        @"\b(?:public|internal|protected|private)\s+(?<name>[A-Za-z_]\w*)\s*\((?<params>[^\)]*)\)",
+        RegexOptions.Singleline)]
+    private static partial Regex ConstructorRegex();
 
     internal static void Extract(
         CSharpScanner.ClassDecl decl,
@@ -66,22 +71,17 @@ internal static class DependencyExtractor
             return;
 
         // A constructor declaration must contain its class name. This cheap span
-        // check avoids compiling a per-class regex for every entity/DTO/endpoint.
+        // check skips the regex for every entity/DTO/endpoint with no constructor.
         var bodyLength = Math.Min(code.Length, decl.BodySpan.End) - decl.BodySpan.Start;
         if (bodyLength <= 0 ||
             code.IndexOf(decl.Name, decl.BodySpan.Start, bodyLength, StringComparison.Ordinal) < 0)
             return;
 
-        var ctorPattern = ConstructorRegexCache.GetOrAdd(
-            decl.Name,
-            static name => new Regex(
-                $@"\b(?:public|internal|protected|private)\s+{Regex.Escape(name)}\s*\((?<params>[^\)]*)\)",
-                RegexOptions.Singleline));
-
         var bodyEnd = Math.Min(code.Length, decl.BodySpan.End);
-        foreach (Match m in ctorPattern.Matches(code, decl.BodySpan.Start))
+        foreach (Match m in ConstructorRegex().Matches(code, decl.BodySpan.Start))
         {
             if (m.Index >= bodyEnd) break;
+            if (!string.Equals(m.Groups["name"].Value, decl.Name, StringComparison.Ordinal)) continue;
             if (!mask.IsCode(m.Index)) continue;
             if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
 

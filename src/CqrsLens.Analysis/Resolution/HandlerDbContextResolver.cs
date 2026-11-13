@@ -13,7 +13,8 @@ internal static class HandlerDbContextResolver
 {
     public static void Build(
         IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
-        AnalysisResult result)
+        AnalysisResult result,
+        TypeHierarchy? hierarchy = null)
     {
         if (result.ServiceResolutions.Count == 0 ||
             result.DbContexts.Count == 0 ||
@@ -44,7 +45,7 @@ internal static class HandlerDbContextResolver
             interfaces.AddRange(scan.InterfaceDecls);
         }
 
-        var hierarchy = new TypeHierarchy(classes, interfaces);
+        hierarchy ??= new TypeHierarchy(classes, interfaces);
         var edges = new List<ResolvedEdge>();
 
         foreach (var handler in EnumerateHandlers(result))
