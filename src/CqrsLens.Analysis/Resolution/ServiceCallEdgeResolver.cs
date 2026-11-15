@@ -56,8 +56,12 @@ internal static partial class ServiceCallEdgeResolver
         hierarchy ??= new TypeHierarchy(classes, interfaces);
 
         var resolutionBySignature = new Dictionary<string, ServiceResolution>(StringComparer.Ordinal);
+        var interfaceLocationByName = new Dictionary<string, SourceLocation?>(StringComparer.Ordinal);
         foreach (var resolution in result.ServiceResolutions)
+        {
             resolutionBySignature.TryAdd(resolution.Interface, resolution);
+            interfaceLocationByName.TryAdd(resolution.InterfaceName, resolution.InterfaceLocation);
+        }
 
         var contexts = new HashSet<string>(StringComparer.Ordinal);
         foreach (var context in result.DbContexts)
@@ -77,22 +81,15 @@ internal static partial class ServiceCallEdgeResolver
         sourceFullNames.RemoveWhere(name => !classByFullName.ContainsKey(name));
         if (sourceFullNames.Count == 0) return;
 
-        var edges = new Dictionary<(string From, string Via, string Method, string To), ServiceCallEdge>();
         foreach (var parsed in ordered)
         {
             // Only classes that are sources need their bodies scanned.
             foreach (var declaration in parsed.Scan.Classes)
             {
                 if (!sourceFullNames.Contains(declaration.FullName)) continue;
-                ScanClass(parsed, declaration, classes, hierarchy, resolutionBySignature, contexts, result, edges);
+                ScanClass(parsed, declaration, classes, hierarchy, resolutionBySignature, interfaceLocationByName, contexts, result);
             }
         }
-
-        result.ServiceCallEdges.AddRange(edges.Values
-            .OrderBy(edge => edge.From, StringComparer.Ordinal)
-            .ThenBy(edge => edge.Via, StringComparer.Ordinal)
-            .ThenBy(edge => edge.Method, StringComparer.Ordinal)
-            .ThenBy(edge => edge.To, StringComparer.Ordinal));
     }
 
     /// <summary>
@@ -140,9 +137,9 @@ internal static partial class ServiceCallEdgeResolver
         IReadOnlyList<CSharpScanner.ClassDecl> classes,
         TypeHierarchy hierarchy,
         IReadOnlyDictionary<string, ServiceResolution> resolutionBySignature,
+        IReadOnlyDictionary<string, SourceLocation?> interfaceLocationByName,
         IReadOnlySet<string> contexts,
-        AnalysisResult result,
-        Dictionary<(string From, string Via, string Method, string To), ServiceCallEdge> edges)
+        AnalysisResult result)
     {
         var members = new List<(string Type, string Name)>();
         DependencyExtractor.ExtractParameters(declaration, parsed.File.Code, parsed.Mask, parsed.Scan.Classes, members);
@@ -191,18 +188,30 @@ internal static partial class ServiceCallEdgeResolver
                 continue;
             if (to == declaration.FullName) continue;
 
-            var key = (declaration.FullName, via, method, to);
-            if (edges.ContainsKey(key)) continue;
+            var resolver = result.IdentityResolver;
+            var fromRef = resolver.ResolveTypeOrComponentRef(declaration.FullName, parsed.File.ProjectName);
+            var isConcrete = string.Equals(via, to, StringComparison.Ordinal);
+            SourceLocation? ifaceLocation = null;
+            if (!isConcrete)
+                interfaceLocationByName.TryGetValue(via, out ifaceLocation);
+            var viaRef = isConcrete
+                ? resolver.ResolveTypeOrComponentRef(via)
+                : resolver.ResolveInterfaceRef(via, ifaceLocation);
+            var toRef = resolver.ResolveMethodTargetRef(to, method);
+            var location = SourceLocation.Create(parsed.File.Path, result.RootPath, code, match.Index);
 
-            edges[key] = new ServiceCallEdge
-            {
-                From = declaration.FullName,
-                Via = via,
-                Method = method,
-                To = to,
-                ProjectName = parsed.File.ProjectName,
-                Location = SourceLocation.Create(parsed.File.Path, result.RootPath, code, match.Index),
-            };
+            result.Spine.AddOrMergeRelation(
+                RelationKind.Calls,
+                fromRef,
+                toRef,
+                SpineIdentityResolver.SyntheticOccurrence(
+                    EvidenceRule.InjectedMemberInvocation,
+                    EvidenceOrigin.CallSite,
+                    location,
+                    isConcrete ? EvidenceStrength.Proven : EvidenceStrength.Resolved,
+                    via: [viaRef],
+                    scopeProjectName: parsed.File.ProjectName),
+                method: method);
         }
     }
 

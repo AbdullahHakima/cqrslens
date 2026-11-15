@@ -12,17 +12,17 @@ public static class JsonReportGenerator
 {
     public const int CurrentSchemaVersion = 1;
 
-    private static readonly JsonSerializerOptions WriteOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-    };
-
     public static string Generate(AnalysisResult result)
     {
-        var document = CreateDocument(result);
-        return JsonSerializer.Serialize(document, WriteOptions) + "\n";
+        var document = JsonReportDocumentFactory.CreateForSerialization(result);
+        var estimatedBytes = Math.Clamp(16384 + result.Spine.UnindexedRelations.Count * 1600, 16384, 8 * 1024 * 1024);
+        using var buffer = new PooledByteBufferWriter(estimatedBytes);
+        using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { Indented = true }))
+        {
+            JsonSerializer.Serialize(writer, document, JsonReportSerializerContext.Default.JsonReportDocument);
+        }
+        buffer.AppendByte((byte)'\n');
+        return buffer.ToUtf8String();
     }
 
     internal static JsonReportDocument CreateDocument(AnalysisResult result)

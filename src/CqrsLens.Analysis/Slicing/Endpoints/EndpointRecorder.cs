@@ -6,20 +6,33 @@ internal static class EndpointRecorder
     public static void Record(AnalysisResult result, CqrsRequest request, EndpointInfo endpoint)
     {
         endpoint.TargetRequestFullName ??= request.FullName;
-        if (!result.Endpoints.Any(existing =>
-                string.Equals(existing.HttpMethod, endpoint.HttpMethod, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(existing.Route, endpoint.Route, StringComparison.OrdinalIgnoreCase) &&
-                string.Equals(existing.TargetRequestName, endpoint.TargetRequestName, StringComparison.Ordinal) &&
-                string.Equals(existing.TargetRequestNamespace, endpoint.TargetRequestNamespace, StringComparison.Ordinal) &&
-                string.Equals(existing.Name, endpoint.Name, StringComparison.Ordinal)))
+        var existing = result.Endpoints.FirstOrDefault(e =>
+            string.Equals(e.HttpMethod, endpoint.HttpMethod, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(e.Route, endpoint.Route, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(e.TargetRequestName, endpoint.TargetRequestName, StringComparison.Ordinal) &&
+            string.Equals(e.TargetRequestNamespace, endpoint.TargetRequestNamespace, StringComparison.Ordinal) &&
+            string.Equals(e.Name, endpoint.Name, StringComparison.Ordinal));
+
+        if (existing is null)
         {
             result.Endpoints.Add(endpoint);
+            existing = endpoint;
         }
 
-        var label = endpoint.IsInferred
-            ? $"{endpoint.DisplayLabel} _(inferred)_"
-            : endpoint.DisplayLabel;
-        if (!request.Entrypoints.Contains(label, StringComparer.Ordinal))
-            request.Entrypoints.Add(label);
+        if (existing.SpineId is not null)
+        {
+            var reqId = request.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                request.ProjectName, request.Namespace, request.ContainingTypes, request.Name);
+            result.Spine.AddOrMergeRelation(
+                RelationKind.Dispatches,
+                NodeReference.ForEndpoint(existing.SpineId),
+                NodeReference.ForComponent(reqId),
+                SpineIdentityResolver.SyntheticOccurrence(
+                    EvidenceRule.EndpointDispatch,
+                    EvidenceOrigin.MappingOrAttribute,
+                    existing.Location,
+                    existing.IsInferred ? EvidenceStrength.Inferred : EvidenceStrength.Proven,
+                    scopeProjectName: existing.ProjectName));
+        }
     }
 }

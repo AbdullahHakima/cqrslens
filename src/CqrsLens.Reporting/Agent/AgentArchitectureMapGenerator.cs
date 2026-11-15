@@ -151,7 +151,7 @@ internal static class AgentArchitectureMapGenerator
         }
 
         // Notifications section (all in full mode, or matched in slice mode)
-        var relevantNotifications = filter is null
+        IReadOnlyList<CqrsNotification> relevantNotifications = filter is null
             ? result.Notifications
             : result.Notifications
                 .Where(n => n.FullName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||

@@ -18,5 +18,13 @@ public sealed class CqrsNotification
     /// </summary>
     public string? ViaMarker { get; set; }
 
-    public List<string> Handlers { get; } = new();
+    internal ComponentId? SpineId { get; set; }
+
+    public SpineLinkList Handlers { get; } = new(SpineLinkKind.NotificationHandlers);
+
+    internal void AttachSpine(AnalysisResult result, ComponentId id)
+    {
+        SpineId = id;
+        Handlers.Attach(result, () => SpineId is null ? null : NodeReference.ForComponent(SpineId));
+    }
 }

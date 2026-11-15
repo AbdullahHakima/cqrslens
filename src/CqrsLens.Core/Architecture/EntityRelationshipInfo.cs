@@ -14,4 +14,8 @@ public sealed record EntityRelationshipInfo(
     string? ForeignKey,
     bool IsRequired,
     EntityRelationshipKind Kind,
-    string? ConfiguredBy = null);
+    string? ConfiguredBy = null)
+{
+    internal SourceLocation? Location { get; init; }
+    internal EvidenceRule EvidenceRule { get; init; } = EvidenceRule.EntityNavigation;
+}

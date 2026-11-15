@@ -21,14 +21,20 @@ internal static class ProjectNameIndex
         // checked (Domain or Application) creates that blind spot; duplicated names
         // that no such project references are unrelated noise on large repos.
         var referencedByCheckedLayer = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var project in result.Projects)
+        foreach (var rel in result.Spine.UnindexedRelations)
         {
-            if (!string.Equals(project.Layer, "Domain", StringComparison.OrdinalIgnoreCase) &&
-                !string.Equals(project.Layer, "Application", StringComparison.OrdinalIgnoreCase))
+            if (rel.Kind != RelationKind.References || rel.From.ProjectId is null)
                 continue;
+            if (!result.Spine.TryGetProject(rel.From.ProjectId, out var fromProject))
+                continue;
+            if (!string.Equals(fromProject!.Layer, "Domain", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(fromProject.Layer, "Application", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
 
-            foreach (var reference in project.ReferenceNames)
-                referencedByCheckedLayer.Add(reference);
+            referencedByCheckedLayer.Add(
+                SpineQueries.FormatProjectReferenceTarget(result.IdentityResolver, rel.To));
         }
 
         foreach (var (name, projects) in projectsByName.OrderBy(p => p.Key, StringComparer.OrdinalIgnoreCase))

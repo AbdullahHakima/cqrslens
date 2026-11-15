@@ -67,15 +67,15 @@ internal static partial class BehaviorRegistrationResolver
                 continue;
 
             var mask = SourceMask.Build(file.Code);
-            var found = new List<(int Index, string Name)>();
-            Collect(DirectDiRegex(), file.Code, mask, found);
-            Collect(DirectDiGenericRegex(), file.Code, mask, found);
-            Collect(MediatRTwoArgRegex(), file.Code, mask, found);
-            Collect(MediatROpenRegex(), file.Code, mask, found);
-            Collect(MediatRGenericRegex(), file.Code, mask, found);
+            var found = new List<(int Index, string Name, bool IsOpenGeneric)>();
+            Collect(DirectDiRegex(), file.Code, mask, found, isOpenGenericForm: null);
+            Collect(DirectDiGenericRegex(), file.Code, mask, found, isOpenGenericForm: false);
+            Collect(MediatRTwoArgRegex(), file.Code, mask, found, isOpenGenericForm: null);
+            Collect(MediatROpenRegex(), file.Code, mask, found, isOpenGenericForm: true);
+            Collect(MediatRGenericRegex(), file.Code, mask, found, isOpenGenericForm: null);
 
-            foreach (var (index, name) in found
-                         .Distinct()
+            foreach (var (index, name, isOpenGeneric) in found
+                         .DistinctBy(f => (f.Index, f.Name))
                          .OrderBy(f => f.Index))
             {
                 registrations.Add(new Registration(
@@ -84,7 +84,8 @@ internal static partial class BehaviorRegistrationResolver
                     name,
                     index,
                     LineOf(file.Code, index),
-                    EnclosingBlockStart(file.Code, mask, index)));
+                    EnclosingBlockStart(file.Code, mask, index),
+                    isOpenGeneric));
             }
         }
 
@@ -93,10 +94,15 @@ internal static partial class BehaviorRegistrationResolver
 
         var sites = BuildSites(registrations, result.RootPath);
         foreach (var behavior in result.Behaviors)
-            Assign(behavior, registrations, sites);
+            Assign(behavior, registrations, sites, result.RootPath);
     }
 
-    private static void Collect(Regex regex, string code, SourceMask mask, List<(int, string)> found)
+    private static void Collect(
+        Regex regex,
+        string code,
+        SourceMask mask,
+        List<(int, string, bool)> found,
+        bool? isOpenGenericForm)
     {
         foreach (Match match in regex.Matches(code))
         {
@@ -105,7 +111,9 @@ internal static partial class BehaviorRegistrationResolver
             var name = match.Groups["name"].Value;
             if (name.Length == 0)
                 continue;
-            found.Add((match.Index, name));
+            var isOpen = isOpenGenericForm ?? (match.Value.Contains("<,", StringComparison.Ordinal) ||
+                                               match.Value.Contains("AddOpenBehavior", StringComparison.Ordinal));
+            found.Add((match.Index, name, isOpen));
         }
     }
 
@@ -115,7 +123,8 @@ internal static partial class BehaviorRegistrationResolver
         string Name,
         int Index,
         int Line,
-        int Block);
+        int Block,
+        bool IsOpenGeneric);
 
     private sealed class Site
     {
@@ -152,7 +161,8 @@ internal static partial class BehaviorRegistrationResolver
     private static void Assign(
         BehaviorInfo behavior,
         List<Registration> registrations,
-        List<Site> sites)
+        List<Site> sites,
+        string rootPath)
     {
         var matches = registrations.Where(r => r.Name == behavior.Name).ToList();
         if (matches.Count == 0)
@@ -187,8 +197,11 @@ internal static partial class BehaviorRegistrationResolver
         if (ordinal < 0)
             return;
 
+        var reg = site.Registrations[ordinal];
         behavior.RegistrationOrder = ordinal + 1;
         behavior.RegistrationSite = site.Label;
+        behavior.IsOpenGenericRegistration = reg.IsOpenGeneric;
+        behavior.RegistrationLocation = SourceLocation.FromLine(reg.File, rootPath, reg.Line, 1);
     }
 
     private static int EnclosingBlockStart(string code, SourceMask mask, int index)

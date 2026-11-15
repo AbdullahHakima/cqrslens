@@ -91,6 +91,8 @@ internal static class FastEndpointDiscovery
                         TargetRequestNamespace = request.Namespace,
                         ProjectName = file.ProjectName,
                         Location = location,
+                        VerbStrength = EvidenceStrength.Proven,
+                        RouteStrength = routeInferred ? EvidenceStrength.Inferred : EvidenceStrength.Proven,
                         IsInferred = routeInferred,
                     });
             }

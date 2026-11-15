@@ -51,11 +51,18 @@ internal static class FlowAnalyzer
             scanner.ScanFile(file, scan, mask);
         }
 
-        AddEndpointToRequestEdges(result);
-        AddRequestToHandlerEdges(result);
+        EnsureEndpointToRequestRelations(result);
         AddHandlerToDbContextEdges(result, parsedFiles);
 
-        SortAndDedupe(result);
+        result.Spine.Unproven.SortUnresolvedDispatches((a, b) =>
+        {
+            var cmp = string.Compare(a.ProjectName, b.ProjectName, StringComparison.Ordinal);
+            if (cmp != 0) return cmp;
+            cmp = string.Compare(a.Location?.File, b.Location?.File, StringComparison.Ordinal);
+            if (cmp != 0) return cmp;
+            cmp = Nullable.Compare(a.Location?.Line, b.Location?.Line);
+            return cmp != 0 ? cmp : string.Compare(a.Method, b.Method, StringComparison.Ordinal);
+        });
     }
 
     private static bool ContainsDispatchName(string code)
@@ -63,39 +70,26 @@ internal static class FlowAnalyzer
            code.Contains(".Publish", StringComparison.Ordinal) ||
            code.Contains(".InvokeAsync", StringComparison.Ordinal);
 
-    private static void AddEndpointToRequestEdges(AnalysisResult result)
+    private static void EnsureEndpointToRequestRelations(AnalysisResult result)
     {
         foreach (var endpoint in result.Endpoints)
         {
-            if (string.IsNullOrEmpty(endpoint.TargetRequestFullName))
+            if (string.IsNullOrEmpty(endpoint.TargetRequestFullName) || endpoint.SpineId is null)
                 continue;
 
-            result.FlowEdges.Add(new FlowEdge
-            {
-                Kind = FlowEdgeKind.EndpointToRequest,
-                From = endpoint.Name,
-                To = endpoint.TargetRequestFullName,
-                ProjectName = endpoint.ProjectName,
-                Location = endpoint.Location,
-            });
-        }
-    }
+            var toRef = result.IdentityResolver.ResolveComponentOrExternalRef(
+                endpoint.TargetRequestFullName, ComponentRole.Request, endpoint.ProjectName);
 
-    private static void AddRequestToHandlerEdges(AnalysisResult result)
-    {
-        foreach (var request in result.Requests)
-        {
-            foreach (var handler in request.Handlers)
-            {
-                result.FlowEdges.Add(new FlowEdge
-                {
-                    Kind = FlowEdgeKind.RequestToHandler,
-                    From = request.FullName,
-                    To = handler,
-                    ProjectName = request.ProjectName,
-                    Location = request.Location,
-                });
-            }
+            result.Spine.AddOrMergeRelation(
+                RelationKind.Dispatches,
+                NodeReference.ForEndpoint(endpoint.SpineId),
+                toRef,
+                SpineIdentityResolver.SyntheticOccurrence(
+                    EvidenceRule.EndpointDispatch,
+                    EvidenceOrigin.MappingOrAttribute,
+                    endpoint.Location,
+                    endpoint.IsInferred ? EvidenceStrength.Inferred : EvidenceStrength.Proven,
+                    scopeProjectName: endpoint.ProjectName));
         }
     }
 
@@ -160,14 +154,21 @@ internal static class FlowAnalyzer
 
             foreach (var simple in matched.OrderBy(s => s, StringComparer.Ordinal))
             {
-                result.FlowEdges.Add(new FlowEdge
-                {
-                    Kind = FlowEdgeKind.HandlerToDbContext,
-                    From = owner,
-                    To = contextsBySimple[simple].FullName,
-                    ProjectName = contextsBySimple[simple].ProjectName,
-                    Location = contextsBySimple[simple].Location,
-                });
+                var context = contextsBySimple[simple];
+                var fromRef = result.IdentityResolver.ResolveComponentOrExternalRef(owner, ComponentRole.Handler);
+                var toRef = context.SpineId is not null
+                    ? NodeReference.ForComponent(context.SpineId)
+                    : result.IdentityResolver.ResolveComponentOrExternalRef(context.FullName, ComponentRole.DbContext, context.ProjectName);
+                result.Spine.AddOrMergeRelation(
+                    RelationKind.UsesData,
+                    fromRef,
+                    toRef,
+                    SpineIdentityResolver.SyntheticOccurrence(
+                        EvidenceRule.DirectDbContextReference,
+                        EvidenceOrigin.Declaration,
+                        context.Location,
+                        EvidenceStrength.Proven,
+                        scopeProjectName: context.ProjectName));
             }
         }
     }
@@ -198,36 +199,4 @@ internal static class FlowAnalyzer
 
     private static bool IsIdentifierChar(char c)
         => char.IsLetterOrDigit(c) || c == '_';
-
-    private static void SortAndDedupe(AnalysisResult result)
-    {
-        var edges = result.FlowEdges
-            .GroupBy(e => (e.Kind, e.From, e.To))
-            .Select(g => g.First())
-            .OrderBy(e => e.Kind)
-            .ThenBy(e => e.From, StringComparer.Ordinal)
-            .ThenBy(e => e.To, StringComparer.Ordinal)
-            .ToList();
-        result.FlowEdges.Clear();
-        result.FlowEdges.AddRange(edges);
-
-        var sites = result.DispatchCallSites
-            .GroupBy(s => (s.TargetFullName, s.TargetKind, s.SenderFullName, s.Location?.File, s.Location?.Line))
-            .Select(g => g.First())
-            .OrderBy(s => s.TargetKind)
-            .ThenBy(s => s.TargetFullName, StringComparer.Ordinal)
-            .ThenBy(s => s.SenderFullName, StringComparer.Ordinal)
-            .ToList();
-        result.DispatchCallSites.Clear();
-        result.DispatchCallSites.AddRange(sites);
-
-        var unresolved = result.UnresolvedDispatches
-            .OrderBy(u => u.ProjectName, StringComparer.Ordinal)
-            .ThenBy(u => u.Location?.File, StringComparer.Ordinal)
-            .ThenBy(u => u.Location?.Line)
-            .ThenBy(u => u.Method, StringComparer.Ordinal)
-            .ToList();
-        result.UnresolvedDispatches.Clear();
-        result.UnresolvedDispatches.AddRange(unresolved);
-    }
 }

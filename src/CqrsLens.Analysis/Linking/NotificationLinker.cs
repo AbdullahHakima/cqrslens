@@ -37,8 +37,20 @@ internal static class NotificationLinker
             }
 
             handler.NotificationNamespace ??= notification.Namespace;
-            if (!notification.Handlers.Contains(handler.FullName))
-                notification.Handlers.Add(handler.FullName);
+            var notificationId = notification.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                notification.ProjectName, notification.Namespace, notification.ContainingTypes, notification.Name);
+            var handlerId = handler.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                handler.ProjectName, handler.Namespace, handler.ContainingTypes, handler.Name);
+            result.Spine.AddOrMergeRelation(
+                RelationKind.HandlesNotification,
+                NodeReference.ForComponent(notificationId),
+                NodeReference.ForComponent(handlerId),
+                SpineIdentityResolver.SyntheticOccurrence(
+                    EvidenceRule.NotificationHandlerMarker,
+                    EvidenceOrigin.Declaration,
+                    handler.Location,
+                    EvidenceStrength.Proven,
+                    scopeProjectName: handler.ProjectName));
         }
 
         foreach (var notification in result.Notifications)

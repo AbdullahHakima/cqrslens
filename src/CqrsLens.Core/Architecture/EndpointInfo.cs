@@ -22,7 +22,22 @@ public sealed class EndpointInfo
     /// EndpointGroup's class name, a verb implied by Query/Command) rather than read from source.
     /// Agent-facing output must flag these so consumers do not treat them as facts.
     /// </summary>
-    public bool IsInferred { get; init; }
+    private bool _isInferred;
+
+    public bool IsInferred
+    {
+        get => _isInferred;
+        init
+        {
+            _isInferred = value;
+            if (value && VerbStrength == EvidenceStrength.Proven && RouteStrength == EvidenceStrength.Proven)
+                RouteStrength = EvidenceStrength.Inferred;
+        }
+    }
+
+    internal EvidenceStrength VerbStrength { get; set; } = EvidenceStrength.Proven;
+    internal EvidenceStrength RouteStrength { get; set; } = EvidenceStrength.Proven;
+    internal EndpointId? SpineId { get; set; }
 
     public string DisplayLabel => string.IsNullOrEmpty(Route)
         ? $"{HttpMethod} ({Name})"

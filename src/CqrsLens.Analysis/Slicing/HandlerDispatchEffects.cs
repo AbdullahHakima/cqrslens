@@ -11,21 +11,21 @@ internal static class HandlerDispatchEffects
 {
     internal static void Apply(HandlerEffectContext context)
     {
-        foreach (var typeRef in EnumerateDispatchedTypeRefs(context))
+        foreach (var (typeRef, index) in EnumerateDispatchedTypeRefs(context))
         {
             var simple = CSharpScanner.UnqualifiedTypeName(typeRef);
+            var location = context.LocationAt(index);
 
-            context.Publish(simple);
+            context.Publish(simple, location, EvidenceStrength.Proven);
 
             if (context.Index.RequestsBySimple.TryGetValue(simple, out var requestHits))
             {
                 var request = DeepSliceCandidateResolver.PickRequest(
                     requestHits, context.File.ProjectName, context.Scan.Usings);
                 if (request is not null &&
-                    !string.Equals(request.Name, context.SelfRequestName, StringComparison.Ordinal) &&
-                    !context.DispatchedRequests.Contains(request.FullName, StringComparer.Ordinal))
+                    !string.Equals(request.Name, context.SelfRequestName, StringComparison.Ordinal))
                 {
-                    context.DispatchedRequests.Add(request.FullName);
+                    context.Dispatch(request, location, EvidenceStrength.Proven);
                 }
             }
 
@@ -33,12 +33,12 @@ internal static class HandlerDispatchEffects
             if (context.Index.MemberEvents.TryGetValue((simple, simple), out var ctorEventNames))
             {
                 foreach (var eventSimpleName in ctorEventNames)
-                    context.Publish(eventSimpleName);
+                    context.Publish(eventSimpleName, location, EvidenceStrength.Resolved);
             }
         }
     }
 
-    private static IEnumerable<string> EnumerateDispatchedTypeRefs(HandlerEffectContext context)
+    private static IEnumerable<(string TypeRef, int Index)> EnumerateDispatchedTypeRefs(HandlerEffectContext context)
     {
         foreach (Match match in ObjectCreationRegex().Matches(context.File.Code, context.BodyStart))
         {
@@ -47,7 +47,7 @@ internal static class HandlerDispatchEffects
             if (!ReferenceEquals(
                     DeepSliceSyntax.InnermostClass(context.Scan.Classes, match.Index), context.Decl))
                 continue;
-            yield return match.Groups["type"].Value;
+            yield return (match.Groups["type"].Value, match.Index);
         }
 
         foreach (Match match in GenericDispatchRegex().Matches(context.File.Code, context.BodyStart))
@@ -57,7 +57,7 @@ internal static class HandlerDispatchEffects
             if (!ReferenceEquals(
                     DeepSliceSyntax.InnermostClass(context.Scan.Classes, match.Index), context.Decl))
                 continue;
-            yield return match.Groups["type"].Value;
+            yield return (match.Groups["type"].Value, match.Index);
         }
     }
 }

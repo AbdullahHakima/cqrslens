@@ -170,44 +170,48 @@ internal sealed partial class DispatchCallSiteScanner
         CSharpScanner.ClassDecl decl,
         SourceFile file,
         bool isTest,
-        SourceLocation location,
+        SourceLocation? location,
         string targetFullName,
         DispatchTargetKind kind)
     {
-        _result.DispatchCallSites.Add(new DispatchCallSite
-        {
-            TargetFullName = targetFullName,
-            TargetKind = kind,
-            SenderFullName = decl.FullName,
-            ProjectName = file.ProjectName,
-            IsTestProject = isTest,
-            Location = location,
-        });
+        var preferredRole = _handlerNames.Contains(decl.FullName)
+            ? ComponentRole.Handler
+            : _notificationHandlerNames.Contains(decl.FullName)
+                ? ComponentRole.NotificationHandler
+                : (ComponentRole?)null;
 
-        var kindValue = kind == DispatchTargetKind.Request
-            ? FlowEdgeKind.HandlerToRequest
-            : FlowEdgeKind.HandlerToNotification;
-        if (_handlerNames.Contains(decl.FullName) || _notificationHandlerNames.Contains(decl.FullName))
-        {
-            _result.FlowEdges.Add(new FlowEdge
-            {
-                Kind = kindValue,
-                From = decl.FullName,
-                To = targetFullName,
-                ProjectName = file.ProjectName,
-                Location = location,
-            });
-        }
+        var resolver = _result.IdentityResolver;
+        var projectId = resolver.ResolveProjectId(file.ProjectName);
+        var comp = resolver.FindComponentByFullName(decl.FullName, preferredRole, file.ProjectName);
+        var fromRef = comp is not null
+            ? NodeReference.ForComponent(comp.Id)
+            : NodeReference.ForType(SymbolId.Create(projectId, decl.Namespace, decl.ContainingTypes, decl.Name, decl.TypeParameters.Count));
+
+        var (relationKind, rule, targetRole) = kind == DispatchTargetKind.Request
+            ? (RelationKind.Dispatches, EvidenceRule.DispatchCallSite, ComponentRole.Request)
+            : (RelationKind.Publishes, EvidenceRule.PublishCallSite, ComponentRole.Notification);
+
+        var toRef = resolver.ResolveComponentOrExternalRef(targetFullName, targetRole);
+        var occurrence = new EvidenceOccurrence(
+            rule,
+            EvidenceOrigin.CallSite,
+            location,
+            EvidenceStrength.Proven,
+            locationOmittedReason: location is null ? "Call site source location unavailable" : null,
+            scopeProjectName: file.ProjectName,
+            isTestProject: isTest);
+
+        _result.Spine.AddOrMergeRelation(relationKind, fromRef, toRef, occurrence);
     }
 
     private void RecordUnresolved(
         string method,
         SourceFile file,
         bool isTest,
-        SourceLocation location,
+        SourceLocation? location,
         string? receiver)
     {
-        _result.UnresolvedDispatches.Add(new UnresolvedDispatch
+        _result.Spine.Unproven.AddUnresolvedDispatch(new UnresolvedDispatch
         {
             Method = method,
             ReceiverName = receiver,

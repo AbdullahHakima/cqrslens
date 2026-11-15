@@ -38,8 +38,10 @@ internal static class ServiceResolutionIndexBuilder
             {
                 var identity = CSharpScanner.TypeIdentity(
                     declaration.FullName, declaration.TypeParameters.Count);
-                interfaceLocations.TryAdd(identity, SourceLocation.Create(
-                    file.Path, result.RootPath, file.Code, declaration.BodySpan.Start));
+                var location = SourceLocation.Create(
+                    file.Path, result.RootPath, file.Code, declaration.BodySpan.Start);
+                if (location is not null)
+                    interfaceLocations.TryAdd(identity, location);
             }
         }
 
@@ -260,6 +262,8 @@ internal static class ServiceResolutionIndexBuilder
             candidate.DeclaredInScan |= declaredInScan;
             candidate.FromRegistration |= fromRegistration;
             candidate.Location ??= location;
+            if (fromRegistration && location is not null)
+                candidate.RegistrationLocation ??= location;
         }
 
         public ServiceResolution ToResolution()
@@ -285,6 +289,7 @@ internal static class ServiceResolutionIndexBuilder
                     DeclaredInScan = pair.Value.DeclaredInScan,
                     FromRegistration = pair.Value.FromRegistration,
                     Location = pair.Value.Location,
+                    RegistrationLocation = pair.Value.RegistrationLocation,
                 });
             }
             return resolution;
@@ -295,6 +300,7 @@ internal static class ServiceResolutionIndexBuilder
             public bool DeclaredInScan { get; set; }
             public bool FromRegistration { get; set; }
             public SourceLocation? Location { get; set; }
+            public SourceLocation? RegistrationLocation { get; set; }
         }
     }
 }

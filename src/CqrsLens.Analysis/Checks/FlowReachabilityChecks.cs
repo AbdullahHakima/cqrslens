@@ -19,9 +19,7 @@ internal static class FlowReachabilityChecks
             return;
 
         var testProjects = new HashSet<string>(
-            result.Projects
-                .Where(p => string.Equals(p.Layer, "Tests", StringComparison.OrdinalIgnoreCase))
-                .Select(p => p.Name),
+            result.Spine.GetProjectsInLayer("Tests").Select(p => p.Name),
             StringComparer.OrdinalIgnoreCase);
 
         var productionRequests = new HashSet<string>(StringComparer.Ordinal);
@@ -29,31 +27,47 @@ internal static class FlowReachabilityChecks
         var productionNotifications = new HashSet<string>(StringComparer.Ordinal);
         var testNotifications = new HashSet<string>(StringComparer.Ordinal);
 
-        foreach (var site in result.DispatchCallSites)
+        foreach (var rel in result.Spine.UnindexedRelations)
         {
-            var production = site.TargetKind == DispatchTargetKind.Request
-                ? productionRequests
-                : productionNotifications;
-            var tests = site.TargetKind == DispatchTargetKind.Request ? testRequests : testNotifications;
-            (site.IsTestProject ? tests : production).Add(site.TargetFullName);
+            if (rel.Kind == RelationKind.Dispatches)
+            {
+                var targetFullName = rel.To.SymbolId?.FullName ?? rel.To.Name;
+                foreach (var occ in rel.Occurrences)
+                {
+                    if (occ.Rule == EvidenceRule.DispatchCallSite)
+                    {
+                        (occ.IsTestProject ? testRequests : productionRequests).Add(targetFullName);
+                    }
+                    else if (occ.Rule == EvidenceRule.EndpointDispatch && rel.From.Kind == NodeReferenceKind.Endpoint)
+                    {
+                        var isTest = occ.ScopeProjectName is not null && testProjects.Contains(occ.ScopeProjectName);
+                        (isTest ? testRequests : productionRequests).Add(targetFullName);
+                    }
+                }
+            }
+            else if (rel.Kind == RelationKind.Publishes)
+            {
+                var targetFullName = rel.To.SymbolId?.FullName ?? rel.To.Name;
+                foreach (var occ in rel.Occurrences)
+                {
+                    if (occ.Rule == EvidenceRule.PublishCallSite)
+                        (occ.IsTestProject ? testNotifications : productionNotifications).Add(targetFullName);
+                }
+            }
         }
 
-        foreach (var endpoint in result.Endpoints)
-        {
-            if (string.IsNullOrEmpty(endpoint.TargetRequestFullName))
-                continue;
-            var isTest = endpoint.ProjectName is not null && testProjects.Contains(endpoint.ProjectName);
-            (isTest ? testRequests : productionRequests).Add(endpoint.TargetRequestFullName);
-        }
-
-        var unresolved = result.UnresolvedDispatches.Count;
+        var unresolved = result.Spine.Unproven.UnresolvedDispatches.Count;
         var unresolvedNote = unresolved == 0
             ? ""
             : $" {unresolved} unresolved dispatch call(s) in the solution could not be resolved and are not counted as call sites.";
 
         foreach (var request in result.Requests)
         {
-            if (request.Handlers.Count == 0 || productionRequests.Contains(request.FullName))
+            var reqId = request.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                request.ProjectName, request.Namespace, request.ContainingTypes, request.Name);
+            var handlerCount = result.Spine.CountOutgoingRelations(
+                NodeReference.ForComponent(reqId), RelationKind.Serves);
+            if (handlerCount == 0 || productionRequests.Contains(request.FullName))
                 continue;
 
             var testNote = testRequests.Contains(request.FullName)
@@ -62,7 +76,7 @@ internal static class FlowReachabilityChecks
             findings.Add(new CheckFinding(
                 CheckSeverity.Warning,
                 ArchitectureChecker.UnreachableRequestCode,
-                $"Request `{request.FullName}` has {request.Handlers.Count} handler(s) but no production call site."
+                $"Request `{request.FullName}` has {handlerCount} handler(s) but no production call site."
                     + testNote + unresolvedNote,
                 Target: request.FullName,
                 Location: request.Location,
@@ -71,7 +85,11 @@ internal static class FlowReachabilityChecks
 
         foreach (var notification in result.Notifications)
         {
-            if (notification.Handlers.Count == 0 || productionNotifications.Contains(notification.FullName))
+            var notifId = notification.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                notification.ProjectName, notification.Namespace, notification.ContainingTypes, notification.Name);
+            var handlerCount = result.Spine.CountOutgoingRelations(
+                NodeReference.ForComponent(notifId), RelationKind.HandlesNotification);
+            if (handlerCount == 0 || productionNotifications.Contains(notification.FullName))
                 continue;
 
             var testNote = testNotifications.Contains(notification.FullName)
@@ -80,7 +98,7 @@ internal static class FlowReachabilityChecks
             findings.Add(new CheckFinding(
                 CheckSeverity.Warning,
                 ArchitectureChecker.UnpublishedNotificationCode,
-                $"Notification `{notification.FullName}` has {notification.Handlers.Count} handler(s) but no production publisher."
+                $"Notification `{notification.FullName}` has {handlerCount} handler(s) but no production publisher."
                     + testNote + unresolvedNote,
                 Target: notification.FullName,
                 Location: notification.Location,

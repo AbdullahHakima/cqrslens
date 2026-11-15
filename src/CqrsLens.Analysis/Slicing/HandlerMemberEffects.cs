@@ -29,7 +29,7 @@ internal static class HandlerMemberEffects
                     (targetType, match.Groups["method"].Value), out var staticEvents))
                 continue;
             foreach (var eventSimpleName in staticEvents)
-                context.Publish(eventSimpleName);
+                context.Publish(eventSimpleName, context.LocationAt(match.Index), EvidenceStrength.Resolved);
         }
 
         // Instance member calls and property sets (`order.Update()`, `entity.Done = true`). The
@@ -50,7 +50,7 @@ internal static class HandlerMemberEffects
                 if (!context.Index.MemberEvents.TryGetValue((receiverType, member), out var raisedEvents))
                     continue;
                 foreach (var eventSimpleName in raisedEvents)
-                    context.Publish(eventSimpleName);
+                    context.Publish(eventSimpleName, context.LocationAt(match.Index), EvidenceStrength.Resolved);
             }
         }
     }

@@ -27,9 +27,16 @@ internal static class EfRelationshipFactory
                 null,
                 false,
                 kind,
-                configuredBy);
+                configuredBy)
+            {
+                Location = principal.Location ?? dependent.Location,
+                EvidenceRule = string.Equals(configuredBy, "fluent", StringComparison.OrdinalIgnoreCase)
+                    ? EvidenceRule.EntityFluentConfiguration
+                    : EvidenceRule.EntityNavigation,
+            };
         }
 
+        var annotatedFk = false;
         var foreignKey = configuredForeignKey;
         if (foreignKey is null && dependentNavigation is not null)
         {
@@ -37,7 +44,10 @@ internal static class EfRelationshipFactory
                 ? entry
                 : null;
             if (map is not null && map.TryGetValue(dependentNavigation, out var annotated))
+            {
                 foreignKey = annotated;
+                annotatedFk = true;
+            }
         }
 
         var foreignKeyProperty = EfForeignKeyResolver.FindProperty(dependent, foreignKey);
@@ -60,6 +70,12 @@ internal static class EfRelationshipFactory
         if (dependentNav is not null && configuredRequired is not null)
             dependentNav.IsRequired = configuredRequired.Value;
 
+        var rule = string.Equals(configuredBy, "fluent", StringComparison.OrdinalIgnoreCase)
+            ? EvidenceRule.EntityFluentConfiguration
+            : annotatedFk
+                ? EvidenceRule.EntityAnnotation
+                : EvidenceRule.EntityNavigation;
+
         return new EntityRelationshipInfo(
             principal.FullName,
             dependent.FullName,
@@ -68,6 +84,10 @@ internal static class EfRelationshipFactory
             foreignKey,
             required,
             kind,
-            configuredBy);
+            configuredBy)
+        {
+            Location = principal.Location ?? dependent.Location,
+            EvidenceRule = rule,
+        };
     }
 }

@@ -29,7 +29,7 @@ internal static class HandlerDbSetEffects
                     index.DbContextTypeNames))
                 continue;
 
-            context.Touch(label);
+            context.Touch(label, context.LocationAt(match.Index), strength: EvidenceStrength.Proven);
         }
 
         foreach (Match match in DbContextSetMethodRegex().Matches(context.File.Code, context.BodyStart))
@@ -47,7 +47,7 @@ internal static class HandlerDbSetEffects
             if (!ReceiverTypeMapBuilder.IsEntityCandidate(entitySimple, context.Decl, index.DbSetsByEntity))
                 continue;
             if (index.DbSetsByEntity.TryGetValue(entitySimple, out var label))
-                context.Touch(label);
+                context.Touch(label, context.LocationAt(match.Index), strength: EvidenceStrength.Proven);
         }
     }
 }

@@ -66,6 +66,7 @@ internal static class JsonReportDocumentReader
         document.ServiceCallEdges ??= new List<JsonServiceCallEdge>();
         document.DispatchCallSites ??= new List<JsonDispatchCallSite>();
         document.UnresolvedDispatches ??= new List<JsonUnresolvedDispatch>();
+        document.Relations ??= new List<JsonSpineRelation>();
         foreach (var notification in document.Notifications)
             notification.Handlers ??= new List<string>();
 

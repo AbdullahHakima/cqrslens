@@ -91,6 +91,8 @@ internal static class ControllerEndpointDiscovery
                             TargetRequestNamespace = request.Namespace,
                             ProjectName = file.ProjectName,
                             Location = location,
+                            VerbStrength = verbMatch.Success ? EvidenceStrength.Proven : EvidenceStrength.Inferred,
+                            RouteStrength = routeInferred ? EvidenceStrength.Inferred : EvidenceStrength.Proven,
                             IsInferred = !verbMatch.Success || routeInferred,
                         });
                 }

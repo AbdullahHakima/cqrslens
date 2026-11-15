@@ -6,18 +6,24 @@ namespace CqrsLens;
 /// </summary>
 internal sealed class HandlerEffectContext
 {
+    private SourceLocation? _defaultLocation;
+
     internal HandlerEffectContext(
+        AnalysisResult result,
+        ComponentId ownerId,
         CSharpScanner.ClassDecl decl,
         SourceFile file,
         CSharpScanner.FileScan scan,
         SourceMask mask,
         SliceIndex index,
         List<string> dependencies,
-        List<string> touchedEntities,
-        List<string> publishedNotifications,
-        List<string> dispatchedRequests,
+        IList<string> touchedEntities,
+        IList<string> publishedNotifications,
+        IList<string> dispatchedRequests,
         string? selfRequestName)
     {
+        Result = result;
+        OwnerId = ownerId;
         Decl = decl;
         File = file;
         Scan = scan;
@@ -32,52 +38,113 @@ internal sealed class HandlerEffectContext
         BodyEnd = Math.Min(file.Code.Length, decl.BodySpan.End);
     }
 
+    internal AnalysisResult Result { get; }
+    internal ComponentId OwnerId { get; }
     internal CSharpScanner.ClassDecl Decl { get; }
     internal SourceFile File { get; }
     internal CSharpScanner.FileScan Scan { get; }
     internal SourceMask Mask { get; }
     internal SliceIndex Index { get; }
     internal List<string> Dependencies { get; }
-    internal List<string> TouchedEntities { get; }
-    internal List<string> PublishedNotifications { get; }
-    internal List<string> DispatchedRequests { get; }
+    internal IList<string> TouchedEntities { get; }
+    internal IList<string> PublishedNotifications { get; }
+    internal IList<string> DispatchedRequests { get; }
     internal string? SelfRequestName { get; }
 
     internal int BodyStart { get; }
     internal int BodyEnd { get; }
     internal bool HasBody => BodyEnd > BodyStart;
 
-    internal void Touch(string label)
+    internal SourceLocation? DefaultLocation =>
+        _defaultLocation ??= SourceLocation.Create(File.Path, Result.RootPath, File.Code, Decl.NameIndex);
+
+    internal SourceLocation? LocationAt(int index)
+        => SourceLocation.Create(File.Path, Result.RootPath, File.Code, index) ?? DefaultLocation;
+
+    internal void Touch(
+        string label,
+        SourceLocation? location = null,
+        IReadOnlyList<NodeReference>? via = null,
+        EvidenceStrength strength = EvidenceStrength.Inferred)
     {
-        if (!TouchedEntities.Contains(label, StringComparer.Ordinal))
-            TouchedEntities.Add(label);
+        var target = Result.IdentityResolver.ResolveTouchesDataTarget(label, File.ProjectName);
+        Result.Spine.AddOrMergeRelation(
+            RelationKind.TouchesData,
+            NodeReference.ForComponent(OwnerId),
+            target,
+            SpineIdentityResolver.SyntheticOccurrence(
+                EvidenceRule.DeepSliceDataAccess,
+                EvidenceOrigin.CallSite,
+                location ?? DefaultLocation,
+                strength,
+                via,
+                scopeProjectName: File.ProjectName));
     }
 
-    internal void Publish(string eventSimpleName)
+    internal void Publish(
+        string eventSimpleName,
+        SourceLocation? location = null,
+        EvidenceStrength strength = EvidenceStrength.Inferred)
     {
         if (!Index.NotificationsBySimple.TryGetValue(eventSimpleName, out var hits))
             return;
         var notif = DeepSliceCandidateResolver.PickNotification(hits, Decl.Namespace, File.ProjectName);
         if (notif is not null)
-            AddNotificationAndWrappers(notif);
+            AddNotificationAndWrappers(notif, location, strength);
     }
 
-    private void AddNotificationAndWrappers(CqrsNotification notif)
+    internal void Dispatch(
+        CqrsRequest request,
+        SourceLocation? location = null,
+        EvidenceStrength strength = EvidenceStrength.Proven)
     {
-        AddUnique(PublishedNotifications, notif.FullName);
+        var reqRef = request.SpineId is not null
+            ? NodeReference.ForComponent(request.SpineId)
+            : Result.IdentityResolver.ResolveComponentOrExternalRef(request.FullName, ComponentRole.Request, request.ProjectName);
+
+        Result.Spine.AddOrMergeRelation(
+            RelationKind.Dispatches,
+            NodeReference.ForComponent(OwnerId),
+            reqRef,
+            SpineIdentityResolver.SyntheticOccurrence(
+                EvidenceRule.DeepSliceDataAccess,
+                EvidenceOrigin.CallSite,
+                location ?? DefaultLocation,
+                strength,
+                scopeProjectName: File.ProjectName));
+    }
+
+    private void AddNotificationAndWrappers(
+        CqrsNotification notif,
+        SourceLocation? location,
+        EvidenceStrength strength)
+    {
+        RecordPublish(notif, location, strength);
 
         if (Index.WrapperNotificationsByInnerSimple.TryGetValue(notif.Name, out var wrappers))
         {
             var wrapper = DeepSliceCandidateResolver.PickNotification(
                 wrappers, Decl.Namespace, File.ProjectName);
             if (wrapper is not null)
-                AddUnique(PublishedNotifications, wrapper.FullName);
+                RecordPublish(wrapper, location, strength);
         }
     }
 
-    private static void AddUnique(List<string> target, string value)
+    private void RecordPublish(CqrsNotification notif, SourceLocation? location, EvidenceStrength strength)
     {
-        if (!target.Contains(value, StringComparer.Ordinal))
-            target.Add(value);
+        var notifRef = notif.SpineId is not null
+            ? NodeReference.ForComponent(notif.SpineId)
+            : Result.IdentityResolver.ResolveComponentOrExternalRef(notif.FullName, ComponentRole.Notification, notif.ProjectName);
+
+        Result.Spine.AddOrMergeRelation(
+            RelationKind.Publishes,
+            NodeReference.ForComponent(OwnerId),
+            notifRef,
+            SpineIdentityResolver.SyntheticOccurrence(
+                EvidenceRule.DeepSliceDataAccess,
+                EvidenceOrigin.CallSite,
+                location ?? DefaultLocation,
+                strength,
+                scopeProjectName: File.ProjectName));
     }
 }

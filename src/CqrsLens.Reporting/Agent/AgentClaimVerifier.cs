@@ -270,7 +270,7 @@ internal static class AgentClaimVerifier
         }
 
         var owners = Owners(result, shape!);
-        var edgeCount = result.FlowEdges.Count(e => e.Kind == FlowEdgeKind.HandlerToDbContext);
+        var edgeCount = SpineQueries.FlowEdges(result).Count(e => e.Kind == FlowEdgeKind.HandlerToDbContext);
         var uses = owners.Any(h => HandlerUsesContext(result, h, contextShape));
         var ownerNames = owners.Count == 0
             ? "none resolved"
@@ -398,7 +398,7 @@ internal static class AgentClaimVerifier
             return SubjectNotResolved(result, subject, spec, claimed, "request or notification");
 
         var targetKind = shape!.Kind == "notification" ? DispatchTargetKind.Notification : DispatchTargetKind.Request;
-        var sites = result.DispatchCallSites
+        var sites = SpineQueries.DispatchCallSites(result.Spine)
             .Where(s => s.TargetKind == targetKind && NamesMatch(s.TargetFullName, shape.FullName))
             .ToList();
 
@@ -406,7 +406,7 @@ internal static class AgentClaimVerifier
             ? new List<DispatchCallSite>()
             : sites.Where(s => SenderMatches(s.SenderFullName, claimed)).ToList();
 
-        var unresolved = result.UnresolvedDispatches;
+        var unresolved = result.Spine.Unproven.UnresolvedDispatches;
         var unresolvedNote = unresolved.Count == 0
             ? ""
             : $"the scan holds {unresolved.Count} unresolved dispatch call site(s), e.g. " +
@@ -613,12 +613,12 @@ internal static class AgentClaimVerifier
         _ => "shape",
     };
 
-    private static List<string> PublishedNotifications(AnalysisResult result, Shape shape) => shape.Kind switch
+    private static IReadOnlyList<string> PublishedNotifications(AnalysisResult result, Shape shape) => shape.Kind switch
     {
         "request" => result.Requests.First(r => r.FullName == shape.FullName).PublishedNotifications,
         "handler" => result.Handlers.First(h => h.FullName == shape.FullName).PublishedNotifications,
         "notification handler" => result.NotificationHandlers.First(nh => nh.FullName == shape.FullName).PublishedNotifications,
-        _ => new List<string>(),
+        _ => Array.Empty<string>(),
     };
 
     private static List<string> Dependencies(AnalysisResult result, Shape shape) => shape.Kind switch
@@ -648,7 +648,7 @@ internal static class AgentClaimVerifier
         if (handler.Dependencies.Any(d => NamesMatch(d, context.Name)))
             return true;
 
-        return result.FlowEdges.Any(e =>
+        return SpineQueries.FlowEdges(result).Any(e =>
             e.Kind == FlowEdgeKind.HandlerToDbContext &&
             NamesMatch(e.From, handler.FullName) &&
             NamesMatch(e.To, context.FullName));

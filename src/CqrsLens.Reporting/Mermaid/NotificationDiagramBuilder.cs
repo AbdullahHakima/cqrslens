@@ -24,7 +24,7 @@ internal static class NotificationDiagramBuilder
         if (result.Notifications.Count <= ReadableNotificationLimit)
             return new Omission(result.Notifications.Count, 0);
 
-        var published = result.DispatchCallSites
+        var published = SpineQueries.DispatchCallSites(result.Spine)
             .Where(s => s.TargetKind == DispatchTargetKind.Notification)
             .Select(s => s.TargetFullName)
             .ToHashSet(StringComparer.Ordinal);
@@ -42,11 +42,12 @@ internal static class NotificationDiagramBuilder
             .Select(c => c.Target!)
             .ToHashSet(StringComparer.Ordinal);
 
+        var dispatchSites = SpineQueries.DispatchCallSites(result.Spine);
         var omission = ComputeOmission(result);
-        var diagramNotifications = omission.HasOmission
+        IReadOnlyList<CqrsNotification> diagramNotifications = omission.HasOmission
             ? result.Notifications
                 .Where(n => n.Handlers.Count > 0 ||
-                            result.DispatchCallSites.Any(s =>
+                            dispatchSites.Any(s =>
                                 s.TargetKind == DispatchTargetKind.Notification &&
                                 string.Equals(s.TargetFullName, n.FullName, StringComparison.Ordinal)))
                 .ToList()
@@ -79,7 +80,7 @@ internal static class NotificationDiagramBuilder
             .Select(n => n.FullName)
             .ToHashSet(StringComparer.Ordinal);
         var publishersByNotification = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var site in result.DispatchCallSites
+        foreach (var site in dispatchSites
                      .Where(s => s.TargetKind == DispatchTargetKind.Notification &&
                                  s.SenderFullName is { Length: > 0 } &&
                                  notificationNames.Contains(s.TargetFullName))

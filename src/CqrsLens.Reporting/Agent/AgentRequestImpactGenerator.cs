@@ -254,7 +254,7 @@ internal static class AgentRequestImpactGenerator
         foreach (var endpoint in endpoints)
         {
             var inferred = endpoint.IsInferred ? " _(inferred)_" : "";
-            var edge = result.FlowEdges.FirstOrDefault(e =>
+            var edge = SpineQueries.FlowEdges(result).FirstOrDefault(e =>
                 e.Kind == FlowEdgeKind.EndpointToRequest &&
                 string.Equals(e.To, request.FullName, StringComparison.Ordinal) &&
                 string.Equals(e.From, endpoint.Name, StringComparison.Ordinal));
@@ -357,7 +357,7 @@ internal static class AgentRequestImpactGenerator
         }
 
         var rows = new List<DbContextEdgeRow>();
-        foreach (var edge in result.FlowEdges)
+        foreach (var edge in SpineQueries.FlowEdges(result))
         {
             if (edge.Kind == FlowEdgeKind.HandlerToDbContext && handlerNames.Contains(edge.From))
                 rows.Add(new DbContextEdgeRow(
@@ -366,7 +366,7 @@ internal static class AgentRequestImpactGenerator
 
         // Resolved through the service-resolution index: the interface is named so the
         // hop is never mistaken for a direct reference.
-        foreach (var edge in result.ResolvedEdges)
+        foreach (var edge in SpineQueries.ResolvedEdges(result))
         {
             if (edge.Kind == FlowEdgeKind.HandlerToDbContextResolved && handlerNames.Contains(edge.From))
                 rows.Add(new DbContextEdgeRow(
@@ -423,7 +423,7 @@ internal static class AgentRequestImpactGenerator
             handlerNames.Add(handler.Name);
         }
 
-        return result.ServiceCallEdges
+        return SpineQueries.ServiceCallEdges(result.Spine)
             .Where(edge => handlerNames.Contains(edge.From))
             .Select(edge => new ServiceCallRow(
                 edge.From, edge.Via, edge.Method, edge.To, edge.Location, edge.ProjectName))
@@ -470,13 +470,15 @@ internal static class AgentRequestImpactGenerator
             references.Add(new Reference(kind, name, how, location));
         }
 
+        var flowEdges = SpineQueries.FlowEdges(result);
+
         // The endpoint catalog's own record of the dispatch (with the edge's provenance when the
         // model holds an endpointToRequest edge for it).
         foreach (var endpoint in result.Endpoints)
         {
             if (!EndpointTargetsRequest(endpoint, request, allowSimpleNameEndpointFallback))
                 continue;
-            var edge = result.FlowEdges.FirstOrDefault(e =>
+            var edge = flowEdges.FirstOrDefault(e =>
                 e.Kind == FlowEdgeKind.EndpointToRequest &&
                 string.Equals(e.To, request.FullName, StringComparison.Ordinal) &&
                 string.Equals(e.From, endpoint.Name, StringComparison.Ordinal));
@@ -491,7 +493,7 @@ internal static class AgentRequestImpactGenerator
         }
 
         // An endpoint→request edge whose endpoint is not in the catalog is still a model fact.
-        foreach (var edge in result.FlowEdges)
+        foreach (var edge in flowEdges)
         {
             if (edge.Kind == FlowEdgeKind.EndpointToRequest &&
                 string.Equals(edge.To, request.FullName, StringComparison.Ordinal))
@@ -502,7 +504,7 @@ internal static class AgentRequestImpactGenerator
 
         // Handler→request flow edges (the model holds none in the frozen corpora, but the
         // relation is modelled and must be surfaced when present).
-        foreach (var edge in result.FlowEdges)
+        foreach (var edge in flowEdges)
         {
             if (edge.Kind == FlowEdgeKind.HandlerToRequest &&
                 string.Equals(edge.To, request.FullName, StringComparison.Ordinal))
@@ -512,7 +514,7 @@ internal static class AgentRequestImpactGenerator
         }
 
         // Resolved dispatch call sites whose target is this request.
-        foreach (var site in result.DispatchCallSites)
+        foreach (var site in SpineQueries.DispatchCallSites(result.Spine))
         {
             if (site.TargetKind == DispatchTargetKind.Request &&
                 string.Equals(site.TargetFullName, request.FullName, StringComparison.Ordinal))
@@ -569,12 +571,13 @@ internal static class AgentRequestImpactGenerator
     private static void AppendReverseReach(StringBuilder sb, IReadOnlyList<Reference> references, AnalysisResult result)
     {
         sb.AppendLine($"### Reverse reach ({references.Count}) — shapes that reference this request");
+        var unresolvedCount = result.Spine.Unproven.UnresolvedDispatches.Count;
         if (references.Count == 0)
         {
             sb.Append("No shape in the scanned model references this request.");
-            if (result.UnresolvedDispatches.Count > 0)
+            if (unresolvedCount > 0)
             {
-                sb.Append($" The scan holds {result.UnresolvedDispatches.Count} unresolved dispatch call site(s) " +
+                sb.Append($" The scan holds {unresolvedCount} unresolved dispatch call site(s) " +
                           "whose targets could not be resolved (runtime-typed send); none is attributed to this request.");
             }
             sb.AppendLine();

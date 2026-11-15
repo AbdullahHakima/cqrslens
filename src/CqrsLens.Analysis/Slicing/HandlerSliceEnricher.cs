@@ -23,8 +23,10 @@ internal static class HandlerSliceEnricher
                     var handler = DeepSliceCandidateResolver.PickHandler(reqHandlerCandidates, file.ProjectName);
                     if (handler is not null)
                     {
+                        var ownerId = handler.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                            handler.ProjectName, handler.Namespace, handler.ContainingTypes, handler.Name);
                         Enrich(
-                            decl, file, scan, mask,
+                            result, ownerId, decl, file, scan, mask,
                             handler.Dependencies,
                             handler.TouchedEntities,
                             handler.PublishedNotifications,
@@ -39,8 +41,10 @@ internal static class HandlerSliceEnricher
                     var notifHandler = DeepSliceCandidateResolver.PickNotificationHandler(notifHandlerCandidates, file.ProjectName);
                     if (notifHandler is not null)
                     {
+                        var ownerId = notifHandler.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                            notifHandler.ProjectName, notifHandler.Namespace, notifHandler.ContainingTypes, notifHandler.Name);
                         Enrich(
-                            decl, file, scan, mask,
+                            result, ownerId, decl, file, scan, mask,
                             notifHandler.Dependencies,
                             notifHandler.TouchedEntities,
                             notifHandler.PublishedNotifications,
@@ -56,19 +60,21 @@ internal static class HandlerSliceEnricher
     }
 
     private static void Enrich(
+        AnalysisResult result,
+        ComponentId ownerId,
         CSharpScanner.ClassDecl decl,
         SourceFile file,
         CSharpScanner.FileScan scan,
         SourceMask mask,
         List<string> dependencies,
-        List<string> touchedEntities,
-        List<string> publishedNotifications,
-        List<string> dispatchedRequests,
+        IList<string> touchedEntities,
+        IList<string> publishedNotifications,
+        IList<string> dispatchedRequests,
         string? selfRequestName,
         SliceIndex index)
     {
         var context = new HandlerEffectContext(
-            decl, file, scan, mask, index,
+            result, ownerId, decl, file, scan, mask, index,
             dependencies,
             touchedEntities,
             publishedNotifications,

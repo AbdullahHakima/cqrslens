@@ -30,8 +30,9 @@ internal static class AgentArchitectureDnaWriter
         sb.AppendLine("### Layer & Project Topology");
         foreach (var p in result.Projects.OrderBy(p => p.Layer, StringComparer.Ordinal).ThenBy(p => p.Name, StringComparer.OrdinalIgnoreCase))
         {
-            var refs = p.ReferenceNames.Count > 0
-                ? $" → references {string.Join(", ", p.ReferenceNames.OrderBy(r => r, StringComparer.OrdinalIgnoreCase).Select(r => $"`{r}`"))}"
+            var projectRefs = SpineQueries.ProjectReferences(result, p);
+            var refs = projectRefs.Count > 0
+                ? $" → references {string.Join(", ", projectRefs.OrderBy(r => r, StringComparer.OrdinalIgnoreCase).Select(r => $"`{r}`"))}"
                 : " (leaf project)";
             sb.AppendLine($"- **`{p.Name}`** [Layer: `{p.Layer}`]{refs}");
         }

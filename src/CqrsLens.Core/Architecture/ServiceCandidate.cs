@@ -18,4 +18,6 @@ public sealed class ServiceCandidate
 
     /// <summary>Location of the class declaration (declaration candidates) or the registration.</summary>
     public SourceLocation? Location { get; init; }
+
+    internal SourceLocation? RegistrationLocation { get; set; }
 }

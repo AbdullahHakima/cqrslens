@@ -9,7 +9,11 @@ internal static class NotificationChecks
     {
         foreach (var notification in result.Notifications)
         {
-            if (notification.Handlers.Count > 0)
+            var notifId = notification.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                notification.ProjectName, notification.Namespace, notification.ContainingTypes, notification.Name);
+            var hasHandlers = result.Spine.HasOutgoingRelation(
+                NodeReference.ForComponent(notifId), RelationKind.HandlesNotification);
+            if (hasHandlers)
                 continue;
 
             findings.Add(new CheckFinding(

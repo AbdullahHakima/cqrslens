@@ -9,11 +9,13 @@ public sealed class NotificationHandlerInfo
     public string FullName =>
         TypeFullName.Compose(Namespace, ContainingTypes, Name);
 
+    internal ComponentId? SpineId { get; set; }
+
     public required string NotificationName { get; init; }
     public List<string> Dependencies { get; } = new();
-    public List<string> TouchedEntities { get; } = new();
-    public List<string> PublishedNotifications { get; } = new();
-    public List<string> DispatchedRequests { get; } = new();
+    public SpineLinkList TouchedEntities { get; } = new(SpineLinkKind.HandlerTouchedEntities);
+    public SpineLinkList PublishedNotifications { get; } = new(SpineLinkKind.HandlerPublishedNotifications);
+    public SpineLinkList DispatchedRequests { get; } = new(SpineLinkKind.HandlerDispatchedRequests);
     public string? NotificationNamespace { get; set; }
 
     /// <summary>Namespaces imported by the declaring file, used by the linker.</summary>
@@ -21,4 +23,13 @@ public sealed class NotificationHandlerInfo
 
     public string? ProjectName { get; set; }
     public SourceLocation? Location { get; set; }
+
+    internal void AttachSpine(AnalysisResult result, ComponentId id)
+    {
+        SpineId = id;
+        NodeReference? Owner() => SpineId is null ? null : NodeReference.ForComponent(SpineId);
+        TouchedEntities.Attach(result, Owner);
+        PublishedNotifications.Attach(result, Owner);
+        DispatchedRequests.Attach(result, Owner);
+    }
 }

@@ -32,11 +32,25 @@ public sealed class CqrsRequest
         set => _kindOverride = value;
     }
 
-    public List<string> Handlers { get; } = new();
-    public List<string> Validators { get; } = new();
+    internal ComponentId? SpineId { get; set; }
+
+    public SpineLinkList Handlers { get; } = new(SpineLinkKind.RequestHandlers);
+    public SpineLinkList Validators { get; } = new(SpineLinkKind.RequestValidators);
     public List<RequestPropertyInfo> Properties { get; } = new();
-    public List<string> Entrypoints { get; } = new();
-    public List<string> TouchedEntities { get; } = new();
-    public List<string> PublishedNotifications { get; } = new();
-    public List<string> DispatchedRequests { get; } = new();
+    public SpineLinkList Entrypoints { get; } = new(SpineLinkKind.RequestEntrypoints);
+    public SpineLinkList TouchedEntities { get; } = new(SpineLinkKind.RequestTouchedEntities);
+    public SpineLinkList PublishedNotifications { get; } = new(SpineLinkKind.RequestPublishedNotifications);
+    public SpineLinkList DispatchedRequests { get; } = new(SpineLinkKind.RequestDispatchedRequests);
+
+    internal void AttachSpine(AnalysisResult result, ComponentId id)
+    {
+        SpineId = id;
+        NodeReference? Owner() => SpineId is null ? null : NodeReference.ForComponent(SpineId);
+        Handlers.Attach(result, Owner);
+        Validators.Attach(result, Owner);
+        Entrypoints.Attach(result, Owner);
+        TouchedEntities.Attach(result, Owner);
+        PublishedNotifications.Attach(result, Owner);
+        DispatchedRequests.Attach(result, Owner);
+    }
 }

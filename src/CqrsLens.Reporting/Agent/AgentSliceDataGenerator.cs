@@ -386,7 +386,7 @@ internal static class AgentSliceDataGenerator
     private static JsonArray EndpointEdgeNodes(CqrsRequest request, AnalysisResult result)
     {
         var nodes = new JsonArray();
-        foreach (var edge in result.FlowEdges)
+        foreach (var edge in SpineQueries.FlowEdges(result))
         {
             if (edge.Kind != FlowEdgeKind.EndpointToRequest)
                 continue;
@@ -413,7 +413,7 @@ internal static class AgentSliceDataGenerator
         }
 
         var nodes = new JsonArray();
-        foreach (var edge in result.FlowEdges)
+        foreach (var edge in SpineQueries.FlowEdges(result))
         {
             if (edge.Kind != FlowEdgeKind.HandlerToDbContext)
                 continue;
@@ -477,7 +477,7 @@ internal static class AgentSliceDataGenerator
         }
 
         var nodes = new JsonArray();
-        foreach (var edge in result.ServiceCallEdges)
+        foreach (var edge in SpineQueries.ServiceCallEdges(result.Spine))
         {
             if (!members.Contains(edge.From))
                 continue;

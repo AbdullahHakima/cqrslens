@@ -7,12 +7,14 @@ internal sealed class ProjectDiagramData
         IReadOnlyList<ProjectInfo> projects,
         IReadOnlyDictionary<string, string> labels,
         IReadOnlyDictionary<string, ProjectInfo?> projectsByName,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> referencesByFilePath,
         int referenceCount,
         HashSet<(string Source, string Target)> violations)
     {
         Projects = projects;
         Labels = labels;
         ProjectsByName = projectsByName;
+        ReferencesByFilePath = referencesByFilePath;
         ReferenceCount = referenceCount;
         Violations = violations;
     }
@@ -20,6 +22,7 @@ internal sealed class ProjectDiagramData
     public IReadOnlyList<ProjectInfo> Projects { get; }
     public IReadOnlyDictionary<string, string> Labels { get; }
     public IReadOnlyDictionary<string, ProjectInfo?> ProjectsByName { get; }
+    public IReadOnlyDictionary<string, IReadOnlyList<string>> ReferencesByFilePath { get; }
     public int ReferenceCount { get; }
     public HashSet<(string Source, string Target)> Violations { get; }
 
@@ -27,11 +30,16 @@ internal sealed class ProjectDiagramData
     {
         var projects = OrderedProjects(result);
         var projectsByName = UniqueProjectsByName(projects);
+        var referencesByFilePath = projects.ToDictionary(
+            p => p.FilePath,
+            p => SpineQueries.ProjectReferences(result, p),
+            StringComparer.Ordinal);
         return new ProjectDiagramData(
             projects,
             ProjectLabels(result, projects),
             projectsByName,
-            ResolvedReferenceCount(projects, projectsByName),
+            referencesByFilePath,
+            ResolvedReferenceCount(projects, referencesByFilePath, projectsByName),
             LayerViolationPairs(result.Checks));
     }
 
@@ -79,8 +87,9 @@ internal sealed class ProjectDiagramData
 
     private static int ResolvedReferenceCount(
         IReadOnlyList<ProjectInfo> projects,
+        IReadOnlyDictionary<string, IReadOnlyList<string>> referencesByFilePath,
         IReadOnlyDictionary<string, ProjectInfo?> projectsByName)
-        => projects.Sum(project => project.ReferenceNames.Count(dependency =>
+        => projects.Sum(project => referencesByFilePath[project.FilePath].Count(dependency =>
             projectsByName.TryGetValue(dependency, out var target) && target is not null));
 
     private static HashSet<(string Source, string Target)> LayerViolationPairs(

@@ -14,7 +14,10 @@ internal static class ProjectDiagramSyntax
         var edgeIndex = 0;
         foreach (var project in data.Projects)
         {
-            foreach (var dependency in project.ReferenceNames
+            var refs = data.ReferencesByFilePath.TryGetValue(project.FilePath, out var list)
+                ? list
+                : Array.Empty<string>();
+            foreach (var dependency in refs
                          .OrderBy(d => d, StringComparer.OrdinalIgnoreCase)
                          .ThenBy(d => d, StringComparer.Ordinal))
             {

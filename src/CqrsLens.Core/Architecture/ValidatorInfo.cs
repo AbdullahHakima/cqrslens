@@ -19,4 +19,5 @@ public sealed class ValidatorInfo
 
     public string? ProjectName { get; set; }
     public SourceLocation? Location { get; set; }
+    internal ComponentId? SpineId { get; set; }
 }

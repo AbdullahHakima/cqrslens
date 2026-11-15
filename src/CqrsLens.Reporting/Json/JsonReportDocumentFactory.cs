@@ -1,11 +1,25 @@
+using System.Text.Json;
+
 namespace CqrsLens;
 
 /// <summary>Projects the analysis model onto the versioned JSON report contract.</summary>
 internal static class JsonReportDocumentFactory
 {
     internal static JsonReportDocument Create(AnalysisResult result)
+        => CreateCore(result, streamRelations: false);
+
+    internal static JsonReportDocument CreateForSerialization(AnalysisResult result)
+        => CreateCore(result, streamRelations: true);
+
+    private static JsonReportDocument CreateCore(AnalysisResult result, bool streamRelations)
     {
         ArgumentNullException.ThrowIfNull(result);
+
+        var flowEdges = SpineQueries.FlowEdges(result);
+        var resolvedEdges = SpineQueries.ResolvedEdges(result);
+        var serviceCallEdges = SpineQueries.ServiceCallEdges(result.Spine);
+        var dispatchCallSites = SpineQueries.DispatchCallSites(result.Spine);
+        var unresolvedDispatches = result.Spine.Unproven.UnresolvedDispatches;
 
         var rootName = new DirectoryInfo(result.RootPath).Name;
         var activeChecks = result.BaselineApplied
@@ -46,9 +60,9 @@ internal static class JsonReportDocumentFactory
                 Warnings = warningCount,
                 KnownFindings = knownCount,
                 Diagnostics = result.Diagnostics.Count,
-                FlowEdges = result.FlowEdges.Count,
-                DispatchCallSites = result.DispatchCallSites.Count,
-                UnresolvedDispatches = result.UnresolvedDispatches.Count,
+                FlowEdges = flowEdges.Count,
+                DispatchCallSites = dispatchCallSites.Count,
+                UnresolvedDispatches = unresolvedDispatches.Count,
             },
             Projects = result.Projects
                 .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
@@ -57,7 +71,7 @@ internal static class JsonReportDocumentFactory
                 {
                     Name = p.Name,
                     Layer = p.Layer,
-                    References = p.ReferenceNames
+                    References = SpineQueries.ProjectReferences(result, p)
                         .OrderBy(r => r, StringComparer.OrdinalIgnoreCase)
                         .ThenBy(r => r, StringComparer.Ordinal)
                         .ToList(),
@@ -267,8 +281,8 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
-            FlowEdges = result.FlowEdges.Count > 0
-                ? result.FlowEdges
+            FlowEdges = flowEdges.Count > 0
+                ? flowEdges
                     .Select(e => new JsonFlowEdge
                     {
                         Kind = FlowEdgeKindName(e.Kind),
@@ -279,8 +293,8 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
-            ResolvedEdges = result.ResolvedEdges.Count > 0
-                ? result.ResolvedEdges
+            ResolvedEdges = resolvedEdges.Count > 0
+                ? resolvedEdges
                     .Select(e => new JsonResolvedEdge
                     {
                         Kind = ResolvedEdgeKindName(e.Kind),
@@ -292,8 +306,8 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
-            ServiceCallEdges = result.ServiceCallEdges.Count > 0
-                ? result.ServiceCallEdges
+            ServiceCallEdges = serviceCallEdges.Count > 0
+                ? serviceCallEdges
                     .Select(e => new JsonServiceCallEdge
                     {
                         Kind = "serviceCall",
@@ -306,8 +320,8 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
-            DispatchCallSites = result.DispatchCallSites.Count > 0
-                ? result.DispatchCallSites
+            DispatchCallSites = dispatchCallSites.Count > 0
+                ? dispatchCallSites
                     .Select(s => new JsonDispatchCallSite
                     {
                         Target = s.TargetFullName,
@@ -319,8 +333,8 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
-            UnresolvedDispatches = result.UnresolvedDispatches.Count > 0
-                ? result.UnresolvedDispatches
+            UnresolvedDispatches = unresolvedDispatches.Count > 0
+                ? unresolvedDispatches
                     .Select(u => new JsonUnresolvedDispatch
                     {
                         Method = u.Method,
@@ -330,7 +344,105 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
+            Relations = BuildRelationsField(result, streamRelations),
         };
+    }
+
+    private static List<JsonSpineRelation>? BuildRelationsField(AnalysisResult result, bool streamRelations)
+    {
+        if (result.Spine.UnindexedRelations.Count == 0)
+            return null;
+
+        var spineRelations = result.Spine.Relations;
+        if (streamRelations)
+            return new DirectSpineRelationPlaceholder(spineRelations);
+
+        var nodeCache = new Dictionary<NodeReference, JsonSpineNodeRef>(ReferenceEqualityComparer.Instance);
+        var list = new List<JsonSpineRelation>(spineRelations.Count);
+        for (var i = 0; i < spineRelations.Count; i++)
+            list.Add(ToJsonSpineRelation(spineRelations[i], nodeCache));
+        return list;
+    }
+
+    private static JsonSpineRelation ToJsonSpineRelation(
+        SpineRelation relation,
+        Dictionary<NodeReference, JsonSpineNodeRef> nodeCache)
+    {
+        List<JsonSpineNodeRef>? viaList = null;
+        if (relation.Via.Count > 0)
+        {
+            viaList = new List<JsonSpineNodeRef>(relation.Via.Count);
+            for (var i = 0; i < relation.Via.Count; i++)
+                viaList.Add(GetOrCreateNodeRef(relation.Via[i], nodeCache));
+        }
+
+        var occSource = relation.Occurrences;
+        var occurrences = new List<JsonSpineEvidence>(occSource.Count);
+        for (var i = 0; i < occSource.Count; i++)
+            occurrences.Add(ToJsonSpineEvidence(occSource[i], nodeCache));
+
+        return new JsonSpineRelation
+        {
+            Kind = JsonSpineNames.RelationKindName(relation.Kind),
+            From = GetOrCreateNodeRef(relation.From, nodeCache),
+            To = GetOrCreateNodeRef(relation.To, nodeCache),
+            Via = viaList,
+            Method = EmptyToNull(relation.Method),
+            Strength = JsonSpineNames.EvidenceStrengthName(relation.Strength),
+            OccurrenceCount = relation.OccurrenceCount,
+            Occurrences = occurrences,
+        };
+    }
+
+    private static JsonSpineEvidence ToJsonSpineEvidence(
+        EvidenceOccurrence occurrence,
+        Dictionary<NodeReference, JsonSpineNodeRef> nodeCache)
+    {
+        List<JsonSpineNodeRef>? viaList = null;
+        if (occurrence.Via.Count > 0)
+        {
+            viaList = new List<JsonSpineNodeRef>(occurrence.Via.Count);
+            for (var i = 0; i < occurrence.Via.Count; i++)
+                viaList.Add(GetOrCreateNodeRef(occurrence.Via[i], nodeCache));
+        }
+
+        return new JsonSpineEvidence
+        {
+            Rule = JsonSpineNames.EvidenceRuleName(occurrence.Rule),
+            Origin = JsonSpineNames.EvidenceOriginName(occurrence.Origin),
+            Strength = JsonSpineNames.EvidenceStrengthName(occurrence.Strength),
+            Location = ToJsonLocation(occurrence.Location),
+            LocationOmittedReason = occurrence.LocationOmittedReason,
+            Via = viaList,
+            ResolutionSemantics = occurrence.ResolutionSemantics is { } semantics
+                ? JsonSpineNames.ResolutionSemanticsName(semantics)
+                : null,
+            ScopeProject = occurrence.ScopeProjectName,
+            TestProject = occurrence.IsTestProject ? true : null,
+        };
+    }
+
+    private static JsonSpineNodeRef GetOrCreateNodeRef(
+        NodeReference reference,
+        Dictionary<NodeReference, JsonSpineNodeRef> nodeCache)
+    {
+        if (nodeCache.TryGetValue(reference, out var cached))
+            return cached;
+
+        var created = new JsonSpineNodeRef
+        {
+            Kind = JsonSpineNames.NodeReferenceKindName(reference.Kind),
+            Key = reference.Key,
+            Name = reference.Name,
+            ComponentId = reference.ComponentId?.Value,
+            EndpointId = reference.EndpointId?.ToString(),
+            ProjectId = reference.ProjectId?.Value,
+            SymbolId = reference.SymbolId?.ToString(),
+            Member = reference.MemberName,
+            Reason = reference.Reason,
+        };
+        nodeCache[reference] = created;
+        return created;
     }
 
     private static string FlowEdgeKindName(FlowEdgeKind kind) => kind switch

@@ -42,7 +42,9 @@ internal static class ConfigurationView
             new("Rule severity overrides", RuleOverrides(provenance.RuleOverrides)),
         };
 
-        var layerStatus = result.HasConfiguredLayers
+        var hasConfiguredLayers = result.HasConfiguredLayers ||
+            result.Spine.Projects.Any(p => p.LayerProvenance == LayerProvenance.Configured);
+        var layerStatus = hasConfiguredLayers
             ? "configured"
             : LayerModelConfidence.IsAsserted(result.Projects) ? "asserted" : "name-guessed";
 

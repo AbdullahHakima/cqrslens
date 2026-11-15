@@ -6,6 +6,18 @@ public sealed class BehaviorInfo
     public string? ProjectName { get; set; }
     public SourceLocation? Location { get; set; }
 
+    internal string Namespace { get; set; } = "";
+    internal List<string> ContainingTypes { get; } = new();
+    internal int GenericArity { get; set; }
+    internal string FullName => TypeFullName.Compose(Namespace, ContainingTypes, Name);
+    internal string? ClosedRequestTarget { get; set; }
+    internal string? ClosedRequestNamespace { get; set; }
+    internal List<string> ImportedNamespaces { get; } = new();
+    internal List<string> RequestTypeConstraints { get; } = new();
+    internal bool IsOpenGenericRegistration { get; set; }
+    internal SourceLocation? RegistrationLocation { get; set; }
+    internal ComponentId? SpineId { get; set; }
+
     /// <summary>
     /// 1-based ordinal of this behavior among the behavior registrations at the same
     /// registration site. Null when no registration site could be resolved — the

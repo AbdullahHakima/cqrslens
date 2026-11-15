@@ -15,9 +15,9 @@ internal static class RoslynBehaviorShapeReader
         string? projectName,
         AnalysisResult result)
     {
-        if (!RoslynSymbolFacts.ImplementedInterfaces(symbol, declaration, model).Any(i =>
-                i.Name == "IPipelineBehavior" &&
-                i.TypeArguments.Length == 2))
+        var behaviorInterface = RoslynSymbolFacts.ImplementedInterfaces(symbol, declaration, model)
+            .FirstOrDefault(i => i.Name == "IPipelineBehavior" && i.TypeArguments.Length == 2);
+        if (behaviorInterface is null)
             return;
 
         var location = RoslynSymbolFacts.LocationOf(declaration.Identifier.GetLocation(), result.RootPath);
@@ -27,11 +27,40 @@ internal static class RoslynBehaviorShapeReader
                 b.Location?.File == location?.File))
             return;
 
-        result.Behaviors.Add(new BehaviorInfo
+        var behavior = new BehaviorInfo
         {
             Name = symbol.Name,
+            Namespace = RoslynSymbolFacts.NamespaceOf(symbol),
+            GenericArity = symbol.TypeParameters.Length,
             ProjectName = projectName,
             Location = location,
-        });
+        };
+        behavior.ContainingTypes.AddRange(RoslynSymbolFacts.ContainingTypeNames(symbol));
+
+        var firstArg = behaviorInterface.TypeArguments[0];
+        if (firstArg.TypeKind == TypeKind.TypeParameter)
+        {
+            var typeParamName = firstArg.Name;
+            foreach (var clause in declaration.ConstraintClauses)
+            {
+                if (!string.Equals(clause.Name.Identifier.Text, typeParamName, StringComparison.Ordinal))
+                    continue;
+                foreach (var constraint in clause.Constraints)
+                {
+                    var text = constraint.ToString().Trim();
+                    if (text.Length > 0 && !behavior.RequestTypeConstraints.Contains(text, StringComparer.Ordinal))
+                        behavior.RequestTypeConstraints.Add(text);
+                }
+            }
+        }
+        else
+        {
+            var targetName = RoslynSymbolFacts.TypeName(firstArg);
+            var targetNs = RoslynSymbolFacts.NamespaceOf(firstArg);
+            behavior.ClosedRequestTarget = targetName;
+            behavior.ClosedRequestNamespace = string.IsNullOrEmpty(targetNs) ? null : targetNs;
+        }
+
+        result.Behaviors.Add(behavior);
     }
 }

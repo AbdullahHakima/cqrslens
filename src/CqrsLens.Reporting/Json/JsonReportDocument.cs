@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace CqrsLens;
 
 internal sealed class JsonReportDocument
@@ -45,4 +47,11 @@ internal sealed class JsonReportDocument
 
     public List<JsonDispatchCallSite>? DispatchCallSites { get; set; }
     public List<JsonUnresolvedDispatch>? UnresolvedDispatches { get; set; }
+
+    /// <summary>
+    /// Additive section (stage F1): deduplicated spine relations with full structured evidence
+    /// occurrences. Emitted only when non-empty; existing sections remain unchanged.
+    /// </summary>
+    [JsonConverter(typeof(DirectSpineRelationsConverter))]
+    public List<JsonSpineRelation>? Relations { get; set; }
 }

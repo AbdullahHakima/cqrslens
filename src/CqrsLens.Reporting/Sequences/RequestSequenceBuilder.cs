@@ -43,7 +43,8 @@ internal static class RequestSequenceBuilder
             .GroupBy(h => h.FullName, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.First().TouchedEntities, StringComparer.Ordinal);
 
-        var handlerDbContexts = result.FlowEdges
+        var flowEdges = SpineQueries.FlowEdges(result);
+        var handlerDbContexts = flowEdges
             .Where(e => e.Kind == FlowEdgeKind.HandlerToDbContext)
             .GroupBy(e => e.From, StringComparer.Ordinal)
             .ToDictionary(
@@ -51,7 +52,7 @@ internal static class RequestSequenceBuilder
                 g => g.Select(e => e.To).Distinct(StringComparer.Ordinal).OrderBy(s => s, StringComparer.Ordinal).ToList(),
                 StringComparer.Ordinal);
 
-        var handlerNotifications = result.FlowEdges
+        var handlerNotifications = flowEdges
             .Where(e => e.Kind == FlowEdgeKind.HandlerToNotification)
             .GroupBy(e => e.From, StringComparer.Ordinal)
             .ToDictionary(
@@ -61,7 +62,7 @@ internal static class RequestSequenceBuilder
 
         // DI-resolved handler → DbContext hops, skipping any context already drawn as a
         // direct edge for that handler so a hop is never shown twice.
-        var handlerResolvedContexts = result.ResolvedEdges
+        var handlerResolvedContexts = SpineQueries.ResolvedEdges(result)
             .Where(e => e.Kind == FlowEdgeKind.HandlerToDbContextResolved)
             .Where(e => !handlerDbContexts.TryGetValue(e.From, out var direct) ||
                         !direct.Contains(e.To, StringComparer.Ordinal))
@@ -77,7 +78,7 @@ internal static class RequestSequenceBuilder
         // The handler's OWN service-call edges (Stage 2). Only edges whose From is a handler
         // of this request are drawn; a service target's own outgoing calls are never expanded
         // into the sequence (no transitive chains).
-        var serviceCallsByHandler = result.ServiceCallEdges
+        var serviceCallsByHandler = SpineQueries.ServiceCallEdges(result.Spine)
             .GroupBy(e => e.From, StringComparer.Ordinal)
             .ToDictionary(
                 g => g.Key,
@@ -88,6 +89,9 @@ internal static class RequestSequenceBuilder
                     .ToList(),
                 StringComparer.Ordinal);
 
+        // H7 / F0 §4.3 rendering gap: sequence diagrams still render BehaviorOrdering.Flattened(result.Behaviors)
+        // for every request instead of filtering by RelationKind.Wraps applicability. This gap is intentionally
+        // preserved untouched in F1 so rendered output remains byte-identical to baseline (H3/H7).
         var behaviors = BehaviorOrdering.Flattened(result.Behaviors);
 
         var sequences = new List<RequestSequence>();

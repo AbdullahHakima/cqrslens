@@ -46,7 +46,6 @@ internal static class HandlerDbContextResolver
         }
 
         hierarchy ??= new TypeHierarchy(classes, interfaces);
-        var edges = new List<ResolvedEdge>();
 
         foreach (var handler in EnumerateHandlers(result))
         {
@@ -73,36 +72,42 @@ internal static class HandlerDbContextResolver
                 if (resolution.Implementation is null) continue;
                 if (!contextsByFullName.TryGetValue(resolution.Implementation, out var context)) continue;
 
-                edges.Add(new ResolvedEdge
-                {
-                    Kind = FlowEdgeKind.HandlerToDbContextResolved,
-                    From = handler.FullName,
-                    Via = resolution.InterfaceName,
-                    To = context.FullName,
-                    ProjectName = context.ProjectName,
-                    Location = context.Location,
-                });
+                var fromRef = handler.SpineId is not null
+                    ? NodeReference.ForComponent(handler.SpineId)
+                    : result.IdentityResolver.ResolveComponentOrExternalRef(handler.FullName, handler.Role, handler.ProjectName);
+                var viaRef = result.IdentityResolver.ResolveInterfaceRef(resolution.InterfaceName, resolution.InterfaceLocation);
+                var toRef = context.SpineId is not null
+                    ? NodeReference.ForComponent(context.SpineId)
+                    : result.IdentityResolver.ResolveComponentOrExternalRef(context.FullName, ComponentRole.DbContext, context.ProjectName);
+
+                result.Spine.AddOrMergeRelation(
+                    RelationKind.UsesDataResolved,
+                    fromRef,
+                    toRef,
+                    SpineIdentityResolver.SyntheticOccurrence(
+                        EvidenceRule.ResolvedDbContextDependency,
+                        EvidenceOrigin.Declaration,
+                        context.Location,
+                        EvidenceStrength.Resolved,
+                        via: [viaRef],
+                        scopeProjectName: context.ProjectName));
             }
         }
-
-        result.ResolvedEdges.AddRange(edges
-            .GroupBy(edge => (edge.Kind, edge.From, edge.Via, edge.To))
-            .Select(group => group.First())
-            .OrderBy(edge => edge.From, StringComparer.Ordinal)
-            .ThenBy(edge => edge.Via, StringComparer.Ordinal)
-            .ThenBy(edge => edge.To, StringComparer.Ordinal));
     }
 
     private static IEnumerable<HandlerDependencies> EnumerateHandlers(AnalysisResult result)
     {
         foreach (var handler in result.Handlers)
-            yield return new HandlerDependencies(handler.FullName, handler.Namespace, handler.Dependencies);
+            yield return new HandlerDependencies(handler.FullName, handler.Namespace, handler.ProjectName, handler.SpineId, ComponentRole.Handler, handler.Dependencies);
         foreach (var handler in result.NotificationHandlers)
-            yield return new HandlerDependencies(handler.FullName, handler.Namespace, handler.Dependencies);
+            yield return new HandlerDependencies(handler.FullName, handler.Namespace, handler.ProjectName, handler.SpineId, ComponentRole.NotificationHandler, handler.Dependencies);
     }
 
     private sealed record HandlerDependencies(
         string FullName,
         string Namespace,
+        string? ProjectName,
+        ComponentId? SpineId,
+        ComponentRole Role,
         IReadOnlyList<string> Dependencies);
 }

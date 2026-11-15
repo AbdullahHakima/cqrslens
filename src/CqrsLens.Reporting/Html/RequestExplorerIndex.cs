@@ -63,7 +63,7 @@ internal sealed class RequestExplorerIndex
                 .Where(c => !string.IsNullOrEmpty(c.Target))
                 .GroupBy(c => c.Target!, StringComparer.Ordinal)
                 .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal),
-            result.DispatchCallSites
+            SpineQueries.DispatchCallSites(result.Spine)
                 .Where(s => s.TargetKind == DispatchTargetKind.Request &&
                             !s.IsTestProject &&
                             !string.IsNullOrEmpty(s.SenderFullName))

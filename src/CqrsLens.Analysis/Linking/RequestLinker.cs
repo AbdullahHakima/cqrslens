@@ -80,8 +80,20 @@ internal static class RequestLinker
             // qualified. Once linking has identified the real request, retain that
             // identity so text and Roslyn results describe the same shape.
             handler.RequestNamespace ??= request.Namespace;
-            if (!request.Handlers.Contains(handler.FullName))
-                request.Handlers.Add(handler.FullName);
+            var requestId = request.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                request.ProjectName, request.Namespace, request.ContainingTypes, request.Name);
+            var handlerId = handler.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                handler.ProjectName, handler.Namespace, handler.ContainingTypes, handler.Name);
+            result.Spine.AddOrMergeRelation(
+                RelationKind.Serves,
+                NodeReference.ForComponent(requestId),
+                NodeReference.ForComponent(handlerId),
+                SpineIdentityResolver.SyntheticOccurrence(
+                    EvidenceRule.HandlerMarker,
+                    EvidenceOrigin.Declaration,
+                    handler.Location ?? request.Location,
+                    EvidenceStrength.Proven,
+                    scopeProjectName: handler.ProjectName ?? request.ProjectName));
         }
     }
 
@@ -109,8 +121,20 @@ internal static class RequestLinker
             }
 
             validator.TargetNamespace ??= request.Namespace;
-            if (!request.Validators.Contains(validator.FullName))
-                request.Validators.Add(validator.FullName);
+            var validatorId = validator.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                validator.ProjectName, validator.Namespace, validator.ContainingTypes, validator.Name);
+            var requestId = request.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                request.ProjectName, request.Namespace, request.ContainingTypes, request.Name);
+            result.Spine.AddOrMergeRelation(
+                RelationKind.Validates,
+                NodeReference.ForComponent(validatorId),
+                NodeReference.ForComponent(requestId),
+                SpineIdentityResolver.SyntheticOccurrence(
+                    EvidenceRule.ValidatorMarker,
+                    EvidenceOrigin.Declaration,
+                    validator.Location,
+                    EvidenceStrength.Proven,
+                    scopeProjectName: validator.ProjectName));
         }
     }
 }

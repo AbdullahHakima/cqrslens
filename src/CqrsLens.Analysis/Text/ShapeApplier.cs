@@ -191,13 +191,23 @@ internal static partial class ShapeApplier
             // IPipelineBehavior<...> -> a pipeline behavior
             if (decl.BaseList.Contains("IPipelineBehavior<", StringComparison.Ordinal))
             {
-                result.Behaviors.Add(new BehaviorInfo
+                var headerEnd = Math.Clamp(decl.BodySpan.Start, decl.NameIndex, code.Length);
+                var headerSegment = decl.NameIndex >= 0 && headerEnd >= decl.NameIndex
+                    ? code[decl.NameIndex..headerEnd]
+                    : null;
+                var behavior = new BehaviorInfo
                 {
                     Name = decl.Name,
+                    Namespace = decl.Namespace,
+                    GenericArity = decl.TypeParameters.Count,
                     ProjectName = projectName,
                     Location = location ??= SourceLocation.Create(
                         filePath, result.RootPath, code, decl.NameIndex),
-                });
+                };
+                behavior.ContainingTypes.AddRange(decl.ContainingTypes);
+                AddImportedNamespaces(decl.Usings, behavior.ImportedNamespaces);
+                BehaviorShapeHelper.PopulateFromHeader(behavior, headerSegment, decl.BaseList, decl.TypeParameters);
+                result.Behaviors.Add(behavior);
             }
 
             // : DbContext (or *DbContext, e.g. IdentityDbContext) -> a DbContext

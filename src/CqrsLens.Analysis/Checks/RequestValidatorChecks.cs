@@ -15,7 +15,11 @@ internal static class RequestValidatorChecks
     {
         foreach (var request in result.Requests)
         {
-            if (request.Kind != "Command" || request.Validators.Count > 0)
+            var reqId = request.SpineId ?? result.IdentityResolver.ResolveComponentId(
+                request.ProjectName, request.Namespace, request.ContainingTypes, request.Name);
+            var hasValidator = result.Spine.HasIncomingRelation(
+                NodeReference.ForComponent(reqId), RelationKind.Validates);
+            if (request.Kind != "Command" || hasValidator)
                 continue;
 
             findings.Add(new CheckFinding(
@@ -44,9 +48,12 @@ internal static class RequestValidatorChecks
         if (result.Requests.Count == 0)
             return;
 
-        var linkedValidators = new HashSet<string>(
-            result.Requests.SelectMany(r => r.Validators),
-            StringComparer.OrdinalIgnoreCase);
+        var linkedValidators = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var rel in result.Spine.UnindexedRelations)
+        {
+            if (rel.Kind == RelationKind.Validates)
+                linkedValidators.Add(rel.From.SymbolId?.FullName ?? rel.From.Name);
+        }
         var ambiguousTargets = result.Requests
             .GroupBy(r => r.Name, StringComparer.Ordinal)
             .Where(g => g.Count() > 1)

@@ -18,7 +18,7 @@ internal static class FlowDiagramPlanner
 
     internal static IReadOnlyList<FlowDiagramSection> Sections(AnalysisResult result)
     {
-        var distinctEdges = result.FlowEdges
+        var distinctEdges = SpineQueries.FlowEdges(result)
             .GroupBy(e => (e.Kind, e.From, e.To))
             .Select(g => g.First())
             .OrderBy(e => e.Kind)
@@ -26,7 +26,7 @@ internal static class FlowDiagramPlanner
             .ThenBy(e => e.To, StringComparer.Ordinal)
             .ToList();
 
-        var distinctResolved = result.ResolvedEdges
+        var distinctResolved = SpineQueries.ResolvedEdges(result)
             .GroupBy(e => (e.Kind, e.From, e.Via, e.To))
             .Select(g => g.First())
             .OrderBy(e => e.From, StringComparer.Ordinal)

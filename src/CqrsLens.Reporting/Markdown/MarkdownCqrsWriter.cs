@@ -68,7 +68,7 @@ internal static class MarkdownCqrsWriter
     /// </summary>
     internal static void WriteRequestsTable(StringBuilder md, AnalysisResult result)
     {
-        var callersByRequest = result.DispatchCallSites
+        var callersByRequest = SpineQueries.DispatchCallSites(result.Spine)
             .Where(s => s.TargetKind == DispatchTargetKind.Request &&
                         !s.IsTestProject &&
                         !string.IsNullOrEmpty(s.SenderFullName))

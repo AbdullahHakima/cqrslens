@@ -97,12 +97,14 @@ internal static class HtmlDiagramSectionRenderer
 
         html.AppendLine("<h2>Flow</h2>");
         var totalEdges = sections.Sum(s => s.Edges.Count + s.ResolvedEdges.Count);
+        var unresolvedCount = result.Spine.Unproven.UnresolvedDispatches.Count;
+        var hasResolvedEdges = result.Spine.HasRelation(RelationKind.UsesDataResolved);
         var edgeText = totalEdges == 1 ? "1 resolved flow edge" : $"{totalEdges} resolved flow edges";
         var sectionText = sections.Count == 1 ? "1 diagram" : $"{sections.Count} feature/project diagrams";
-        var unresolvedNote = result.UnresolvedDispatches.Count > 0
-            ? $" {result.UnresolvedDispatches.Count} unresolved dispatch call(s) are not drawn as edges."
+        var unresolvedNote = unresolvedCount > 0
+            ? $" {unresolvedCount} unresolved dispatch call(s) are not drawn as edges."
             : "";
-        var dbContextNote = result.ResolvedEdges.Count > 0
+        var dbContextNote = hasResolvedEdges
             ? "DbContext nodes appear when a handler references a discovered DbContext type directly, " +
               "or through an injected interface resolved through DI"
             : "DbContext nodes appear only when a handler directly references a discovered DbContext type";
@@ -110,7 +112,7 @@ internal static class HtmlDiagramSectionRenderer
             $"<p class=\"note\">{Encode(edgeText)} across {Encode(sectionText)} " +
             $"(endpoint → request → handler and onward; {Encode(dbContextNote)}; " +
             $"every flow edge appears in exactly one diagram).{Encode(unresolvedNote)}</p>");
-        AppendFlowLegend(html, result.ResolvedEdges.Count > 0);
+        AppendFlowLegend(html, hasResolvedEdges);
 
         foreach (var section in sections)
         {

@@ -87,6 +87,7 @@ public static class Analyzer
         options.Progress?.Invoke(new ScanProgress(
             "Linking CQRS & checks", 3, 4, $"{result.Requests.Count} request(s)"));
         ShapeLinker.Link(result);
+        BehaviorWrapsResolver.Resolve(workspace, result);
         phases.Record("Link shapes");
 
         DeepSliceAnalyzer.Analyze(workspace, result);
@@ -145,14 +146,19 @@ public static class Analyzer
         AnalysisResult result)
     {
         options.Progress?.Invoke(new ScanProgress("Discovering projects", 0, 4));
-        result.Projects.AddRange(CsprojParser.LoadProjects(root));
+        var loadedProjects = CsprojParser.LoadProjects(root);
         result.HasConfiguredLayers = options.LayerOverrides.Count > 0;
-        foreach (var project in result.Projects)
+        foreach (var project in loadedProjects)
         {
-            project.Layer = options.LayerOverrides.TryGetValue(project.Name, out var layerOverride)
-                ? layerOverride
+            var hasOverride = options.LayerOverrides.TryGetValue(project.Name, out var layerOverride);
+            project.Layer = hasOverride
+                ? layerOverride!
                 : LayerClassifier.Classify(project.Name, project.DirectoryPath, root);
+            project.LayerProvenance = hasOverride
+                ? LayerProvenance.Configured
+                : LayerProvenance.Guessed;
         }
+        result.Projects.AddRange(loadedProjects);
     }
 
     private static void ScanShapes(
