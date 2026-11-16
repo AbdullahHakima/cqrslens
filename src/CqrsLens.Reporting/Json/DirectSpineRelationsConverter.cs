@@ -34,7 +34,7 @@ internal sealed class DirectSpineRelationsConverter : JsonConverter<List<JsonSpi
         JsonSerializer.Serialize(writer, value, JsonReportSerializerContext.Default.ListJsonSpineRelation);
     }
 
-    private static void WriteSpineRelations(Utf8JsonWriter writer, IReadOnlyList<SpineRelation> relations)
+    internal static void WriteSpineRelations(Utf8JsonWriter writer, IReadOnlyList<SpineRelation> relations)
     {
         writer.WriteStartArray();
         for (var i = 0; i < relations.Count; i++)
@@ -45,28 +45,28 @@ internal sealed class DirectSpineRelationsConverter : JsonConverter<List<JsonSpi
     private static void WriteRelation(Utf8JsonWriter writer, SpineRelation relation)
     {
         writer.WriteStartObject();
-        writer.WriteString(JsonSpineNames.KindProp, JsonSpineNames.RelationKindEncoded(relation.Kind));
-        writer.WritePropertyName(JsonSpineNames.FromProp);
+        writer.WriteString("kind"u8, JsonSpineNames.RelationKindUtf8(relation.Kind));
+        writer.WritePropertyName("from"u8);
         WriteNodeRef(writer, relation.From);
-        writer.WritePropertyName(JsonSpineNames.ToProp);
+        writer.WritePropertyName("to"u8);
         WriteNodeRef(writer, relation.To);
 
         var via = relation.Via;
         if (via.Count > 0)
         {
-            writer.WriteStartArray(JsonSpineNames.ViaProp);
+            writer.WriteStartArray("via"u8);
             for (var i = 0; i < via.Count; i++)
                 WriteNodeRef(writer, via[i]);
             writer.WriteEndArray();
         }
 
         if (!string.IsNullOrEmpty(relation.Method))
-            writer.WriteString(JsonSpineNames.MethodProp, relation.Method);
+            writer.WriteString("method"u8, relation.Method);
 
-        writer.WriteString(JsonSpineNames.StrengthProp, JsonSpineNames.EvidenceStrengthEncoded(relation.Strength));
-        writer.WriteNumber(JsonSpineNames.OccurrenceCountProp, relation.OccurrenceCount);
+        writer.WriteString("strength"u8, JsonSpineNames.EvidenceStrengthUtf8(relation.Strength));
+        writer.WriteNumber("occurrenceCount"u8, relation.OccurrenceCount);
 
-        writer.WriteStartArray(JsonSpineNames.OccurrencesProp);
+        writer.WriteStartArray("occurrences"u8);
         var occurrences = relation.Occurrences;
         for (var i = 0; i < occurrences.Count; i++)
             WriteEvidence(writer, occurrences[i]);
@@ -78,63 +78,66 @@ internal sealed class DirectSpineRelationsConverter : JsonConverter<List<JsonSpi
     private static void WriteNodeRef(Utf8JsonWriter writer, NodeReference reference)
     {
         writer.WriteStartObject();
-        writer.WriteString(JsonSpineNames.KindProp, JsonSpineNames.NodeReferenceKindEncoded(reference.Kind));
+        writer.WriteString("kind"u8, JsonSpineNames.NodeReferenceKindUtf8(reference.Kind));
         if (reference.Key is not null)
-            writer.WriteString(JsonSpineNames.KeyProp, reference.Key);
+            writer.WriteString("key"u8, reference.Key);
         if (reference.Name is not null)
-            writer.WriteString(JsonSpineNames.NameProp, reference.Name);
+            writer.WriteString("name"u8, reference.Name);
         if (reference.ComponentId is { } componentId)
-            writer.WriteString(JsonSpineNames.ComponentIdProp, componentId.Value);
+            writer.WriteString("componentId"u8, componentId.Value);
         if (reference.EndpointId is { } endpointId)
-            writer.WriteString(JsonSpineNames.EndpointIdProp, endpointId.ToString());
+            writer.WriteString("endpointId"u8, endpointId.ToString());
         if (reference.ProjectId is { } projectId)
-            writer.WriteString(JsonSpineNames.ProjectIdProp, projectId.Value);
+            writer.WriteString("projectId"u8, projectId.Value);
         if (reference.SymbolId is { } symbolId)
-            writer.WriteString(JsonSpineNames.SymbolIdProp, symbolId.ToString());
+            writer.WriteString("symbolId"u8, symbolId.ToString());
         if (reference.MemberName is not null)
-            writer.WriteString(JsonSpineNames.MemberProp, reference.MemberName);
+            writer.WriteString("member"u8, reference.MemberName);
         if (reference.Reason is not null)
-            writer.WriteString(JsonSpineNames.ReasonProp, reference.Reason);
+            writer.WriteString("reason"u8, reference.Reason);
         writer.WriteEndObject();
     }
 
-    private static void WriteEvidence(Utf8JsonWriter writer, EvidenceOccurrence occurrence)
+    internal static void WriteEvidence(Utf8JsonWriter writer, EvidenceOccurrence occurrence)
     {
         writer.WriteStartObject();
-        writer.WriteString(JsonSpineNames.RuleProp, JsonSpineNames.EvidenceRuleEncoded(occurrence.Rule));
-        writer.WriteString(JsonSpineNames.OriginProp, JsonSpineNames.EvidenceOriginEncoded(occurrence.Origin));
-        writer.WriteString(JsonSpineNames.StrengthProp, JsonSpineNames.EvidenceStrengthEncoded(occurrence.Strength));
+        writer.WriteString("rule"u8, JsonSpineNames.EvidenceRuleUtf8(occurrence.Rule));
+        writer.WriteString("origin"u8, JsonSpineNames.EvidenceOriginUtf8(occurrence.Origin));
+        writer.WriteString("strength"u8, JsonSpineNames.EvidenceStrengthUtf8(occurrence.Strength));
 
         if (occurrence.Location is { } location)
         {
-            writer.WriteStartObject(JsonSpineNames.LocationProp);
+            writer.WriteStartObject("location"u8);
             if (location.File is not null)
-                writer.WriteString(JsonSpineNames.FileProp, location.File);
-            writer.WriteNumber(JsonSpineNames.LineProp, location.Line);
-            writer.WriteNumber(JsonSpineNames.ColumnProp, location.Column);
+                writer.WriteString("file"u8, location.File);
+            writer.WriteNumber("line"u8, location.Line);
+            writer.WriteNumber("column"u8, location.Column);
             writer.WriteEndObject();
         }
 
         if (occurrence.LocationOmittedReason is not null)
-            writer.WriteString(JsonSpineNames.LocationOmittedReasonProp, occurrence.LocationOmittedReason);
+            writer.WriteString("locationOmittedReason"u8, occurrence.LocationOmittedReason);
 
         var via = occurrence.Via;
         if (via.Count > 0)
         {
-            writer.WriteStartArray(JsonSpineNames.ViaProp);
+            writer.WriteStartArray("via"u8);
             for (var i = 0; i < via.Count; i++)
                 WriteNodeRef(writer, via[i]);
             writer.WriteEndArray();
         }
 
         if (occurrence.ResolutionSemantics is { } semantics)
-            writer.WriteString(JsonSpineNames.ResolutionSemanticsProp, JsonSpineNames.ResolutionSemanticsEncoded(semantics));
+            writer.WriteString("resolutionSemantics"u8, JsonSpineNames.ResolutionSemanticsUtf8(semantics));
 
         if (occurrence.ScopeProjectName is not null)
-            writer.WriteString(JsonSpineNames.ScopeProjectProp, occurrence.ScopeProjectName);
+            writer.WriteString("scopeProject"u8, occurrence.ScopeProjectName);
 
         if (occurrence.IsTestProject)
-            writer.WriteBoolean(JsonSpineNames.TestProjectProp, true);
+            writer.WriteBoolean("testProject"u8, true);
+
+        if (occurrence.Detail is not null)
+            writer.WriteString("detail"u8, occurrence.Detail);
 
         writer.WriteEndObject();
     }

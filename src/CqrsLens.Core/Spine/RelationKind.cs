@@ -19,4 +19,5 @@ public enum RelationKind
     Calls,
     TouchesData,
     Relates,
+    Exposes,
 }

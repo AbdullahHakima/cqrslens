@@ -107,7 +107,8 @@ public static class Analyzer
         var serviceHierarchy = new TypeHierarchy(
             parsedFiles.SelectMany(f => f.Scan.Classes),
             parsedFiles.SelectMany(f => f.Scan.InterfaceDecls));
-        ServiceResolutionIndexBuilder.Build(parsedFiles, result, serviceHierarchy);
+        var lineIndices = SourceLineIndex.BuildLookup(parsedFiles, result.RootPath);
+        ServiceResolutionIndexBuilder.Build(parsedFiles, result, serviceHierarchy, lineIndices);
         phases.Record("Resolve services");
 
         // First consumer: handler → DbContext edges resolved through the index. These
@@ -116,13 +117,20 @@ public static class Analyzer
         HandlerDbContextResolver.Build(parsedFiles, result, serviceHierarchy);
         phases.Record("Resolve handler contexts");
 
-        // Stage 2 consumer: method-body call edges between scanned classes, through injected
-        // members. Additive model data; no existing count or surface reads it yet.
-        ServiceCallEdgeResolver.Build(parsedFiles, result, serviceHierarchy);
-        phases.Record("Resolve service calls");
-
         FlowAnalyzer.Analyze(parsedFiles, result);
         phases.Record("Flow graph");
+
+        var catalog = ComponentRoleDiscovery.AnalyzePreCall(parsedFiles, serviceHierarchy, lineIndices, result);
+        if (catalog.DiscoveredControllerCount > 0)
+            ConventionalControllerEndpointDiscovery.Analyze(catalog, lineIndices, result);
+        phases.Record("Discover component roles");
+
+        // Stage 2 + F2 consumers: resolve F1 closed-generic calls (promoting any newly
+        // discovered concrete service targets before emitting into Spine), followed by
+        // open-generic, partial, repository data-access, event publish, and unproven passes.
+        ServiceCallEdgeResolver.BuildWithCatalog(parsedFiles, catalog, result, serviceHierarchy, lineIndices);
+        ComponentCallAndDataResolver.Analyze(parsedFiles, catalog, serviceHierarchy, lineIndices, result);
+        phases.Record("Resolve service calls");
 
         result.Checks.AddRange(ArchitectureChecker.ApplyRuleSeverities(
             ArchitectureChecker.RunChecks(result),

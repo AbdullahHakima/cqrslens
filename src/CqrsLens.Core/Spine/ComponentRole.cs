@@ -15,4 +15,7 @@ public enum ComponentRole
     DbContext,
     Entity,
     Endpoint,
+    Controller,
+    Service,
+    Repository,
 }

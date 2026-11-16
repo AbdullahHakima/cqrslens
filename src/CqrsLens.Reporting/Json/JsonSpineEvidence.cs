@@ -12,4 +12,5 @@ internal sealed class JsonSpineEvidence
     public string? ResolutionSemantics { get; set; }
     public string? ScopeProject { get; set; }
     public bool? TestProject { get; set; }
+    public string? Detail { get; set; }
 }

@@ -14,4 +14,9 @@ public enum UnprovenItemKind
     UnresolvedNavigation,
     UnresolvedConfiguration,
     UnestablishedBehavior,
+    ConventionRegistration,
+    ServiceLocator,
+    DynamicReflection,
+    UnresolvedEventConsumer,
+    UnimplementedInterface,
 }

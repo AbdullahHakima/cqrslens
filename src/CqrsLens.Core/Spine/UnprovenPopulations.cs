@@ -11,19 +11,22 @@ public sealed class UnprovenPopulations
     private readonly List<UnprovenDiagnosticEntry> _ambiguousLinks = new();
     private readonly List<UnprovenDiagnosticEntry> _unresolvedContracts = new();
     private readonly List<UnestablishedBehaviorEntry> _unestablishedBehaviors = new();
+    private readonly List<UnprovenDiagnosticEntry> _observations = new();
 
     public IReadOnlyList<UnresolvedDispatch> UnresolvedDispatches => _unresolvedDispatches;
     public IReadOnlyList<AmbiguousResolutionEntry> AmbiguousResolutions => _ambiguousResolutions;
     public IReadOnlyList<UnprovenDiagnosticEntry> AmbiguousLinks => _ambiguousLinks;
     public IReadOnlyList<UnprovenDiagnosticEntry> UnresolvedContracts => _unresolvedContracts;
     public IReadOnlyList<UnestablishedBehaviorEntry> UnestablishedBehaviors => _unestablishedBehaviors;
+    public IReadOnlyList<UnprovenDiagnosticEntry> Observations => _observations;
 
     public int TotalCount =>
         _unresolvedDispatches.Count
         + _ambiguousResolutions.Count
         + _ambiguousLinks.Count
         + _unresolvedContracts.Count
-        + _unestablishedBehaviors.Count;
+        + _unestablishedBehaviors.Count
+        + _observations.Count;
 
     public void AddUnresolvedDispatch(UnresolvedDispatch dispatch)
     {
@@ -59,6 +62,13 @@ public sealed class UnprovenPopulations
             _unestablishedBehaviors.Add(entry);
     }
 
+    public void AddObservation(UnprovenDiagnosticEntry entry)
+    {
+        ArgumentNullException.ThrowIfNull(entry);
+        if (!_observations.Contains(entry))
+            _observations.Add(entry);
+    }
+
     public void Clear()
     {
         _unresolvedDispatches.Clear();
@@ -66,6 +76,7 @@ public sealed class UnprovenPopulations
         _ambiguousLinks.Clear();
         _unresolvedContracts.Clear();
         _unestablishedBehaviors.Clear();
+        _observations.Clear();
     }
 
     internal void InsertUnresolvedDispatch(int index, UnresolvedDispatch dispatch)
@@ -89,6 +100,9 @@ public sealed class UnprovenPopulations
     internal int RemoveAmbiguousResolution(string interfaceSignature)
         => _ambiguousResolutions.RemoveAll(e =>
             string.Equals(e.InterfaceSignature, interfaceSignature, StringComparison.Ordinal));
+
+    internal void PruneAmbiguousResolutions(Func<AmbiguousResolutionEntry, bool> shouldKeep)
+        => _ambiguousResolutions.RemoveAll(e => !shouldKeep(e));
 
     internal void ClearAmbiguousResolutions()
         => _ambiguousResolutions.Clear();

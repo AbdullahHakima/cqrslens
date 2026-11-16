@@ -1,4 +1,4 @@
-using System.Text.RegularExpressions;
+using System.Runtime.CompilerServices;
 
 namespace CqrsLens;
 
@@ -17,53 +17,80 @@ namespace CqrsLens;
 /// access, statics, <c>base</c>/<c>this</c>, DbContext targets, self-calls and
 /// unresolved/ambiguous interfaces produce no edge.
 /// </summary>
-internal static partial class ServiceCallEdgeResolver
+internal static class ServiceCallEdgeResolver
 {
-    // A member-access invocation: an identifier receiver (not preceded by `.`, so a property
-    // chain's tail like `UnitOfWork.SaveEntitiesAsync` is rejected), then the member access and
-    // the invoked method name. The target expression is the receiver; the method name is
-    // captured without arguments or signature.
-    [GeneratedRegex(
-        @"(?<![\w.@])(?<receiver>@?[A-Za-z_]\w*)\s*[!?]?\s*\.\s*(?<method>[A-Za-z_]\w*)\s*(?:<[^;{}()]*>)?\s*\(")]
-    private static partial Regex InvocationRegex();
 
     public static void Build(
         IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
         AnalysisResult result,
         TypeHierarchy? hierarchy = null)
+        => BuildCore(parsedFiles, catalog: null, result, hierarchy, lineIndices: null);
+
+    public static void BuildWithCatalog(
+        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
+        ScannedTypeCatalog catalog,
+        AnalysisResult result,
+        TypeHierarchy? hierarchy,
+        IReadOnlyDictionary<string, SourceLineIndex> lineIndices)
+        => BuildCore(parsedFiles, catalog, result, hierarchy, lineIndices);
+
+    private static void BuildCore(
+        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
+        ScannedTypeCatalog? catalog,
+        AnalysisResult result,
+        TypeHierarchy? hierarchy,
+        IReadOnlyDictionary<string, SourceLineIndex>? lineIndices)
     {
-        if (parsedFiles.Count == 0) return;
-
-        var ordered = parsedFiles
-            .OrderBy(f => f.File.Path, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var classes = new List<CSharpScanner.ClassDecl>();
-        var interfaces = new List<CSharpScanner.InterfaceDecl>();
-        var classByFullName = new Dictionary<string, CSharpScanner.ClassDecl>(StringComparer.Ordinal);
-        foreach (var (_, scan, _) in ordered)
+        if (parsedFiles.Count == 0 ||
+            (result.Handlers.Count == 0 && result.NotificationHandlers.Count == 0 && result.ServiceResolutions.Count == 0))
         {
-            foreach (var declaration in scan.Classes)
+            return;
+        }
+
+        BuildCoreActive(parsedFiles, catalog, result, hierarchy, lineIndices);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void BuildCoreActive(
+        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
+        ScannedTypeCatalog? catalog,
+        AnalysisResult result,
+        TypeHierarchy? hierarchy,
+        IReadOnlyDictionary<string, SourceLineIndex>? lineIndices)
+    {
+        lineIndices ??= SourceLineIndex.BuildLookup(parsedFiles, result.RootPath);
+
+        var ordered = EnsureSortedByPath(parsedFiles);
+
+        var classes = hierarchy is null ? new List<CSharpScanner.ClassDecl>() : null;
+        var interfaces = hierarchy is null ? new List<CSharpScanner.InterfaceDecl>() : null;
+        var classByFullName = new Dictionary<string, CSharpScanner.ClassDecl>(StringComparer.Ordinal);
+        for (var i = 0; i < ordered.Count; i++)
+        {
+            var scan = ordered[i].Scan;
+            var scanClasses = scan.Classes;
+            for (var c = 0; c < scanClasses.Count; c++)
             {
-                classes.Add(declaration);
+                var declaration = scanClasses[c];
+                classes?.Add(declaration);
                 classByFullName.TryAdd(declaration.FullName, declaration);
             }
-            interfaces.AddRange(scan.InterfaceDecls);
+            interfaces?.AddRange(scan.InterfaceDecls);
         }
-        if (classes.Count == 0) return;
+        if (classByFullName.Count == 0) return;
 
         // Reuse the shared hierarchy and its warmed resolver cache when the caller provides one.
-        hierarchy ??= new TypeHierarchy(classes, interfaces);
+        hierarchy ??= new TypeHierarchy(classes!, interfaces!);
 
-        var resolutionBySignature = new Dictionary<string, ServiceResolution>(StringComparer.Ordinal);
-        var interfaceLocationByName = new Dictionary<string, SourceLocation?>(StringComparer.Ordinal);
+        var resolutionBySignature = new Dictionary<string, ServiceResolution>(result.ServiceResolutions.Count, StringComparer.Ordinal);
+        var interfaceLocationByName = new Dictionary<string, SourceLocation?>(result.ServiceResolutions.Count, StringComparer.Ordinal);
         foreach (var resolution in result.ServiceResolutions)
         {
             resolutionBySignature.TryAdd(resolution.Interface, resolution);
             interfaceLocationByName.TryAdd(resolution.InterfaceName, resolution.InterfaceLocation);
         }
 
-        var contexts = new HashSet<string>(StringComparer.Ordinal);
+        var contexts = new HashSet<string>(result.DbContexts.Count, StringComparer.Ordinal);
         foreach (var context in result.DbContexts)
             contexts.Add(context.FullName);
 
@@ -75,27 +102,131 @@ internal static partial class ServiceCallEdgeResolver
         foreach (var handler in result.NotificationHandlers)
             sourceFullNames.Add(handler.FullName);
 
-        AddServices(ordered, hierarchy, resolutionBySignature, classByFullName, sourceFullNames);
+        if (resolutionBySignature.Count > 0)
+            AddServices(ordered, hierarchy, resolutionBySignature, classByFullName, sourceFullNames);
 
         // A handler that is not a scanned class produces no body to scan.
         sourceFullNames.RemoveWhere(name => !classByFullName.ContainsKey(name));
         if (sourceFullNames.Count == 0) return;
 
+        var collected = new List<(string FromFullName, string? FromProject, string Via, string Method, string To, SourceLocation? Location, SourceLocation? IfaceLocation)>();
+        var membersBuffer = new List<(string Type, string Name)>();
+        var resolvedByMember = new Dictionary<string, (string Via, string To)>(StringComparer.Ordinal);
+        var hitsBuffer = new List<MemberInvocationHit<(string Via, string To)>>();
+
         foreach (var parsed in ordered)
         {
+            var lineIndex = lineIndices.GetValueOrDefault(parsed.File.Path);
             // Only classes that are sources need their bodies scanned.
             foreach (var declaration in parsed.Scan.Classes)
             {
                 if (!sourceFullNames.Contains(declaration.FullName)) continue;
-                ScanClass(parsed, declaration, classes, hierarchy, resolutionBySignature, interfaceLocationByName, contexts, result);
+                ScanClass(
+                    parsed,
+                    declaration,
+                    lineIndex,
+                    hierarchy,
+                    resolutionBySignature,
+                    contexts,
+                    membersBuffer,
+                    resolvedByMember,
+                    hitsBuffer,
+                    collected);
             }
         }
+
+        if (collected.Count == 0) return;
+
+        EmitCollectedEdges(collected, catalog, hierarchy, interfaceLocationByName, result);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void EmitCollectedEdges(
+        List<(string FromFullName, string? FromProject, string Via, string Method, string To, SourceLocation? Location, SourceLocation? IfaceLocation)> collected,
+        ScannedTypeCatalog? catalog,
+        TypeHierarchy hierarchy,
+        Dictionary<string, SourceLocation?> interfaceLocationByName,
+        AnalysisResult result)
+    {
+        if (catalog is not null)
+        {
+            ServiceAndRepositoryRoleRules.ApplyServiceCallTargets(
+                collected.Select(c => (c.Via, c.To, c.FromProject, c.Location)),
+                catalog,
+                hierarchy,
+                result);
+        }
+
+        var resolver = result.IdentityResolver;
+        var fromCache = new Dictionary<(string From, string? Project), NodeReference>();
+        var viaCache = new Dictionary<(string Via, string To), NodeReference>();
+        var toCache = new Dictionary<(string To, string Method), NodeReference>();
+
+        foreach (var edge in collected)
+        {
+            var fromKey = (edge.FromFullName, edge.FromProject);
+            if (!fromCache.TryGetValue(fromKey, out var fromRef))
+            {
+                fromRef = resolver.ResolveTypeOrComponentRef(edge.FromFullName, edge.FromProject);
+                fromCache[fromKey] = fromRef;
+            }
+
+            var viaKey = (edge.Via, edge.To);
+            var isConcrete = string.Equals(edge.Via, edge.To, StringComparison.Ordinal);
+            if (!viaCache.TryGetValue(viaKey, out var viaRef))
+            {
+                SourceLocation? ifaceLocation = null;
+                if (!isConcrete)
+                    interfaceLocationByName.TryGetValue(edge.Via, out ifaceLocation);
+                viaRef = isConcrete
+                    ? resolver.ResolveTypeOrComponentRef(edge.Via)
+                    : resolver.ResolveInterfaceRef(edge.Via, ifaceLocation);
+                viaCache[viaKey] = viaRef;
+            }
+
+            var toKey = (edge.To, edge.Method);
+            if (!toCache.TryGetValue(toKey, out var toRef))
+            {
+                toRef = resolver.ResolveMethodTargetRef(edge.To, edge.Method);
+                toCache[toKey] = toRef;
+            }
+
+            result.Spine.AddOrMergeRelation(
+                RelationKind.Calls,
+                fromRef,
+                toRef,
+                SpineIdentityResolver.SyntheticOccurrence(
+                    EvidenceRule.InjectedMemberInvocation,
+                    EvidenceOrigin.CallSite,
+                    edge.Location,
+                    isConcrete ? EvidenceStrength.Proven : EvidenceStrength.Resolved,
+                    via: [viaRef],
+                    scopeProjectName: edge.FromProject),
+                method: edge.Method);
+        }
+    }
+
+    private static IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> EnsureSortedByPath(
+        IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles)
+    {
+        for (var i = 1; i < parsedFiles.Count; i++)
+        {
+            if (StringComparer.OrdinalIgnoreCase.Compare(parsedFiles[i - 1].File.Path, parsedFiles[i].File.Path) > 0)
+            {
+                return parsedFiles
+                    .OrderBy(f => f.File.Path, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+        }
+
+        return parsedFiles;
     }
 
     /// <summary>
     /// A service is a concrete class that is the chosen implementation of an interface in the
     /// index and is injected as a constructor dependency into at least one scanned class.
     /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private static void AddServices(
         IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
         TypeHierarchy hierarchy,
@@ -106,11 +237,12 @@ internal static partial class ServiceCallEdgeResolver
         if (resolutionBySignature.Count == 0) return;
 
         var injected = new HashSet<string>(StringComparer.Ordinal);
+        var dependencies = new List<string>();
         foreach (var (file, scan, mask) in parsedFiles)
         {
             foreach (var declaration in scan.Classes)
             {
-                var dependencies = new List<string>();
+                dependencies.Clear();
                 DependencyExtractor.Extract(declaration, file.Code, mask, scan.Classes, dependencies);
                 foreach (var dependency in dependencies)
                 {
@@ -134,14 +266,16 @@ internal static partial class ServiceCallEdgeResolver
     private static void ScanClass(
         (SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask) parsed,
         CSharpScanner.ClassDecl declaration,
-        IReadOnlyList<CSharpScanner.ClassDecl> classes,
+        SourceLineIndex? lineIndex,
         TypeHierarchy hierarchy,
         IReadOnlyDictionary<string, ServiceResolution> resolutionBySignature,
-        IReadOnlyDictionary<string, SourceLocation?> interfaceLocationByName,
         IReadOnlySet<string> contexts,
-        AnalysisResult result)
+        List<(string Type, string Name)> members,
+        Dictionary<string, (string Via, string To)> resolvedByMember,
+        List<MemberInvocationHit<(string Via, string To)>> hitsBuffer,
+        List<(string FromFullName, string? FromProject, string Via, string Method, string To, SourceLocation? Location, SourceLocation? IfaceLocation)> collected)
     {
-        var members = new List<(string Type, string Name)>();
+        members.Clear();
         DependencyExtractor.ExtractParameters(declaration, parsed.File.Code, parsed.Mask, parsed.Scan.Classes, members);
         if (members.Count == 0) return;
 
@@ -154,64 +288,48 @@ internal static partial class ServiceCallEdgeResolver
         foreach (var property in declaration.Properties)
         {
             if (property.Name.Length == 0) continue;
-            if (!members.Contains((Normalize(property.Type), property.Name)))
-                members.Add((Normalize(property.Type), property.Name));
+            var norm = Normalize(property.Type);
+            if (!members.Contains((norm, property.Name)))
+                members.Add((norm, property.Name));
         }
 
-        // Keep only members whose declared type comes from the constructor signature.
-        var typeByMember = new Dictionary<string, string>(StringComparer.Ordinal);
+        // Pre-resolve every injected member's DI target once per class rather than per call site.
+        resolvedByMember.Clear();
         foreach (var (type, name) in members)
         {
             if (name.Length == 0 || type.Length == 0) continue;
             if (!constructorTypes.Contains(type)) continue;
-            typeByMember.TryAdd(name, type);
+            if (resolvedByMember.ContainsKey(name)) continue;
+
+            if (TryResolveTarget(type, declaration, hierarchy, resolutionBySignature, contexts, out var via, out var to) &&
+                !string.Equals(to, declaration.FullName, StringComparison.Ordinal))
+            {
+                resolvedByMember[name] = (via, to);
+            }
         }
-        if (typeByMember.Count == 0) return;
+        if (resolvedByMember.Count == 0) return;
 
         var code = parsed.File.Code;
         var bodyEnd = Math.Min(code.Length, declaration.BodySpan.End);
-        foreach (Match match in InvocationRegex().Matches(code, declaration.BodySpan.Start))
+        hitsBuffer.Clear();
+        MemberInvocationScanner.FindMatches(
+            code, parsed.Mask, declaration.BodySpan.Start, bodyEnd, resolvedByMember, hitsBuffer);
+
+        var multiClass = parsed.Scan.Classes.Count > 1;
+        foreach (var hit in hitsBuffer)
         {
-            if (match.Index >= bodyEnd) break;
-            if (!parsed.Mask.IsCode(match.Index)) continue;
-            if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(parsed.Scan.Classes, match.Index), declaration))
+            if (multiClass &&
+                !ReferenceEquals(DeepSliceSyntax.InnermostClass(parsed.Scan.Classes, hit.Index), declaration))
+            {
                 continue;
+            }
 
-            var receiver = match.Groups["receiver"].Value.TrimStart('@');
-            if (!typeByMember.TryGetValue(receiver, out var memberType)) continue;
+            if (hit.Method.Length == 0) continue;
 
-            var method = match.Groups["method"].Value;
-            if (method.Length == 0) continue;
-
-            if (!TryResolveTarget(memberType, declaration, hierarchy, resolutionBySignature, contexts,
-                    out var via, out var to))
-                continue;
-            if (to == declaration.FullName) continue;
-
-            var resolver = result.IdentityResolver;
-            var fromRef = resolver.ResolveTypeOrComponentRef(declaration.FullName, parsed.File.ProjectName);
-            var isConcrete = string.Equals(via, to, StringComparison.Ordinal);
-            SourceLocation? ifaceLocation = null;
-            if (!isConcrete)
-                interfaceLocationByName.TryGetValue(via, out ifaceLocation);
-            var viaRef = isConcrete
-                ? resolver.ResolveTypeOrComponentRef(via)
-                : resolver.ResolveInterfaceRef(via, ifaceLocation);
-            var toRef = resolver.ResolveMethodTargetRef(to, method);
-            var location = SourceLocation.Create(parsed.File.Path, result.RootPath, code, match.Index);
-
-            result.Spine.AddOrMergeRelation(
-                RelationKind.Calls,
-                fromRef,
-                toRef,
-                SpineIdentityResolver.SyntheticOccurrence(
-                    EvidenceRule.InjectedMemberInvocation,
-                    EvidenceOrigin.CallSite,
-                    location,
-                    isConcrete ? EvidenceStrength.Proven : EvidenceStrength.Resolved,
-                    via: [viaRef],
-                    scopeProjectName: parsed.File.ProjectName),
-                method: method);
+            var location = lineIndex is not null
+                ? lineIndex.Create(hit.Index)
+                : SourceLocation.Create(parsed.File.Path, "", code, hit.Index);
+            collected.Add((declaration.FullName, parsed.File.ProjectName, hit.Target.Via, hit.Method, hit.Target.To, location, null));
         }
     }
 
@@ -295,5 +413,5 @@ internal static partial class ServiceCallEdgeResolver
             : identity + "<" + string.Join(", ", arguments) + ">";
     }
 
-    private static string Normalize(string type) => Regex.Replace(type, @"\s+", "");
+    private static string Normalize(string type) => MemberInvocationScanner.CollapseWhitespace(type);
 }

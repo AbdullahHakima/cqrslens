@@ -19,6 +19,7 @@ public sealed record EvidenceOccurrence : IComparable<EvidenceOccurrence>
     public ResolutionSemantics? ResolutionSemantics { get; }
     public string? ScopeProjectName { get; }
     public bool IsTestProject { get; }
+    public string? Detail { get; }
     internal bool ExcludeFromDispatchCallSites { get; set; }
 
     public EvidenceOccurrence(
@@ -30,7 +31,8 @@ public sealed record EvidenceOccurrence : IComparable<EvidenceOccurrence>
         string? locationOmittedReason = null,
         ResolutionSemantics? resolutionSemantics = null,
         string? scopeProjectName = null,
-        bool isTestProject = false)
+        bool isTestProject = false,
+        string? detail = null)
     {
         if (location is null && string.IsNullOrWhiteSpace(locationOmittedReason))
         {
@@ -50,6 +52,7 @@ public sealed record EvidenceOccurrence : IComparable<EvidenceOccurrence>
         ResolutionSemantics = resolutionSemantics;
         ScopeProjectName = string.IsNullOrWhiteSpace(scopeProjectName) ? null : scopeProjectName.Trim();
         IsTestProject = isTestProject;
+        Detail = string.IsNullOrWhiteSpace(detail) ? null : detail.Trim();
 
         _hashCode = ComputeHashCode(
             Rule,
@@ -60,7 +63,8 @@ public sealed record EvidenceOccurrence : IComparable<EvidenceOccurrence>
             Strength,
             ResolutionSemantics,
             ScopeProjectName,
-            IsTestProject);
+            IsTestProject,
+            Detail);
     }
 
     public bool Equals(EvidenceOccurrence? other)
@@ -77,6 +81,7 @@ public sealed record EvidenceOccurrence : IComparable<EvidenceOccurrence>
                && Equals(Location, other.Location)
                && string.Equals(LocationOmittedReason, other.LocationOmittedReason, StringComparison.Ordinal)
                && string.Equals(ScopeProjectName, other.ScopeProjectName, StringComparison.Ordinal)
+               && string.Equals(Detail, other.Detail, StringComparison.Ordinal)
                && ViaEquals(Via, other.Via);
     }
 
@@ -109,6 +114,9 @@ public sealed record EvidenceOccurrence : IComparable<EvidenceOccurrence>
         if (cmp != 0) return cmp;
 
         cmp = IsTestProject.CompareTo(other.IsTestProject);
+        if (cmp != 0) return cmp;
+
+        cmp = string.Compare(Detail, other.Detail, StringComparison.Ordinal);
         if (cmp != 0) return cmp;
 
         return CompareVia(Via, other.Via);
@@ -182,7 +190,8 @@ public sealed record EvidenceOccurrence : IComparable<EvidenceOccurrence>
         EvidenceStrength strength,
         ResolutionSemantics? resolutionSemantics,
         string? scopeProjectName,
-        bool isTestProject)
+        bool isTestProject,
+        string? detail)
     {
         var hash = new HashCode();
         hash.Add(rule);
@@ -196,6 +205,7 @@ public sealed record EvidenceOccurrence : IComparable<EvidenceOccurrence>
         hash.Add(resolutionSemantics);
         hash.Add(scopeProjectName, StringComparer.Ordinal);
         hash.Add(isTestProject);
+        hash.Add(detail, StringComparer.Ordinal);
         return hash.ToHashCode();
     }
 }

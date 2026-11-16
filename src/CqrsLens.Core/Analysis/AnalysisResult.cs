@@ -629,10 +629,24 @@ public sealed class AnalysisResult
         {
             if (resolution.IsAmbiguous)
             {
+                var hasExplicitRegistrations = false;
+                for (var i = 0; i < resolution.Candidates.Count; i++)
+                {
+                    if (resolution.Candidates[i].FromRegistration)
+                    {
+                        hasExplicitRegistrations = true;
+                        break;
+                    }
+                }
+
+                var candidates = hasExplicitRegistrations
+                    ? resolution.Candidates.Where(c => c.FromRegistration).ToArray()
+                    : resolution.Candidates.ToArray();
+
                 Spine.Unproven.AddAmbiguousResolution(new AmbiguousResolutionEntry(
                     resolution.Interface,
                     resolution.InterfaceName,
-                    resolution.Candidates.ToArray(),
+                    candidates,
                     resolution.InterfaceLocation));
             }
             return;

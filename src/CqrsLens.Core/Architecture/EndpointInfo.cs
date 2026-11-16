@@ -38,6 +38,7 @@ public sealed class EndpointInfo
     internal EvidenceStrength VerbStrength { get; set; } = EvidenceStrength.Proven;
     internal EvidenceStrength RouteStrength { get; set; } = EvidenceStrength.Proven;
     internal EndpointId? SpineId { get; set; }
+    internal ComponentId? ControllerId { get; set; }
 
     public string DisplayLabel => string.IsNullOrEmpty(Route)
         ? $"{HttpMethod} ({Name})"

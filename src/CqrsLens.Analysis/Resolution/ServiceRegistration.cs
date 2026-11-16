@@ -17,4 +17,5 @@ internal sealed record ServiceRegistration(
     bool ImplementationIsOpen,
     int ImplementationArity,
     ServiceRegistrationKind Kind,
-    ServiceRegistrationForm Form);
+    ServiceRegistrationForm Form,
+    bool IsFactoryNew = false);

@@ -94,6 +94,12 @@ internal static class ControllerEndpointDiscovery
                             VerbStrength = verbMatch.Success ? EvidenceStrength.Proven : EvidenceStrength.Inferred,
                             RouteStrength = routeInferred ? EvidenceStrength.Inferred : EvidenceStrength.Proven,
                             IsInferred = !verbMatch.Success || routeInferred,
+                            ControllerId = result.IdentityResolver.ResolveComponentId(
+                                file.ProjectName,
+                                declaration.Namespace,
+                                declaration.ContainingTypes,
+                                declaration.Name,
+                                declaration.TypeParameters.Count),
                         });
                 }
             }

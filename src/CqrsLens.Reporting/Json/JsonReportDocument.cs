@@ -54,4 +54,22 @@ internal sealed class JsonReportDocument
     /// </summary>
     [JsonConverter(typeof(DirectSpineRelationsConverter))]
     public List<JsonSpineRelation>? Relations { get; set; }
+
+    /// <summary>
+    /// Additive section (stage F2): deduplicated spine components and their discovered role evidence.
+    /// Emitted only when non-empty.
+    /// </summary>
+    public List<JsonSpineComponent>? Components { get; set; }
+
+    /// <summary>
+    /// Additive section (stage F2): spine endpoints including conventional controller action endpoints.
+    /// Emitted only when non-empty.
+    /// </summary>
+    public List<JsonSpineEndpoint>? SpineEndpoints { get; set; }
+
+    /// <summary>
+    /// Additive section (stage F2): structured unproven populations recorded instead of speculative edges.
+    /// Emitted only when <see cref="JsonUnprovenPopulations.TotalCount"/> is non-zero.
+    /// </summary>
+    public JsonUnprovenPopulations? Unproven { get; set; }
 }

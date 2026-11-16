@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 namespace CqrsLens;
 
 /// <summary>
@@ -167,17 +165,59 @@ public static class CSharpSyntax
     /// carries the <c>abstract</c> modifier. Best-effort for line-wrapped modifiers.
     /// </summary>
     public static bool IsAbstractDeclaration(string code, int declarationIndex)
+        => HasDeclarationModifier(code, declarationIndex, "abstract");
+
+    /// <summary>
+    /// True when the declaration immediately preceding <paramref name="declarationIndex"/>
+    /// carries the <c>static</c> modifier.
+    /// </summary>
+    internal static bool IsStaticDeclaration(string code, int declarationIndex)
+        => HasDeclarationModifier(code, declarationIndex, "static");
+
+    private static bool HasDeclarationModifier(string code, int declarationIndex, string modifier)
     {
-        var lineStart = code.LastIndexOf('\n', declarationIndex);
-        var prefix = code[(lineStart + 1)..declarationIndex];
-        if (prefix.Contains("abstract", StringComparison.Ordinal)) return true;
+        if ((uint)declarationIndex > (uint)code.Length || declarationIndex == 0)
+            return false;
+
+        var lineStart = code.LastIndexOf('\n', declarationIndex - 1);
+        var linePrefix = code.AsSpan(lineStart + 1, declarationIndex - (lineStart + 1));
+        if (linePrefix.Contains(modifier.AsSpan(), StringComparison.Ordinal))
+            return true;
 
         var start = Math.Max(0, declarationIndex - 300);
-        var segment = code[start..declarationIndex];
-        var boundary = segment.LastIndexOfAny(new[] { ';', '}' });
-        if (boundary >= 0) segment = segment[(boundary + 1)..];
-        return Regex.IsMatch(segment, @"\babstract\b");
+        var segment = code.AsSpan(start, declarationIndex - start);
+        if (!segment.Contains(modifier.AsSpan(), StringComparison.Ordinal))
+            return false;
+
+        var boundary = segment.LastIndexOfAny(';', '{', '}');
+        if (boundary >= 0)
+            segment = segment[(boundary + 1)..];
+
+        return ContainsWholeWord(segment, modifier.AsSpan());
     }
+
+    private static bool ContainsWholeWord(ReadOnlySpan<char> text, ReadOnlySpan<char> word)
+    {
+        var pos = 0;
+        while (pos + word.Length <= text.Length)
+        {
+            var idx = text[pos..].IndexOf(word, StringComparison.Ordinal);
+            if (idx < 0)
+                return false;
+
+            var abs = pos + idx;
+            var leftOk = abs == 0 || !IsWordChar(text[abs - 1]);
+            var rightIdx = abs + word.Length;
+            var rightOk = rightIdx >= text.Length || !IsWordChar(text[rightIdx]);
+            if (leftOk && rightOk)
+                return true;
+
+            pos = abs + word.Length;
+        }
+        return false;
+    }
+
+    private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
     /// <summary>
     /// Recognizes DbContext base types by their final type name. Fully-qualified

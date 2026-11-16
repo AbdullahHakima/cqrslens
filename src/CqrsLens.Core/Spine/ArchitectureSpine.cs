@@ -245,6 +245,40 @@ public sealed class ArchitectureSpine
         return relation;
     }
 
+    internal SpineRelation UpgradeOrMergeRelationOccurrence(
+        RelationKind kind,
+        NodeReference from,
+        NodeReference to,
+        EvidenceOccurrence occurrence,
+        EvidenceRule? replaceRuleAtSameLocation = null,
+        string? method = null)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        ArgumentNullException.ThrowIfNull(to);
+        ArgumentNullException.ThrowIfNull(occurrence);
+
+        var key = new RelationKey(kind, from, to, occurrence.Via, method);
+        if (replaceRuleAtSameLocation is not null &&
+            occurrence.Location is not null &&
+            _relations.TryGetValue(key, out var existing))
+        {
+            foreach (var prev in existing.Occurrences)
+            {
+                if (prev.Rule == replaceRuleAtSameLocation && Equals(prev.Location, occurrence.Location))
+                {
+                    if (existing.TryReplaceOccurrence(prev, occurrence))
+                    {
+                        InvalidateRelationCaches();
+                        return existing;
+                    }
+                    break;
+                }
+            }
+        }
+
+        return AddOrMergeRelation(kind, from, to, occurrence, method);
+    }
+
     public bool TryGetProject(ProjectId id, out ProjectNode? project)
         => _projects.TryGetValue(id, out project);
 
@@ -948,7 +982,7 @@ public sealed class ArchitectureSpine
         return changed
             ? new EvidenceOccurrence(
                 occ.Rule, occ.Origin, occ.Location, occ.Strength, newVia,
-                occ.LocationOmittedReason, occ.ResolutionSemantics, occ.ScopeProjectName, occ.IsTestProject)
+                occ.LocationOmittedReason, occ.ResolutionSemantics, occ.ScopeProjectName, occ.IsTestProject, occ.Detail)
             : occ;
     }
 
@@ -976,7 +1010,7 @@ public sealed class ArchitectureSpine
         return changed
             ? new EvidenceOccurrence(
                 occ.Rule, occ.Origin, occ.Location, occ.Strength, newVia,
-                occ.LocationOmittedReason, occ.ResolutionSemantics, occ.ScopeProjectName, occ.IsTestProject)
+                occ.LocationOmittedReason, occ.ResolutionSemantics, occ.ScopeProjectName, occ.IsTestProject, occ.Detail)
             : occ;
     }
 }

@@ -100,4 +100,29 @@ public sealed class SpineRelation
             _occurrences[existingIndex].ExcludeFromDispatchCallSites = false;
         }
     }
+
+    internal bool TryReplaceOccurrence(EvidenceOccurrence existing, EvidenceOccurrence replacement)
+    {
+        ArgumentNullException.ThrowIfNull(existing);
+        ArgumentNullException.ThrowIfNull(replacement);
+        if (!RelationKey.ViaEquals(Key.Via, replacement.Via))
+            return false;
+
+        var existingIndex = _occurrences.IndexOf(existing);
+        if (existingIndex < 0)
+            return false;
+
+        var duplicateIndex = _occurrences.IndexOf(replacement);
+        if (duplicateIndex >= 0 && duplicateIndex != existingIndex)
+        {
+            _occurrences.RemoveAt(existingIndex);
+        }
+        else
+        {
+            _occurrences[existingIndex] = replacement;
+        }
+
+        _sortedOccurrences = null;
+        return true;
+    }
 }

@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace CqrsLens;
 
 /// <summary>
@@ -132,13 +134,38 @@ internal static class SpineQueries
             }
         }
 
-        return projected
-            .GroupBy(e => (e.Kind, e.From, e.To))
-            .Select(g => g.First())
-            .OrderBy(e => e.Kind)
-            .ThenBy(e => e.From, StringComparer.Ordinal)
-            .ThenBy(e => e.To, StringComparer.Ordinal)
-            .ToArray();
+        if (projected.Count == 0)
+            return Array.Empty<FlowEdge>();
+        if (projected.Count == 1)
+            return new[] { projected[0] };
+
+        return DeduplicateAndSortFlowEdges(projected);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static FlowEdge[] DeduplicateAndSortFlowEdges(List<FlowEdge> projected)
+    {
+        var seen = new HashSet<(FlowEdgeKind, string, string)>(projected.Count);
+        var unique = new List<FlowEdge>(projected.Count);
+        for (var i = 0; i < projected.Count; i++)
+        {
+            var e = projected[i];
+            if (seen.Add((e.Kind, e.From, e.To)))
+                unique.Add(e);
+        }
+
+        if (unique.Count > 1)
+        {
+            unique.Sort(static (a, b) =>
+            {
+                var cmp = ((int)a.Kind).CompareTo((int)b.Kind);
+                if (cmp != 0) return cmp;
+                cmp = string.CompareOrdinal(a.From, b.From);
+                return cmp != 0 ? cmp : string.CompareOrdinal(a.To, b.To);
+            });
+        }
+
+        return unique.ToArray();
     }
 
     internal static IReadOnlyList<ResolvedEdge> ResolvedEdges(AnalysisResult result)
@@ -147,6 +174,15 @@ internal static class SpineQueries
     private static ResolvedEdge[] BuildResolvedEdges(AnalysisResult result)
     {
         var spine = result.Spine;
+        if (!spine.HasRelation(RelationKind.UsesDataResolved))
+            return Array.Empty<ResolvedEdge>();
+
+        return BuildResolvedEdgesActive(result, spine);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static ResolvedEdge[] BuildResolvedEdgesActive(AnalysisResult result, ArchitectureSpine spine)
+    {
         var resolver = result.IdentityResolver;
         var projected = new List<ResolvedEdge>();
 
@@ -175,13 +211,32 @@ internal static class SpineQueries
             });
         }
 
-        return projected
-            .GroupBy(e => (e.Kind, e.From, e.Via, e.To))
-            .Select(g => g.First())
-            .OrderBy(e => e.From, StringComparer.Ordinal)
-            .ThenBy(e => e.Via, StringComparer.Ordinal)
-            .ThenBy(e => e.To, StringComparer.Ordinal)
-            .ToArray();
+        if (projected.Count == 0)
+            return Array.Empty<ResolvedEdge>();
+        if (projected.Count == 1)
+            return new[] { projected[0] };
+
+        var seen = new HashSet<(FlowEdgeKind, string, string, string)>(projected.Count);
+        var unique = new List<ResolvedEdge>(projected.Count);
+        for (var i = 0; i < projected.Count; i++)
+        {
+            var e = projected[i];
+            if (seen.Add((e.Kind, e.From, e.Via, e.To)))
+                unique.Add(e);
+        }
+
+        if (unique.Count > 1)
+        {
+            unique.Sort(static (a, b) =>
+            {
+                var cmp = string.CompareOrdinal(a.From, b.From);
+                if (cmp != 0) return cmp;
+                cmp = string.CompareOrdinal(a.Via, b.Via);
+                return cmp != 0 ? cmp : string.CompareOrdinal(a.To, b.To);
+            });
+        }
+
+        return unique.ToArray();
     }
 
     internal static IReadOnlyList<ServiceCallEdge> ServiceCallEdges(ArchitectureSpine spine)
@@ -189,35 +244,71 @@ internal static class SpineQueries
 
     private static ServiceCallEdge[] BuildServiceCallEdges(ArchitectureSpine spine)
     {
-        var projected = new List<ServiceCallEdge>();
+        if (!spine.HasRelation(RelationKind.Calls))
+            return Array.Empty<ServiceCallEdge>();
+
+        return BuildServiceCallEdgesActive(spine);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static ServiceCallEdge[] BuildServiceCallEdgesActive(ArchitectureSpine spine)
+    {
+        var projected = new List<(ServiceCallEdge Edge, int Index)>();
 
         foreach (var rel in spine.RelationsInDiscoveryOrder)
         {
             if (rel.Kind != RelationKind.Calls)
                 continue;
 
-            var first = rel.FirstOccurrence;
+            EvidenceOccurrence? legacyOcc = null;
+            foreach (var occ in rel.Occurrences)
+            {
+                if (occ.Rule == EvidenceRule.InjectedMemberInvocation)
+                {
+                    legacyOcc = occ;
+                    break;
+                }
+            }
+
+            if (legacyOcc is null)
+                continue;
+
             var via = rel.Via.Count > 0 ? rel.Via[0].SymbolId?.FullName ?? rel.Via[0].Name : string.Empty;
             var method = rel.Method ?? rel.To.MemberName ?? string.Empty;
             var to = rel.To.SymbolId?.FullName ?? StripTrailingMember(rel.To.Name, rel.To.MemberName);
 
-            projected.Add(new ServiceCallEdge
+            projected.Add((new ServiceCallEdge
             {
                 From = rel.From.SymbolId?.FullName ?? rel.From.Name,
                 Via = via,
                 Method = method,
                 To = to,
-                ProjectName = first.ScopeProjectName,
-                Location = first.Location,
-            });
+                ProjectName = legacyOcc.ScopeProjectName,
+                Location = legacyOcc.Location,
+            }, projected.Count));
         }
 
-        return projected
-            .OrderBy(e => e.From, StringComparer.Ordinal)
-            .ThenBy(e => e.Via, StringComparer.Ordinal)
-            .ThenBy(e => e.Method, StringComparer.Ordinal)
-            .ThenBy(e => e.To, StringComparer.Ordinal)
-            .ToArray();
+        if (projected.Count == 0)
+            return Array.Empty<ServiceCallEdge>();
+        if (projected.Count == 1)
+            return new[] { projected[0].Edge };
+
+        projected.Sort(static (a, b) =>
+        {
+            var cmp = string.CompareOrdinal(a.Edge.From, b.Edge.From);
+            if (cmp != 0) return cmp;
+            cmp = string.CompareOrdinal(a.Edge.Via, b.Edge.Via);
+            if (cmp != 0) return cmp;
+            cmp = string.CompareOrdinal(a.Edge.Method, b.Edge.Method);
+            if (cmp != 0) return cmp;
+            cmp = string.CompareOrdinal(a.Edge.To, b.Edge.To);
+            return cmp != 0 ? cmp : a.Index.CompareTo(b.Index);
+        });
+
+        var result = new ServiceCallEdge[projected.Count];
+        for (var i = 0; i < projected.Count; i++)
+            result[i] = projected[i].Edge;
+        return result;
     }
 
     internal static IReadOnlyList<DispatchCallSite> DispatchCallSites(ArchitectureSpine spine)
@@ -225,7 +316,17 @@ internal static class SpineQueries
 
     private static DispatchCallSite[] BuildDispatchCallSites(ArchitectureSpine spine)
     {
-        var projected = new List<DispatchCallSite>();
+        if (!spine.HasRelation(RelationKind.Dispatches) && !spine.HasRelation(RelationKind.Publishes))
+            return Array.Empty<DispatchCallSite>();
+
+        return BuildDispatchCallSitesActive(spine);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static DispatchCallSite[] BuildDispatchCallSitesActive(ArchitectureSpine spine)
+    {
+        var seen = new HashSet<(string, DispatchTargetKind, string?, string?, int?)>();
+        var projected = new List<(DispatchCallSite Site, int Index)>();
 
         foreach (var rel in spine.RelationsInDiscoveryOrder)
         {
@@ -258,25 +359,40 @@ internal static class SpineQueries
                 if (occ.Rule != expectedRule || occ.ExcludeFromDispatchCallSites)
                     continue;
 
-                projected.Add(new DispatchCallSite
+                if (seen.Add((targetFullName, targetKind, senderFullName, occ.Location?.File, occ.Location?.Line)))
                 {
-                    TargetFullName = targetFullName,
-                    TargetKind = targetKind,
-                    SenderFullName = senderFullName,
-                    ProjectName = occ.ScopeProjectName,
-                    IsTestProject = occ.IsTestProject,
-                    Location = occ.Location,
-                });
+                    projected.Add((new DispatchCallSite
+                    {
+                        TargetFullName = targetFullName,
+                        TargetKind = targetKind,
+                        SenderFullName = senderFullName,
+                        ProjectName = occ.ScopeProjectName,
+                        IsTestProject = occ.IsTestProject,
+                        Location = occ.Location,
+                    }, projected.Count));
+                }
             }
         }
 
-        return projected
-            .GroupBy(s => (s.TargetFullName, s.TargetKind, s.SenderFullName, s.Location?.File, s.Location?.Line))
-            .Select(g => g.First())
-            .OrderBy(s => s.TargetKind)
-            .ThenBy(s => s.TargetFullName, StringComparer.Ordinal)
-            .ThenBy(s => s.SenderFullName, StringComparer.Ordinal)
-            .ToArray();
+        if (projected.Count == 0)
+            return Array.Empty<DispatchCallSite>();
+        if (projected.Count == 1)
+            return new[] { projected[0].Site };
+
+        projected.Sort(static (a, b) =>
+        {
+            var cmp = ((int)a.Site.TargetKind).CompareTo((int)b.Site.TargetKind);
+            if (cmp != 0) return cmp;
+            cmp = string.CompareOrdinal(a.Site.TargetFullName, b.Site.TargetFullName);
+            if (cmp != 0) return cmp;
+            cmp = string.CompareOrdinal(a.Site.SenderFullName, b.Site.SenderFullName);
+            return cmp != 0 ? cmp : a.Index.CompareTo(b.Index);
+        });
+
+        var result = new DispatchCallSite[projected.Count];
+        for (var i = 0; i < projected.Count; i++)
+            result[i] = projected[i].Site;
+        return result;
     }
 
     private static void ProjectDispatches(

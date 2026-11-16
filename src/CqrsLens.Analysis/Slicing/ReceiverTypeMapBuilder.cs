@@ -134,35 +134,81 @@ internal static partial class ReceiverTypeMapBuilder
         if (bodyOpen < 0 || bodyOpen >= decl.BodySpan.End) return;
         var bodyEnd = Math.Min(code.Length, decl.BodySpan.End);
 
-        foreach (Match m in TypedDeclarationRegex().Matches(code, bodyOpen + 1))
+        var multiClass = classes.Count > 1;
+        var braceDepth = 1;
+        var parenDepth = 0;
+        var segStart = bodyOpen + 1;
+
+        for (var i = bodyOpen + 1; i <= bodyEnd; i++)
         {
-            if (m.Index >= bodyEnd) break;
-            if (!mask.IsCode(m.Index)) continue;
-            if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
+            if (i == bodyEnd)
+            {
+                if (braceDepth == 1 && parenDepth == 0 && i > segStart)
+                    ScanTopLevelFieldSegment(decl, code, mask, classes, multiClass, segStart, i, target);
+                break;
+            }
+
+            if (!mask.IsCode(i)) continue;
+
+            var ch = code[i];
+            if (ch == '{')
+            {
+                if (braceDepth == 1 && parenDepth == 0 && i > segStart)
+                    ScanTopLevelFieldSegment(decl, code, mask, classes, multiClass, segStart, i, target);
+                braceDepth++;
+            }
+            else if (ch == '}')
+            {
+                if (braceDepth > 0) braceDepth--;
+                if (braceDepth == 1 && parenDepth == 0)
+                    segStart = i + 1;
+            }
+            else if (ch == '(')
+            {
+                if (braceDepth == 1 && parenDepth == 0 && i > segStart)
+                    ScanTopLevelFieldSegment(decl, code, mask, classes, multiClass, segStart, i, target);
+                parenDepth++;
+            }
+            else if (ch == ')')
+            {
+                if (parenDepth > 0) parenDepth--;
+                if (braceDepth == 1 && parenDepth == 0)
+                    segStart = i + 1;
+            }
+        }
+    }
+
+    private static void ScanTopLevelFieldSegment(
+        CSharpScanner.ClassDecl decl,
+        string code,
+        SourceMask mask,
+        List<CSharpScanner.ClassDecl> classes,
+        bool multiClass,
+        int segStart,
+        int segEnd,
+        List<(string Type, string Name)> target)
+    {
+        var span = code.AsSpan(segStart, segEnd - segStart);
+        if (span.IndexOfAny(';', '=', ',') < 0)
+            return;
+
+        // Pass segment substring rather than full file so regex skips method bodies entirely.
+        var segment = code[segStart..segEnd];
+        foreach (Match m in TypedDeclarationRegex().Matches(segment))
+        {
+            var absIndex = segStart + m.Index;
+            if (!mask.IsCode(absIndex)) continue;
+            if (multiClass && !ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, absIndex), decl)) continue;
 
             var type = m.Groups["type"].Value.Trim();
             if (NonTypeWords.Contains(type)) continue;
-            if (DepthAt(code, mask, bodyOpen, m.Index, '{', '}') != 1) continue;
-            if (DepthAt(code, mask, bodyOpen, m.Index, '(', ')') != 0) continue;
 
             var name = m.Groups["name"].Value.TrimStart('@');
-            var normalized = Regex.Replace(type, @"\s+", "");
+            var normalized = MemberInvocationScanner.CollapseWhitespace(type);
             if (normalized.Length == 0 || name.Length == 0) continue;
             if (target.Contains((normalized, name))) continue;
             target.Add((normalized, name));
         }
-    }
-
-    private static int DepthAt(string code, SourceMask mask, int from, int index, char open, char close)
-    {
-        var depth = 0;
-        for (var i = from; i < index && i < code.Length; i++)
-        {
-            if (!mask.IsCode(i)) continue;
-            if (code[i] == open) depth++;
-            else if (code[i] == close && depth > 0) depth--;
-        }
-        return depth;
     }
 
     private static string? InferInitializerType(
