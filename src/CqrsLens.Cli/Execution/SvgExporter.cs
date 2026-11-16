@@ -3,10 +3,15 @@ using System.Text;
 namespace CqrsLens;
 
 /// <summary>
-/// Writes every diagram the report contains as a standalone SVG file. Reuses the
-/// same builders and <see cref="MermaidSvgRenderer"/> as the HTML report; it does
-/// not build a parallel diagram pipeline and does not change what the diagrams hold.
-/// Export is additive and never changes the report, the exit code or --strict.
+/// Writes standalone SVG files for the diagrams the SVG-rendered HTML report
+/// emits: <c>project-graph.svg</c>, <c>layers.svg</c>, <c>cqrs-map[-N].svg</c>,
+/// <c>flow[-N].svg</c>, <c>notifications.svg</c>, <c>behavior-chain.svg</c>,
+/// <c>er-diagram[-N].svg</c>, and <c>sequence-&lt;RequestName&gt;[-N].svg</c>
+/// (one per handled request). Null diagrams and diagrams exceeding the Mermaid
+/// safety limit (<see cref="DiagramBuilder.IsWithinMermaidLimits"/>) are omitted
+/// identically to the report. Reuses the same builders and
+/// <see cref="MermaidSvgRenderer"/> as the HTML report; export is additive and
+/// never changes the report, the exit code, or <c>--strict</c>.
 /// </summary>
 internal static class SvgExporter
 {

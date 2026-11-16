@@ -333,8 +333,24 @@ public sealed class AnalysisResult
     /// <summary>Scanner implementation that produced the shape model.</summary>
     public string ScannerName { get; set; } = "unknown";
 
+    private DateTimeOffset _generatedAt = DateTimeOffset.UtcNow;
+
+    /// <summary>True when <see cref="GeneratedAt"/> was explicitly pinned by the caller.</summary>
+    internal bool HasExplicitGeneratedAt { get; set; }
+
     /// <summary>One timestamp shared by every report artifact.</summary>
-    public DateTimeOffset GeneratedAt { get; set; } = DateTimeOffset.UtcNow;
+    public DateTimeOffset GeneratedAt
+    {
+        get => _generatedAt;
+        set
+        {
+            _generatedAt = value;
+            HasExplicitGeneratedAt = true;
+        }
+    }
+
+    /// <summary>Optional human intent specification loaded from <c>.cqrslens.json</c> (R4).</summary>
+    public IntentSpecification? Intent { get; set; }
 
     /// <summary>Built-in mediator conventions detected in the source (e.g. Mediator, Wolverine).</summary>
     public List<string> Conventions { get; } = new();

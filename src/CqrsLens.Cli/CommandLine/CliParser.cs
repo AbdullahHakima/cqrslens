@@ -93,10 +93,16 @@ public static class CliParser
                     options.SummaryPath = reader.ReadValue("--summary", "a value, e.g. --summary cqrslens-summary.md");
                     break;
                 case "--export-svg":
-                    options.ExportSvgDirectory = ReadExportSvgDirectory(reader);
+                    options.ExportSvgDirectory = ReadDirectoryOption(reader, "--export-svg", "e.g. --export-svg diagrams");
                     break;
                 case "--export-mermaid":
-                    options.ExportMermaidDirectory = ReadExportMermaidDirectory(reader);
+                    options.ExportMermaidDirectory = ReadDirectoryOption(reader, "--export-mermaid", "e.g. --export-mermaid diagrams");
+                    break;
+                case "--export-docs":
+                    options.ExportDocsDirectory = ReadDirectoryOption(reader, "--export-docs", "e.g. --export-docs docs/architecture");
+                    break;
+                case "--check-docs":
+                    options.CheckDocsDirectory = ReadDirectoryOption(reader, "--check-docs", "e.g. --check-docs docs/architecture");
                     break;
                 case "--cqrs-map-split":
                     options.CqrsMapSplit = ParseCqrsMapSplit(
@@ -182,20 +188,11 @@ public static class CliParser
         return slice;
     }
 
-    private static string ReadExportSvgDirectory(ArgumentReader reader)
+    private static string ReadDirectoryOption(ArgumentReader reader, string flag, string example)
     {
-        var directory = reader.ReadValue("--export-svg", "a directory, e.g. --export-svg diagrams").Trim();
+        var directory = reader.ReadValue(flag, $"a directory, {example}").Trim();
         if (directory.Length == 0)
-            throw new CliParseException("error: --export-svg directory cannot be empty.");
-
-        return directory;
-    }
-
-    private static string ReadExportMermaidDirectory(ArgumentReader reader)
-    {
-        var directory = reader.ReadValue("--export-mermaid", "a directory, e.g. --export-mermaid diagrams").Trim();
-        if (directory.Length == 0)
-            throw new CliParseException("error: --export-mermaid directory cannot be empty.");
+            throw new CliParseException($"error: {flag} directory cannot be empty.");
 
         return directory;
     }
@@ -265,6 +262,9 @@ public static class CliParser
 
         if (options.BaselinePath is not null && options.WriteBaselinePath is not null)
             throw new CliParseException("error: use either --baseline or --write-baseline, not both.");
+
+        if (options.ExportDocsDirectory is not null && options.CheckDocsDirectory is not null)
+            throw new CliParseException("error: use either --export-docs or --check-docs, not both.");
 
         if (options.DiffOutputPath is not null && options.DiffPath is null)
             throw new CliParseException("error: --diff-output requires --diff <path-or-json>.");

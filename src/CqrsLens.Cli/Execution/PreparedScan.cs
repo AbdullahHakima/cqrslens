@@ -28,5 +28,6 @@ internal sealed record PreparedScan(
         Exclude = Settings.Exclude,
         LayerOverrides = Settings.LayerOverrides,
         RuleSeverities = Settings.RuleSeverities,
+        Intent = Settings.Intent,
     };
 }

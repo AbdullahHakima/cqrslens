@@ -22,7 +22,10 @@ internal static class ScanReporter
         if (!cardShown)
             WriteScanTotals(result, stdout, useColor, palette);
 
-        WritePath(stdout, "Report", outputs.Report, useColor, palette);
+        if (outputs.Report is not null)
+            WritePath(stdout, "Report", outputs.Report, useColor, palette);
+        if (options.ExportDocsDirectory is not null)
+            WritePath(stdout, "Docs", Path.GetFullPath(options.ExportDocsDirectory), useColor, palette);
 
         if (outputs.Sarif is not null)
             WritePath(stdout, "SARIF", outputs.Sarif, useColor, palette);

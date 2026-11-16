@@ -40,13 +40,18 @@ internal static class ScanCommand
                 SvgExporter.Export(result, options.ExportSvgDirectory, scan.CqrsMapSplit);
             if (options.ExportMermaidDirectory is not null)
                 MermaidExporter.Export(result, options.ExportMermaidDirectory, scan.CqrsMapSplit);
+            if (options.ExportDocsDirectory is not null)
+                DocsExporter.Export(result, options.ExportDocsDirectory, scan.CqrsMapSplit);
             return ExitCodes.Success;
         }
 
         console.ClearProgress();
 
         var format = ReportFormatResolver.Resolve(options);
-        var outputs = ReportOutputPathsResolver.Resolve(options, format);
+        var writeReport = options.Output is not null ||
+                          options.Format is not null ||
+                          (options.ExportDocsDirectory is null && options.CheckDocsDirectory is null);
+        var outputs = ReportOutputPathsResolver.Resolve(options, format, includeReport: writeReport);
 
         BaselineProcessor.Apply(options, result);
         var diff = DiffProcessor.Run(
@@ -63,12 +68,17 @@ internal static class ScanCommand
             SvgExporter.Export(result, options.ExportSvgDirectory, scan.CqrsMapSplit);
         if (options.ExportMermaidDirectory is not null)
             MermaidExporter.Export(result, options.ExportMermaidDirectory, scan.CqrsMapSplit);
+        if (options.ExportDocsDirectory is not null)
+            DocsExporter.Export(result, options.ExportDocsDirectory, scan.CqrsMapSplit);
 
         if (options.GitHubAnnotations)
             GitHubAnnotations.Write(result, stdout, scan.CiRoot);
 
-        console.WriteSummaryCard(result, outputs.Report);
+        console.WriteSummaryCard(result, outputs.Report ?? string.Empty);
         ScanReporter.Write(result, options, outputs, diff, stdout, stderr);
+
+        if (options.CheckDocsDirectory is not null)
+            return DocsFreshnessGate.Check(result, options, scan, stdout, stderr);
 
         return ScanReporter.StrictExitCode(result, options, stderr);
     }

@@ -3,14 +3,21 @@ namespace CqrsLens;
 /// <summary>Resolves and validates the report, SARIF, summary and diff destinations.</summary>
 internal static class ReportOutputPathsResolver
 {
-    public static ReportOutputPaths Resolve(CliOptions options, ReportFormat format)
+    public static ReportOutputPaths Resolve(
+        CliOptions options,
+        ReportFormat format,
+        bool includeReport = true)
     {
-        var output = options.Output ?? Path.Combine(
-            Directory.GetCurrentDirectory(),
-            ReportFormatResolver.DefaultFileName(format));
-        var fullReport = Path.GetFullPath(output);
-        if (IsDirectoryOutput(output, fullReport))
-            throw new CliFailureException($"output path is a directory: {output}", ExitCodes.Usage);
+        string? fullReport = null;
+        if (includeReport)
+        {
+            var output = options.Output ?? Path.Combine(
+                Directory.GetCurrentDirectory(),
+                ReportFormatResolver.DefaultFileName(format));
+            fullReport = Path.GetFullPath(output);
+            if (IsDirectoryOutput(output, fullReport))
+                throw new CliFailureException($"output path is a directory: {output}", ExitCodes.Usage);
+        }
 
         var fullSarif = ResolveOptional(options.SarifPath, "SARIF");
         var fullSummary = ResolveOptional(options.SummaryPath, "summary");
@@ -20,11 +27,11 @@ internal static class ReportOutputPathsResolver
             ? StringComparison.OrdinalIgnoreCase
             : StringComparison.Ordinal;
 
-        if (fullSarif is not null && string.Equals(fullSarif, fullReport, comparison))
+        if (fullSarif is not null && fullReport is not null && string.Equals(fullSarif, fullReport, comparison))
             throw new CliFailureException("--sarif and the report output must be different files.", ExitCodes.Usage);
 
         if (fullSummary is not null &&
-            (string.Equals(fullSummary, fullReport, comparison) ||
+            ((fullReport is not null && string.Equals(fullSummary, fullReport, comparison)) ||
              string.Equals(fullSummary, fullSarif, comparison)))
         {
             throw new CliFailureException(
@@ -33,7 +40,7 @@ internal static class ReportOutputPathsResolver
         }
 
         if (fullDiff is not null &&
-            (string.Equals(fullDiff, fullReport, comparison) ||
+            ((fullReport is not null && string.Equals(fullDiff, fullReport, comparison)) ||
              string.Equals(fullDiff, fullSarif, comparison) ||
              string.Equals(fullDiff, fullSummary, comparison)))
         {

@@ -2,8 +2,8 @@ namespace CqrsLens;
 
 /// <summary>
 /// Deterministic, zero-dependency .NET renderer that compiles CqrsLens Mermaid
-/// diagrams (<c>flowchart TD</c>, <c>flowchart LR</c>, and <c>erDiagram</c>) to
-/// self-contained inline SVG.
+/// diagrams (<c>flowchart TD</c>, <c>flowchart LR</c>, <c>erDiagram</c>, and
+/// <c>sequenceDiagram</c>) to self-contained inline SVG.
 /// </summary>
 public static class MermaidSvgRenderer
 {

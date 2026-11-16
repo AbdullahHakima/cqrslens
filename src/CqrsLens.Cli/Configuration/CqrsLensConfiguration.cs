@@ -18,4 +18,5 @@ internal sealed class CqrsLensConfiguration
     public List<string>? Exclude { get; set; }
     public Dictionary<string, string>? Layers { get; set; }
     public Dictionary<string, string>? Rules { get; set; }
+    public IntentConfiguration? Intent { get; set; }
 }

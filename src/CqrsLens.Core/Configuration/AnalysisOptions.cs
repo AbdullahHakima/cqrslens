@@ -42,4 +42,7 @@ public sealed class AnalysisOptions
     /// </summary>
     public IReadOnlyDictionary<string, CheckSeverity?> RuleSeverities { get; init; } =
         new Dictionary<string, CheckSeverity?>(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Optional human intent specification loaded from <c>.cqrslens.json</c> (R4).</summary>
+    public IntentSpecification? Intent { get; init; }
 }

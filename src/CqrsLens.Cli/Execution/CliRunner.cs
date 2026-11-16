@@ -23,6 +23,7 @@ public static class CliRunner
                 return ExitCodes.Usage;
         }
 
+        var isCheckDocs = command.Options?.CheckDocsDirectory is not null;
         try
         {
             if (command.Options!.Mcp)
@@ -32,18 +33,24 @@ public static class CliRunner
         }
         catch (CliFailureException ex)
         {
-            stderr.WriteLine($"error: {ex.Message}");
+            stderr.WriteLine(isCheckDocs
+                ? $"error: docs freshness gate failed — scan failed: {ex.Message}"
+                : $"error: {ex.Message}");
             return ex.ExitCode;
         }
         catch (Exception ex) when (ex is ConfigurationException or BaselineException or DiffException)
         {
-            stderr.WriteLine($"error: {ex.Message}");
+            stderr.WriteLine(isCheckDocs
+                ? $"error: docs freshness gate failed — scan failed: {ex.Message}"
+                : $"error: {ex.Message}");
             return ExitCodes.Usage;
         }
         catch (Exception ex)
         {
             // Keep the CLI's failure output concise; never dump a stack trace on users.
-            stderr.WriteLine($"error: {ex.Message}");
+            stderr.WriteLine(isCheckDocs
+                ? $"error: docs freshness gate failed — scan failed: {ex.Message}"
+                : $"error: {ex.Message}");
             return ExitCodes.Unexpected;
         }
     }

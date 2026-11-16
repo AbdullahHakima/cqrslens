@@ -12,7 +12,8 @@ public sealed record CqrsLensSettings(
     IReadOnlyDictionary<string, CheckSeverity?> RuleSeverities,
     DiagramRenderMode? RenderMode = null,
     string? Watermark = null,
-    CqrsMapSplitMode? CqrsMapSplit = null)
+    CqrsMapSplitMode? CqrsMapSplit = null,
+    IntentSpecification? Intent = null)
 {
     public static readonly CqrsLensSettings Empty = new(
         null,

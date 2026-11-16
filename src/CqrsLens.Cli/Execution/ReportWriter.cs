@@ -11,7 +11,8 @@ internal static class ReportWriter
         ReportFormat format,
         ArchitectureDiff? diff)
     {
-        OutputFileWriter.Write(outputs.Report, Render(result, options, format, scan.RenderMode, scan.CqrsMapSplit));
+        if (outputs.Report is not null)
+            OutputFileWriter.Write(outputs.Report, Render(result, options, format, scan.RenderMode, scan.CqrsMapSplit));
 
         if (outputs.Sarif is not null)
             OutputFileWriter.Write(outputs.Sarif, SarifReportGenerator.Generate(result, scan.CiRoot));

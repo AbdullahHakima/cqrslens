@@ -59,6 +59,8 @@ internal static class UsageWriter
                     "Also write every diagram as a standalone .svg file into DIR (created when missing)."),
                 ("--export-mermaid DIR",
                     "Also write every diagram as a standalone .mmd file into DIR (created when missing)."),
+                ("--export-docs DIR",
+                    "Write an arc42 documentation tree and standalone .svg diagrams into DIR."),
                 ("--summary FILE",
                     "Also write a compact Markdown job summary."),
                 ("--generated-at ISO8601",
@@ -86,6 +88,8 @@ internal static class UsageWriter
             {
                 ("--strict",
                     "Exit 4 when architecture checks report an error and the scan is complete."),
+                ("--check-docs DIR",
+                    "Regenerate docs to a temp folder and fail non-zero if DIR is stale or incomplete."),
                 ("--baseline FILE",
                     "Compare checks with a baseline; --strict then fails only on new errors."),
                 ("--write-baseline FILE",

@@ -64,7 +64,9 @@ public static class Analyzer
             },
             GeneratedAt = options.GeneratedAt ?? DateTimeOffset.UtcNow,
             Watermark = string.IsNullOrWhiteSpace(options.Watermark) ? null : options.Watermark.Trim(),
+            Intent = options.Intent,
         };
+        result.HasExplicitGeneratedAt = options.GeneratedAt is not null;
         var phases = new AnalysisPhaseRecorder(result);
 
         DiscoverProjects(root, options, result);

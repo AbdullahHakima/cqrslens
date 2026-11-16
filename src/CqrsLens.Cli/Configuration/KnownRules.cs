@@ -16,5 +16,8 @@ internal static class KnownRules
         ArchitectureChecker.AmbiguousProjectNameCode,
         ArchitectureChecker.UnreachableRequestCode,
         ArchitectureChecker.UnpublishedNotificationCode,
+        ArchitectureChecker.IntentBoundaryCode,
+        ArchitectureChecker.IntentSurfaceCode,
+        ArchitectureChecker.IntentStaleCode,
     };
 }

@@ -18,6 +18,8 @@ public sealed class CliOptions
     public string? SummaryPath { get; set; }
     public string? ExportSvgDirectory { get; set; }
     public string? ExportMermaidDirectory { get; set; }
+    public string? ExportDocsDirectory { get; set; }
+    public string? CheckDocsDirectory { get; set; }
     public string? CiRoot { get; set; }
     public bool GitHubAnnotations { get; set; }
     public AnalysisMode AnalysisMode { get; set; } = AnalysisMode.Text;

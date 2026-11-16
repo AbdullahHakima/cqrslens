@@ -19,6 +19,9 @@ public static class ArchitectureChecker
     public const string AmbiguousProjectNameCode = "AmbiguousProjectName";
     public const string UnreachableRequestCode = "UnreachableRequest";
     public const string UnpublishedNotificationCode = "UnpublishedNotification";
+    public const string IntentBoundaryCode = "C-BOUNDARY";
+    public const string IntentSurfaceCode = "C-SURFACE";
+    public const string IntentStaleCode = "C-INTENT-STALE";
 
     public static List<CheckFinding> RunChecks(AnalysisResult result)
     {
@@ -32,6 +35,8 @@ public static class ArchitectureChecker
         RequestValidatorChecks.Run(result, findings);
         NotificationChecks.Run(result, findings);
         FlowReachabilityChecks.Run(result, findings);
+        if (result.Intent is not null)
+            IntentChecker.Run(result, findings);
 
         CheckFindingOrdering.Sort(findings);
         return findings;
