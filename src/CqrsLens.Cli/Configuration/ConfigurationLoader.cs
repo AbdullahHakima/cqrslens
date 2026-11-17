@@ -4,13 +4,14 @@ using System.Text.Json.Serialization;
 namespace CqrsLens;
 
 /// <summary>
-/// Reads and deserializes .cqrslens.json. By default the file is looked up only
-/// at the scan root so a parent repository's config cannot silently affect a
+/// Reads and deserializes .noctua.json (with permanent .cqrslens.json fallback). By default the file
+/// is looked up only at the scan root so a parent repository's config cannot silently affect a
 /// nested scan. --config can point at an explicit file.
 /// </summary>
 public static class ConfigurationLoader
 {
-    public const string FileName = ".cqrslens.json";
+    public const string FileName = ".noctua.json";
+    public const string LegacyFileName = ".cqrslens.json";
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -22,7 +23,7 @@ public static class ConfigurationLoader
 
     public static CqrsLensSettings Load(string scanRoot, string? explicitPath = null)
     {
-        var path = ResolvePath(scanRoot, explicitPath);
+        var (path, bothPresent) = ResolvePath(scanRoot, explicitPath);
         if (path is null)
             return CqrsLensSettings.Empty;
 
@@ -51,15 +52,23 @@ public static class ConfigurationLoader
         if (config is null)
             throw new ConfigurationException($"config file is empty: {path}");
 
-        return ConfigurationValidator.Validate(path, config);
+        return ConfigurationValidator.Validate(path, config, bothPresent);
     }
 
-    private static string? ResolvePath(string scanRoot, string? explicitPath)
+    private static (string? Path, bool BothPresent) ResolvePath(string scanRoot, string? explicitPath)
     {
         if (explicitPath is null)
         {
-            var defaultPath = Path.Combine(scanRoot, FileName);
-            return File.Exists(defaultPath) ? defaultPath : null;
+            var primaryPath = Path.Combine(scanRoot, FileName);
+            var legacyPath = Path.Combine(scanRoot, LegacyFileName);
+            var hasPrimary = File.Exists(primaryPath);
+            var hasLegacy = File.Exists(legacyPath);
+
+            if (hasPrimary)
+                return (primaryPath, hasLegacy);
+            if (hasLegacy)
+                return (legacyPath, false);
+            return (null, false);
         }
 
         string path;
@@ -73,7 +82,7 @@ public static class ConfigurationLoader
         }
 
         return File.Exists(path)
-            ? path
+            ? (path, false)
             : throw new ConfigurationException($"config file not found: {explicitPath}");
     }
 }

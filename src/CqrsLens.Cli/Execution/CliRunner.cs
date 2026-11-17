@@ -15,7 +15,7 @@ public static class CliRunner
                 UsageWriter.Write(stdout, command.Options);
                 return ExitCodes.Success;
             case CliCommandKind.Version:
-                stdout.WriteLine($"CqrsLens {ToolInfo.Version}");
+                stdout.WriteLine($"Noctua {ToolInfo.Version}");
                 return ExitCodes.Success;
             case CliCommandKind.Error:
                 stderr.WriteLine(command.Error);

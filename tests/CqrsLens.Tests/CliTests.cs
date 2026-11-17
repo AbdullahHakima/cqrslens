@@ -63,7 +63,7 @@ public class CliTests : IDisposable
         var result = Run(new[] { "--version" });
 
         Assert.Equal(ExitCodes.Success, result.Code);
-        Assert.Equal($"CqrsLens {ToolInfo.Version}", result.Stdout.Trim());
+        Assert.Equal($"Noctua {ToolInfo.Version}", result.Stdout.Trim());
         Assert.Equal("", result.Stderr);
     }
 
@@ -73,7 +73,7 @@ public class CliTests : IDisposable
         var result = Run(new[] { "--help" });
 
         Assert.Equal(ExitCodes.Success, result.Code);
-        Assert.Contains("Usage: cqrslens", result.Stdout);
+        Assert.Contains("Usage: noctua", result.Stdout);
         Assert.Contains("--format FORMAT", result.Stdout);
         Assert.Contains("md (default), html, json, or agent", result.Stdout);
         Assert.Contains("--render", result.Stdout);
@@ -140,7 +140,7 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Usage, result.Code);
         Assert.Contains("pass a folder to scan", result.Stderr);
-        Assert.Contains("Usage: cqrslens", result.Stderr);
+        Assert.Contains("Usage: noctua", result.Stderr);
     }
 
     [Fact]
@@ -150,7 +150,7 @@ public class CliTests : IDisposable
 
         Assert.Equal(ExitCodes.Usage, result.Code);
         Assert.Contains("unknown option '--nope'", result.Stderr);
-        Assert.Contains("Usage: cqrslens", result.Stderr);
+        Assert.Contains("Usage: noctua", result.Stderr);
     }
 
     [Theory]

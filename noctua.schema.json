@@ -1,0 +1,240 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AbdullahHakima/noctua/main/noctua.schema.json",
+  "title": "Noctua configuration",
+  "description": "Configuration for Noctua .NET architecture scans (.noctua.json, or legacy .cqrslens.json).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional schema URL for editor completion."
+    },
+    "analysis": {
+      "type": "string",
+      "enum": ["text", "roslyn"],
+      "description": "Analysis backend. Text is the default."
+    },
+    "render": {
+      "type": "string",
+      "enum": ["mermaid", "svg"],
+      "description": "HTML diagram rendering mode: mermaid (default, browser-rendered via Mermaid.js) or svg (pre-rendered inline SVG, zero JavaScript)."
+    },
+    "cqrsMapSplit": {
+      "type": "string",
+      "enum": ["count", "feature", "unsplit"],
+      "description": "How the CQRS map is split into diagrams: count (default; by project then size), feature (one diagram per feature), or unsplit (one diagram per project). The --cqrs-map-split flag overrides this key."
+    },
+    "watermark": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
+      "description": "Optional custom watermark text rendered as ASCII art in the console and embedded as a watermark stamp in generated reports."
+    },
+    "markers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      },
+      "description": "Custom marker interface names that also count as request roots."
+    },
+    "handlerMarkers": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      },
+      "description": "Custom handler-root interface names for wrappers supplied by an external package."
+    },
+    "include": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      },
+      "description": "Root-relative globs. When present, only matching source files are scanned."
+    },
+    "exclude": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      },
+      "description": "Root-relative globs removed after include."
+    },
+    "layers": {
+      "type": "object",
+      "description": "Project-name to layer overrides.",
+      "propertyNames": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "pattern": "\\S"
+      }
+    },
+    "rules": {
+      "type": "object",
+      "description": "Per-rule severity overrides.",
+      "additionalProperties": false,
+      "properties": {
+        "MissingHandler": { "$ref": "#/$defs/severity" },
+        "MultipleHandlers": { "$ref": "#/$defs/severity" },
+        "LayerViolation": { "$ref": "#/$defs/severity" },
+        "ApplicationLayerViolation": { "$ref": "#/$defs/severity" },
+        "CircularProjectDependency": { "$ref": "#/$defs/severity" },
+        "CommandWithoutValidator": { "$ref": "#/$defs/severity" },
+        "OrphanValidator": { "$ref": "#/$defs/severity" },
+        "OrphanNotification": { "$ref": "#/$defs/severity" },
+        "AmbiguousProjectName": { "$ref": "#/$defs/severity" },
+        "UnreachableRequest": { "$ref": "#/$defs/severity" },
+        "UnpublishedNotification": { "$ref": "#/$defs/severity" },
+        "C-BOUNDARY": { "$ref": "#/$defs/severity" },
+        "C-SURFACE": { "$ref": "#/$defs/severity" },
+        "C-INTENT-STALE": { "$ref": "#/$defs/severity" }
+      }
+    },
+    "intent": {
+      "description": "Human-declared module boundaries, public surface, and ownership checked strictly read-only against observed evidence.",
+      "anyOf": [
+        { "type": "null" },
+        { "$ref": "#/$defs/intent" }
+      ]
+    }
+  },
+  "$defs": {
+    "severity": {
+      "type": "string",
+      "enum": ["off", "warning", "error"]
+    },
+    "intentSeverity": {
+      "type": "string",
+      "enum": ["warning", "error"]
+    },
+    "nonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "intentSelector": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?=.*\\S)[^*?\\[\\]]+$",
+      "description": "Exact identifier or boundary-safe prefix; wildcard globs (*, ?, [, ]) are forbidden."
+    },
+    "intentModule": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Declared logical module membership. Must specify at least one project or component selector.",
+      "properties": {
+        "projects": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/intentSelector" },
+          "description": "Explicit project names or root-relative ProjectIds."
+        },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/intentSelector" },
+          "description": "Explicit ComponentIds, qualified/full names, simple names, or identifier-boundary prefixes."
+        }
+      },
+      "anyOf": [
+        {
+          "required": ["projects"],
+          "properties": {
+            "projects": { "type": "array", "minItems": 1 }
+          }
+        },
+        {
+          "required": ["components"],
+          "properties": {
+            "components": { "type": "array", "minItems": 1 }
+          }
+        }
+      ]
+    },
+    "intentBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "description": "Forbidden cross-module call direction (from must differ from to; both must be declared in intent.modules).",
+      "properties": {
+        "from": { "$ref": "#/$defs/nonEmptyString" },
+        "to": { "$ref": "#/$defs/nonEmptyString" },
+        "severity": { "$ref": "#/$defs/intentSeverity" }
+      }
+    },
+    "intentPublicSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Declared public surface. At least one of endpoints or components must be non-null.",
+      "properties": {
+        "endpoints": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "array", "items": { "$ref": "#/$defs/intentSelector" } }
+          ]
+        },
+        "components": {
+          "anyOf": [
+            { "type": "null" },
+            { "type": "array", "items": { "$ref": "#/$defs/intentSelector" } }
+          ]
+        },
+        "severity": { "$ref": "#/$defs/intentSeverity" }
+      },
+      "anyOf": [
+        {
+          "required": ["endpoints"],
+          "properties": {
+            "endpoints": { "type": "array" }
+          }
+        },
+        {
+          "required": ["components"],
+          "properties": {
+            "components": { "type": "array" }
+          }
+        }
+      ]
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "modules": {
+          "type": "object",
+          "description": "Named logical modules mapping module names to project and component selectors.",
+          "propertyNames": { "$ref": "#/$defs/nonEmptyString" },
+          "additionalProperties": { "$ref": "#/$defs/intentModule" }
+        },
+        "boundaries": {
+          "type": "array",
+          "description": "Forbidden cross-module call edges checked as C-BOUNDARY.",
+          "items": { "$ref": "#/$defs/intentBoundary" }
+        },
+        "publicSurface": {
+          "description": "Declared public HTTP endpoints and/or components checked as C-SURFACE.",
+          "anyOf": [
+            { "type": "null" },
+            { "$ref": "#/$defs/intentPublicSurface" }
+          ]
+        },
+        "ownership": {
+          "type": "object",
+          "description": "Declared module owners rendered in exported docs as declared, unverified.",
+          "propertyNames": { "$ref": "#/$defs/nonEmptyString" },
+          "additionalProperties": { "$ref": "#/$defs/nonEmptyString" }
+        }
+      }
+    }
+  }
+}

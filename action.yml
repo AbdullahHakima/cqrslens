@@ -1,4 +1,4 @@
-name: CqrsLens
+name: Noctua
 description: >-
   Statically scan a .NET solution (no build required) and generate an
   architecture report — project graph, Clean Architecture layers, CQRS map
@@ -48,7 +48,7 @@ inputs:
     required: false
     default: ''
   config:
-    description: Path to a .cqrslens.json file; empty auto-discovers at the scan root.
+    description: Path to a .noctua.json (or .cqrslens.json) file; empty auto-discovers at the scan root.
     required: false
     default: ''
   baseline:
@@ -84,9 +84,9 @@ inputs:
     required: false
     default: 'true'
   version:
-    description: CqrsLens NuGet tool version to install.
+    description: Noctua NuGet tool version to install.
     required: false
-    default: '1.1.0'
+    default: '2.0.0'
 
 outputs:
   report-path:
@@ -107,110 +107,110 @@ runs:
       with:
         dotnet-version: '10.0.x'
 
-    - name: Install CqrsLens
+    - name: Install Noctua
       shell: bash
       env:
-        CQRSLENS_VERSION: ${{ inputs.version }}
+        NOCTUA_VERSION: ${{ inputs.version }}
       run: |
-        if ! dotnet tool install --global CqrsLens --version "$CQRSLENS_VERSION"; then
-          dotnet tool update --global CqrsLens --version "$CQRSLENS_VERSION"
+        if ! dotnet tool install --global Noctua --version "$NOCTUA_VERSION"; then
+          dotnet tool update --global Noctua --version "$NOCTUA_VERSION"
         fi
 
     - name: Scan
       id: scan
       shell: bash
       env:
-        CQRSLENS_PATH: ${{ inputs.path }}
-        CQRSLENS_OUTPUT: ${{ inputs.output }}
-        CQRSLENS_FORMAT: ${{ inputs.format }}
-        CQRSLENS_RENDER: ${{ inputs.render }}
-        CQRSLENS_WATERMARK: ${{ inputs.watermark }}
-        CQRSLENS_STRICT: ${{ inputs.strict }}
-        CQRSLENS_MARKERS: ${{ inputs.markers }}
-        CQRSLENS_HANDLER_MARKERS: ${{ inputs.handler-markers }}
-        CQRSLENS_ANALYSIS: ${{ inputs.analysis }}
-        CQRSLENS_CONFIG: ${{ inputs.config }}
-        CQRSLENS_BASELINE: ${{ inputs.baseline }}
-        CQRSLENS_DIFF_BASE: ${{ inputs.diff-base }}
-        CQRSLENS_DIFF_OUTPUT: ${{ inputs.diff-output }}
-        CQRSLENS_COMMENT_PR: ${{ inputs.comment-pr }}
-        CQRSLENS_SARIF: ${{ inputs.sarif-output }}
-        CQRSLENS_ANNOTATIONS: ${{ inputs.annotations }}
-        CQRSLENS_SUMMARY: ${{ runner.temp }}/cqrslens-summary.md
-        CQRSLENS_BASE_WORKTREE: ${{ runner.temp }}/cqrslens-base-worktree
+        NOCTUA_PATH: ${{ inputs.path }}
+        NOCTUA_OUTPUT: ${{ inputs.output }}
+        NOCTUA_FORMAT: ${{ inputs.format }}
+        NOCTUA_RENDER: ${{ inputs.render }}
+        NOCTUA_WATERMARK: ${{ inputs.watermark }}
+        NOCTUA_STRICT: ${{ inputs.strict }}
+        NOCTUA_MARKERS: ${{ inputs.markers }}
+        NOCTUA_HANDLER_MARKERS: ${{ inputs.handler-markers }}
+        NOCTUA_ANALYSIS: ${{ inputs.analysis }}
+        NOCTUA_CONFIG: ${{ inputs.config }}
+        NOCTUA_BASELINE: ${{ inputs.baseline }}
+        NOCTUA_DIFF_BASE: ${{ inputs.diff-base }}
+        NOCTUA_DIFF_OUTPUT: ${{ inputs.diff-output }}
+        NOCTUA_COMMENT_PR: ${{ inputs.comment-pr }}
+        NOCTUA_SARIF: ${{ inputs.sarif-output }}
+        NOCTUA_ANNOTATIONS: ${{ inputs.annotations }}
+        NOCTUA_SUMMARY: ${{ runner.temp }}/cqrslens-summary.md
+        NOCTUA_BASE_WORKTREE: ${{ runner.temp }}/cqrslens-base-worktree
       run: |
         cleanup_worktree() {
-          if [ -d "$CQRSLENS_BASE_WORKTREE" ]; then
-            git worktree remove --force "$CQRSLENS_BASE_WORKTREE" 2>/dev/null || rm -rf "$CQRSLENS_BASE_WORKTREE"
+          if [ -d "$NOCTUA_BASE_WORKTREE" ]; then
+            git worktree remove --force "$NOCTUA_BASE_WORKTREE" 2>/dev/null || rm -rf "$NOCTUA_BASE_WORKTREE"
           fi
         }
         trap cleanup_worktree EXIT
 
-        if [ -z "$CQRSLENS_DIFF_BASE" ] && [ "$CQRSLENS_COMMENT_PR" = "true" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
+        if [ -z "$NOCTUA_DIFF_BASE" ] && [ "$NOCTUA_COMMENT_PR" = "true" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
           if git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF" 2>/dev/null &&
-             git worktree add --detach "$CQRSLENS_BASE_WORKTREE" FETCH_HEAD 2>/dev/null; then
-            if [ -d "$CQRSLENS_BASE_WORKTREE/$CQRSLENS_PATH" ]; then
-              CQRSLENS_DIFF_BASE="$CQRSLENS_BASE_WORKTREE/$CQRSLENS_PATH"
+             git worktree add --detach "$NOCTUA_BASE_WORKTREE" FETCH_HEAD 2>/dev/null; then
+            if [ -d "$NOCTUA_BASE_WORKTREE/$NOCTUA_PATH" ]; then
+              NOCTUA_DIFF_BASE="$NOCTUA_BASE_WORKTREE/$NOCTUA_PATH"
             fi
           fi
         fi
 
-        if [ -n "$CQRSLENS_DIFF_BASE" ] && [ -z "$CQRSLENS_DIFF_OUTPUT" ]; then
-          CQRSLENS_DIFF_OUTPUT="cqrslens-diff.md"
+        if [ -n "$NOCTUA_DIFF_BASE" ] && [ -z "$NOCTUA_DIFF_OUTPUT" ]; then
+          NOCTUA_DIFF_OUTPUT="cqrslens-diff.md"
         fi
 
-        args=("$CQRSLENS_PATH" -o "$CQRSLENS_OUTPUT" --format "$CQRSLENS_FORMAT" \
+        args=("$NOCTUA_PATH" -o "$NOCTUA_OUTPUT" --format "$NOCTUA_FORMAT" \
           --ci-root "$GITHUB_WORKSPACE" \
-          --summary "$CQRSLENS_SUMMARY")
-        if [ -n "$CQRSLENS_RENDER" ]; then
-          args+=(--render "$CQRSLENS_RENDER")
+          --summary "$NOCTUA_SUMMARY")
+        if [ -n "$NOCTUA_RENDER" ]; then
+          args+=(--render "$NOCTUA_RENDER")
         fi
-        if [ -n "$CQRSLENS_WATERMARK" ]; then
-          args+=(--watermark "$CQRSLENS_WATERMARK")
+        if [ -n "$NOCTUA_WATERMARK" ]; then
+          args+=(--watermark "$NOCTUA_WATERMARK")
         fi
-        if [ "$CQRSLENS_STRICT" = "true" ]; then
+        if [ "$NOCTUA_STRICT" = "true" ]; then
           args+=(--strict)
         fi
-        if [ -n "$CQRSLENS_MARKERS" ]; then
-          args+=(--markers "$CQRSLENS_MARKERS")
+        if [ -n "$NOCTUA_MARKERS" ]; then
+          args+=(--markers "$NOCTUA_MARKERS")
         fi
-        if [ -n "$CQRSLENS_HANDLER_MARKERS" ]; then
-          args+=(--handler-markers "$CQRSLENS_HANDLER_MARKERS")
+        if [ -n "$NOCTUA_HANDLER_MARKERS" ]; then
+          args+=(--handler-markers "$NOCTUA_HANDLER_MARKERS")
         fi
-        if [ -n "$CQRSLENS_ANALYSIS" ]; then
-          args+=(--analysis "$CQRSLENS_ANALYSIS")
+        if [ -n "$NOCTUA_ANALYSIS" ]; then
+          args+=(--analysis "$NOCTUA_ANALYSIS")
         fi
-        if [ -n "$CQRSLENS_CONFIG" ]; then
-          args+=(--config "$CQRSLENS_CONFIG")
+        if [ -n "$NOCTUA_CONFIG" ]; then
+          args+=(--config "$NOCTUA_CONFIG")
         fi
-        if [ -n "$CQRSLENS_BASELINE" ]; then
-          args+=(--baseline "$CQRSLENS_BASELINE")
+        if [ -n "$NOCTUA_BASELINE" ]; then
+          args+=(--baseline "$NOCTUA_BASELINE")
         fi
-        if [ -n "$CQRSLENS_DIFF_BASE" ]; then
-          args+=(--diff "$CQRSLENS_DIFF_BASE")
+        if [ -n "$NOCTUA_DIFF_BASE" ]; then
+          args+=(--diff "$NOCTUA_DIFF_BASE")
         fi
-        if [ -n "$CQRSLENS_DIFF_OUTPUT" ]; then
-          args+=(--diff-output "$CQRSLENS_DIFF_OUTPUT")
+        if [ -n "$NOCTUA_DIFF_OUTPUT" ]; then
+          args+=(--diff-output "$NOCTUA_DIFF_OUTPUT")
         fi
-        if [ -n "$CQRSLENS_SARIF" ]; then
-          args+=(--sarif "$CQRSLENS_SARIF")
+        if [ -n "$NOCTUA_SARIF" ]; then
+          args+=(--sarif "$NOCTUA_SARIF")
         fi
-        if [ "$CQRSLENS_ANNOTATIONS" = "true" ]; then
+        if [ "$NOCTUA_ANNOTATIONS" = "true" ]; then
           args+=(--github-annotations)
         fi
 
         set +e
-        cqrslens "${args[@]}"
+        noctua "${args[@]}"
         status=$?
         set -e
 
-        echo "report-path=$CQRSLENS_OUTPUT" >> "$GITHUB_OUTPUT"
-        echo "sarif-path=$CQRSLENS_SARIF" >> "$GITHUB_OUTPUT"
-        echo "diff-path=$CQRSLENS_DIFF_OUTPUT" >> "$GITHUB_OUTPUT"
-        if [ -f "$CQRSLENS_DIFF_OUTPUT" ]; then
-          cat "$CQRSLENS_DIFF_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
-        elif [ -f "$CQRSLENS_SUMMARY" ]; then
-          cat "$CQRSLENS_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+        echo "report-path=$NOCTUA_OUTPUT" >> "$GITHUB_OUTPUT"
+        echo "sarif-path=$NOCTUA_SARIF" >> "$GITHUB_OUTPUT"
+        echo "diff-path=$NOCTUA_DIFF_OUTPUT" >> "$GITHUB_OUTPUT"
+        if [ -f "$NOCTUA_DIFF_OUTPUT" ]; then
+          cat "$NOCTUA_DIFF_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+        elif [ -f "$NOCTUA_SUMMARY" ]; then
+          cat "$NOCTUA_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
         fi
         exit "$status"
 

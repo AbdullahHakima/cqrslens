@@ -1,6 +1,6 @@
 # Real-world validation
 
-CqrsLens is tested against a small, pinned corpus of public MediatR / Clean
+Noctua is tested against a small, pinned corpus of public MediatR / Clean
 Architecture repositories in addition to its unit and fixture tests. The corpus
 is deliberately informational: it shows where the text scanner works today and
 where its static heuristics stop. It is **not** part of the PR or release gates,
@@ -185,7 +185,7 @@ every diagram with GitHub-compatible limits and layout:
 node scripts/mermaid-render-check/check.mjs docs/sample-output/ARCHITECTURE.md
 ```
 
-Generate fresh reports with `cqrslens` and pass their paths to check the current
+Generate fresh reports with `noctua` and pass their paths to check the current
 branch rather than the checked-in sample. This check is informational; it is not
 part of the PR or release gates.
 

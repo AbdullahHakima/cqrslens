@@ -76,7 +76,7 @@ public class CiOutputTests : IDisposable
         var root = document.RootElement;
         Assert.Equal("2.1.0", root.GetProperty("version").GetString());
         var run = root.GetProperty("runs")[0];
-        Assert.Equal("CqrsLens", run.GetProperty("tool").GetProperty("driver").GetProperty("name").GetString());
+        Assert.Equal("Noctua", run.GetProperty("tool").GetProperty("driver").GetProperty("name").GetString());
         Assert.Equal("utf16CodeUnits", run.GetProperty("columnKind").GetString());
         Assert.True(run.GetProperty("invocations")[0].GetProperty("executionSuccessful").GetBoolean());
 
@@ -92,7 +92,7 @@ public class CiOutputTests : IDisposable
             missing.GetProperty("partialFingerprints").GetProperty("cqrslens/v1").GetString()));
 
         var summary = File.ReadAllText(outputs.Summary);
-        Assert.Contains("## CqrsLens architecture summary", summary);
+        Assert.Contains("## Noctua architecture summary", summary);
         Assert.Contains("**1** error(s), **1** warning(s).", summary);
         Assert.Contains("src/Features/PingCommand.cs", summary);
         Assert.Contains("MissingHandler", summary);

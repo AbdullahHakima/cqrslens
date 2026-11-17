@@ -30,7 +30,7 @@ jobs:
             echo "::error::Release tag '$GITHUB_REF_NAME' does not match package version '$version'."
             exit 1
           fi
-          echo "Publishing CqrsLens $version for tag $GITHUB_REF_NAME"
+          echo "Publishing Noctua $version for tag $GITHUB_REF_NAME"
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
@@ -55,10 +55,10 @@ jobs:
           set -euo pipefail
           version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n1)
           test -n "$version"
-          dotnet tool install --global CqrsLens --version "$version" \
+          dotnet tool install --global Noctua --version "$version" \
             --add-source "$PWD/artifacts"
           export PATH="$HOME/.dotnet/tools:$PATH"
-          cqrslens samples/SampleShop --analysis text --strict \
+          noctua samples/SampleShop --analysis text --strict \
             --generated-at 2026-01-02T03:04:05Z -o artifacts/release-smoke.md
           grep -q "| Requests (commands + queries) | 4 |" artifacts/release-smoke.md
           grep -q "| Handlers | 4 |" artifacts/release-smoke.md

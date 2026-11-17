@@ -45,7 +45,7 @@ public static class CliParser
                     options.Output = reader.ReadValue("-o", "a value, e.g. -o ARCHITECTURE.md");
                     break;
                 case "--config":
-                    options.ConfigPath = reader.ReadValue("--config", "a value, e.g. --config .cqrslens.json");
+                    options.ConfigPath = reader.ReadValue("--config", "a value, e.g. --config .noctua.json");
                     break;
                 case "--format":
                     options.Format = reader.ReadValue("--format", "a value: md, html, json or agent").ToLowerInvariant();

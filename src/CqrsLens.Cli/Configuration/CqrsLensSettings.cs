@@ -1,6 +1,6 @@
 namespace CqrsLens;
 
-/// <summary>Validated .cqrslens.json values.</summary>
+/// <summary>Validated config values (.noctua.json or legacy .cqrslens.json).</summary>
 public sealed record CqrsLensSettings(
     string? ConfigPath,
     AnalysisMode? AnalysisMode,
@@ -13,7 +13,8 @@ public sealed record CqrsLensSettings(
     DiagramRenderMode? RenderMode = null,
     string? Watermark = null,
     CqrsMapSplitMode? CqrsMapSplit = null,
-    IntentSpecification? Intent = null)
+    IntentSpecification? Intent = null,
+    bool BothConfigFilesPresent = false)
 {
     public static readonly CqrsLensSettings Empty = new(
         null,

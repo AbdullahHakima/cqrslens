@@ -80,7 +80,7 @@ internal static class McpRequestRouter
             },
             ["serverInfo"] = new JsonObject
             {
-                ["name"] = "cqrslens",
+                ["name"] = "noctua",
                 ["version"] = ToolInfo.Version,
             },
         };

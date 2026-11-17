@@ -1,9 +1,12 @@
 namespace CqrsLens;
 
-/// <summary>Turns a deserialized .cqrslens.json into validated <see cref="CqrsLensSettings"/>.</summary>
+/// <summary>Turns a deserialized .noctua.json (or legacy .cqrslens.json) into validated <see cref="CqrsLensSettings"/>.</summary>
 internal static class ConfigurationValidator
 {
-    public static CqrsLensSettings Validate(string path, CqrsLensConfiguration config)
+    public static CqrsLensSettings Validate(
+        string path,
+        CqrsLensConfiguration config,
+        bool bothConfigFilesPresent = false)
     {
         var analysis = ValidateAnalysisMode(path, config.Analysis);
         var render = ValidateRenderMode(path, config.Render);
@@ -29,7 +32,8 @@ internal static class ConfigurationValidator
             render,
             watermark,
             cqrsMapSplit,
-            intent);
+            intent,
+            bothConfigFilesPresent);
     }
 
     private static CqrsMapSplitMode? ValidateCqrsMapSplit(string path, string? value)

@@ -11,6 +11,9 @@ public sealed class ConfigurationProvenance
     /// <summary>Absolute path of the config file used, or null when none was found.</summary>
     public string? ConfigFilePath { get; init; }
 
+    /// <summary>True when both .noctua.json and legacy .cqrslens.json exist in the scan root.</summary>
+    public bool BothConfigFilesPresent { get; init; }
+
     public IReadOnlyList<string> DeclaredMarkers { get; init; } = Array.Empty<string>();
 
     public IReadOnlyList<string> DeclaredHandlerMarkers { get; init; } = Array.Empty<string>();

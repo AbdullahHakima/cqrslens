@@ -1,24 +1,25 @@
 # Baselines and new-only CI checks
 
-A baseline lets an existing codebase adopt CqrsLens without making every
+A baseline lets an existing codebase adopt Noctua without making every
 pre-existing architecture finding a merge blocker. The first scan records the
 current findings; later scans mark those findings as **known** and `--strict`
-fails only when a **new** error appears.
+fails only when a **new** error appears. Baselines recorded with CqrsLens `1.x`
+(`schemaVersion: 1`) continue to match cleanly.
 
 ## Bootstrap a baseline
 
 ```bash
 # Record the current architecture checks once, then commit the file.
-cqrslens . --write-baseline cqrslens-baseline.json -o ARCHITECTURE.md
+noctua . --write-baseline cqrslens-baseline.json -o ARCHITECTURE.md
 
 git add cqrslens-baseline.json ARCHITECTURE.md
-git commit -m "chore: record CqrsLens architecture baseline"
+git commit -m "chore: record Noctua architecture baseline"
 ```
 
 In CI, compare against it:
 
 ```bash
-cqrslens . --baseline cqrslens-baseline.json --strict -o ARCHITECTURE.md
+noctua . --baseline cqrslens-baseline.json --strict -o ARCHITECTURE.md
 ```
 
 `--write-baseline` records the findings, marks them as known for this run, and
@@ -52,7 +53,7 @@ Baseline: 3 known finding(s), 1 new finding(s).
 ```
 
 `--strict` uses the new count when a baseline is present. Rule severity
-overrides in `.cqrslens.json` are applied before matching; turning a rule off
+overrides in `.noctua.json` (or `.cqrslens.json`) are applied before matching; turning a rule off
 also removes it from the baseline.
 
 ## Baseline file

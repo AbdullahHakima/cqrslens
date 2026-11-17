@@ -18,6 +18,7 @@ internal static class ScanCommand
         result.Configuration = new ConfigurationProvenance
         {
             ConfigFilePath = scan.Settings.ConfigPath,
+            BothConfigFilesPresent = scan.Settings.BothConfigFilesPresent,
             DeclaredMarkers = MediatorConventions.EffectiveMarkers(scan.Markers, result.Conventions)
                 .OrderBy(m => m, StringComparer.Ordinal).ToList(),
             DeclaredHandlerMarkers = MediatorConventions.EffectiveHandlerMarkers(scan.HandlerMarkers, result.Conventions)

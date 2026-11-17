@@ -1,6 +1,6 @@
 # Architecture
 
-CqrsLens is split into four production projects with a one-way dependency chain.
+Noctua (internally `CqrsLens.*` projects and namespaces) is split into four production projects with a one-way dependency chain.
 The split keeps parsing, analysis, rendering and CLI concerns independent, and it is
 enforced by `ArchitectureBoundaryTests` rather than convention alone.
 
@@ -22,7 +22,7 @@ analysis models are renderer inputs, but not the reverse.
 | `CqrsLens.Core` | Public analysis model (`AnalysisResult`, shapes, locations, diagnostics), source text masks/namespaces, progress and diff exceptions, shared tool identity. |
 | `CqrsLens.Analysis` | Project/source discovery, text and Roslyn scanners, type hierarchy and marker resolution, EF model construction, deep vertical-slice tracing, architecture checks, baseline and diff logic. |
 | `CqrsLens.Reporting` | Markdown/HTML/JSON/agent/SARIF/summary renderers, Mermaid and SVG generation, console artwork. |
-| `CqrsLens.Cli` | Argument/config parsing, command orchestration, MCP server, the `cqrslens` executable. |
+| `CqrsLens.Cli` | Argument/config parsing, command orchestration, MCP server, the `noctua` executable. |
 
 Tests and benchmarks are outside the production graph. Production projects must not
 reference either.
@@ -170,7 +170,7 @@ file.
   `ArgumentReader` enforces option values, `UsageWriter` owns the help text and
   `ExitCodes` is the shared exit-code contract.
 - `Execution/` is the scan pipeline: `ScanPreparer` validates the root, merges
-  `.cqrslens.json` and produces a `PreparedScan`; `ScanConsole` owns banner,
+  `.noctua.json` (or legacy `.cqrslens.json`) and produces a `PreparedScan`; `ScanConsole` owns banner,
   progress and summary-card presentation; `ReportFormatResolver` and
   `ReportOutputPathsResolver` choose formats and validate destinations;
   `BaselineProcessor` and `DiffProcessor` apply cross-run state; `ReportWriter`

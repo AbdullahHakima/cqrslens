@@ -22,6 +22,12 @@ internal static class ScanReporter
         if (!cardShown)
             WriteScanTotals(result, stdout, useColor, palette);
 
+        if (result.Configuration.BothConfigFilesPresent)
+        {
+            stdout.WriteLine(
+                $"Config: {ConfigurationLoader.FileName} takes precedence over {ConfigurationLoader.LegacyFileName}.");
+        }
+
         if (outputs.Report is not null)
             WritePath(stdout, "Report", outputs.Report, useColor, palette);
         if (options.ExportDocsDirectory is not null)

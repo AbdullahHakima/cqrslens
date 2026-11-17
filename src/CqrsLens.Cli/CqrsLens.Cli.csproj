@@ -17,8 +17,8 @@
 
     <!-- NuGet / dotnet tool packaging -->
     <PackAsTool>true</PackAsTool>
-    <ToolCommandName>cqrslens</ToolCommandName>
-    <PackageId>CqrsLens</PackageId>
+    <ToolCommandName>noctua</ToolCommandName>
+    <PackageId>Noctua</PackageId>
     <Authors>Abdullah Hakim</Authors>
     <Description>See your MediatR codebase: CqrsLens statically scans a .NET solution (no build required) and generates an ARCHITECTURE.md report with Mermaid diagrams of your project graph, CQRS map, layers, and DbContexts.</Description>
     <PackageTags>mediatr;cqrs;clean-architecture;mermaid;dotnet-tool;architecture</PackageTags>

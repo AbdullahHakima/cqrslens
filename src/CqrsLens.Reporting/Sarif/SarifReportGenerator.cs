@@ -12,7 +12,7 @@ namespace CqrsLens;
 public static class SarifReportGenerator
 {
     public const string Schema = "https://json.schemastore.org/sarif-2.1.0.json";
-    public const string InformationUri = "https://github.com/AbdullahHakima/cqrslens";
+    public const string InformationUri = "https://github.com/AbdullahHakima/noctua";
 
     private static readonly Dictionary<string, (string Name, string Description, string Level)> Rules =
         new(StringComparer.Ordinal)
@@ -65,8 +65,8 @@ public static class SarifReportGenerator
 
             writer.WriteStartObject("tool");
             writer.WriteStartObject("driver");
-            writer.WriteString("name", "CqrsLens");
-            writer.WriteString("fullName", "CqrsLens .NET architecture scanner");
+            writer.WriteString("name", "Noctua");
+            writer.WriteString("fullName", "Noctua .NET architecture scanner");
             writer.WriteString("version", ToolInfo.Version);
             writer.WriteString("informationUri", InformationUri);
             writer.WriteStartArray("rules");

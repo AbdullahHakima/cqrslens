@@ -81,7 +81,7 @@ public class ArchitectureDiffTests : IDisposable
 
         var markdown = File.ReadAllText(diffMd);
         Assert.StartsWith(ArchitectureDiffer.CommentMarker, markdown);
-        Assert.Contains("## CqrsLens Architecture Diff", markdown);
+        Assert.Contains("## Noctua Architecture Diff", markdown);
         Assert.Contains("No architecture changes detected", markdown);
         Assert.Contains("| Requests (commands + queries) | 1 | 1 | 0 |", markdown);
 
@@ -285,7 +285,7 @@ public class ArchitectureDiffTests : IDisposable
 
         // Verify PR comment marker and key sections
         Assert.StartsWith("<!-- cqrslens-architecture-diff -->", mdFromJson);
-        Assert.Contains("## CqrsLens Architecture Diff", mdFromJson);
+        Assert.Contains("## Noctua Architecture Diff", mdFromJson);
         Assert.Contains("| Projects | 1 | 2 | +1 |", mdFromJson);
         Assert.Contains("| Requests (commands + queries) | 2 | 3 | +1 |", mdFromJson);
         Assert.Contains("| Handlers | 1 | 3 | +2 |", mdFromJson);

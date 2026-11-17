@@ -83,7 +83,7 @@ public class McpServerTests
         var initResp = JsonNode.Parse(lines[0])!.AsObject();
         Assert.Equal(1, initResp["id"]!.GetValue<int>());
         Assert.Equal("2024-11-05", initResp["result"]!["protocolVersion"]!.GetValue<string>());
-        Assert.Equal("cqrslens", initResp["result"]!["serverInfo"]!["name"]!.GetValue<string>());
+        Assert.Equal("noctua", initResp["result"]!["serverInfo"]!["name"]!.GetValue<string>());
 
         // 2. ping
         var pingResp = JsonNode.Parse(lines[1])!.AsObject();

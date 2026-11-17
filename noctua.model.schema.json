@@ -1,0 +1,1028 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/AbdullahHakima/noctua/main/noctua.model.schema.json",
+  "title": "Noctua Architecture Model",
+  "description": "Public JSON contract for the Noctua static architecture model (--format json).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "toolVersion",
+    "scanner",
+    "generatedAt",
+    "elapsedMilliseconds",
+    "rootName",
+    "discoveredFileCount",
+    "fileCount",
+    "baselineApplied",
+    "canRunStrictChecks",
+    "summary",
+    "projects",
+    "requests",
+    "handlers",
+    "validators",
+    "behaviors",
+    "dbContexts",
+    "checks",
+    "diagnostics",
+    "skippedFiles",
+    "notifications",
+    "notificationHandlers"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Model JSON contract version. Always 1 for this schema."
+    },
+    "toolVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Semantic version of the Noctua tool that generated the model."
+    },
+    "scanner": {
+      "type": "string",
+      "enum": ["text", "roslyn", "unknown"],
+      "description": "Analysis backend used to build the model ('text', 'roslyn', or 'unknown' when constructed in-memory without a scanner)."
+    },
+    "generatedAt": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ISO-8601 UTC timestamp ('O' round-trip format) when the model was generated."
+    },
+    "elapsedMilliseconds": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Scan duration in milliseconds (0 when --generated-at is pinned)."
+    },
+    "rootName": {
+      "type": "string",
+      "description": "Directory name of the scanned solution root."
+    },
+    "discoveredFileCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total source files discovered before read/scan filtering or skips."
+    },
+    "fileCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Source files successfully read and scanned."
+    },
+    "watermark": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional custom watermark text when specified via --watermark or configuration."
+    },
+    "conventions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "Detected framework conventions (e.g. Mediator, Wolverine). Omitted when empty."
+    },
+    "baselineApplied": {
+      "type": "boolean",
+      "description": "Whether --baseline or --write-baseline was applied to checks."
+    },
+    "canRunStrictChecks": {
+      "type": "boolean",
+      "description": "True when the scan is complete enough for --strict error gating."
+    },
+    "summary": {
+      "$ref": "#/$defs/summary"
+    },
+    "projects": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/project"
+      },
+      "description": "Discovered .csproj projects, layers, references, and packages."
+    },
+    "requests": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/request"
+      },
+      "description": "Discovered CQRS request contracts."
+    },
+    "handlers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/handler"
+      },
+      "description": "Discovered request handlers."
+    },
+    "validators": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/validator"
+      },
+      "description": "Discovered FluentValidation and FastEndpoints validators."
+    },
+    "behaviors": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/behavior"
+      },
+      "description": "Discovered pipeline behaviors."
+    },
+    "dbContexts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/dbContext"
+      },
+      "description": "Discovered EF Core DbContexts, each carrying its dbSets, entities, and relationships."
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/checkFinding"
+      },
+      "description": "Architecture and intent check findings."
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/diagnostic"
+      },
+      "description": "Scan completeness and ambiguity diagnostics."
+    },
+    "skippedFiles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Root-relative paths of source files that could not be read or scanned."
+    },
+    "notifications": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/notification"
+      },
+      "description": "Discovered domain events and notifications."
+    },
+    "notificationHandlers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/notificationHandler"
+      },
+      "description": "Discovered notification handlers."
+    },
+    "endpoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/endpoint"
+      },
+      "description": "Legacy-but-stable CQRS-linked endpoint list. Omitted when empty; prefer spineEndpoints."
+    },
+    "flowEdges": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/flowEdge"
+      },
+      "description": "Legacy-but-stable flow edges. Omitted when empty; prefer relations."
+    },
+    "resolvedEdges": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/resolvedEdge"
+      },
+      "description": "Legacy-but-stable DI-resolved handler-to-DbContext edges. Omitted when empty; prefer relations."
+    },
+    "serviceCallEdges": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/serviceCallEdge"
+      },
+      "description": "Legacy-but-stable handler-to-service call edges. Omitted when empty; prefer relations."
+    },
+    "dispatchCallSites": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/dispatchCallSite"
+      },
+      "description": "Legacy-but-stable resolved dispatch call sites. Omitted when empty; prefer relations."
+    },
+    "unresolvedDispatches": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/unresolvedDispatch"
+      },
+      "description": "Legacy-but-stable unresolved dispatch call sites. Omitted when empty; also carried in unproven.unresolvedDispatches."
+    },
+    "relations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/spineRelation"
+      },
+      "description": "Unified spine relations with structured evidence occurrences. Emitted only when unindexed spine relations exist."
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/spineComponent"
+      },
+      "description": "Deduplicated spine components with evidenced roles. Omitted when empty."
+    },
+    "spineEndpoints": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/spineEndpoint"
+      },
+      "description": "Mapping-level HTTP endpoints with per-fact verb/route provenance. Omitted when empty."
+    },
+    "unproven": {
+      "$ref": "#/$defs/unprovenPopulations",
+      "description": "First-class unproven, ambiguous, and unresolved populations. Emitted only when totalCount > 0."
+    }
+  },
+  "$defs": {
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projects",
+        "requests",
+        "handlers",
+        "validators",
+        "behaviors",
+        "dbContexts",
+        "notifications",
+        "notificationHandlers",
+        "endpoints",
+        "errors",
+        "warnings",
+        "knownFindings",
+        "diagnostics",
+        "flowEdges",
+        "dispatchCallSites",
+        "unresolvedDispatches"
+      ],
+      "properties": {
+        "projects": { "type": "integer", "minimum": 0 },
+        "requests": { "type": "integer", "minimum": 0 },
+        "handlers": { "type": "integer", "minimum": 0 },
+        "validators": { "type": "integer", "minimum": 0 },
+        "behaviors": { "type": "integer", "minimum": 0 },
+        "dbContexts": { "type": "integer", "minimum": 0 },
+        "notifications": { "type": "integer", "minimum": 0 },
+        "notificationHandlers": { "type": "integer", "minimum": 0 },
+        "endpoints": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "knownFindings": { "type": "integer", "minimum": 0 },
+        "diagnostics": { "type": "integer", "minimum": 0 },
+        "flowEdges": { "type": "integer", "minimum": 0 },
+        "dispatchCallSites": { "type": "integer", "minimum": 0 },
+        "unresolvedDispatches": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["line", "column"],
+      "properties": {
+        "file": { "type": "string" },
+        "line": { "type": "integer", "minimum": 0 },
+        "column": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "layer", "references", "packages"],
+      "properties": {
+        "name": { "type": "string" },
+        "layer": { "type": "string" },
+        "references": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "packages": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "requestProperty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type"],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "fullName", "kind", "handlers", "validators"],
+      "properties": {
+        "name": { "type": "string" },
+        "namespace": { "type": "string", "minLength": 1 },
+        "fullName": { "type": "string" },
+        "kind": { "type": "string", "enum": ["Command", "Query", "Request"] },
+        "responseType": { "type": "string" },
+        "viaMarker": { "type": "string" },
+        "project": { "type": "string" },
+        "handlers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "validators": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "properties": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/requestProperty" }
+        },
+        "entrypoints": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "touchedEntities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "publishedNotifications": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "dispatchedRequests": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "handler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "fullName", "requestName"],
+      "properties": {
+        "name": { "type": "string" },
+        "namespace": { "type": "string", "minLength": 1 },
+        "fullName": { "type": "string" },
+        "requestName": { "type": "string" },
+        "dependencies": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "touchedEntities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "publishedNotifications": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "dispatchedRequests": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "validator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "fullName", "targetType"],
+      "properties": {
+        "name": { "type": "string" },
+        "namespace": { "type": "string", "minLength": 1 },
+        "fullName": { "type": "string" },
+        "targetType": { "type": "string" },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "behavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string" },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "dbSet": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["property", "entity"],
+      "properties": {
+        "property": { "type": "string" },
+        "entity": { "type": "string" },
+        "entityFullName": { "type": "string" }
+      }
+    },
+    "entityProperty": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "isKey",
+        "isForeignKey",
+        "isNavigation",
+        "isCollection",
+        "isRequired"
+      ],
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string" },
+        "isKey": { "type": "boolean" },
+        "isForeignKey": { "type": "boolean" },
+        "isNavigation": { "type": "boolean" },
+        "isCollection": { "type": "boolean" },
+        "targetEntity": { "type": "string" },
+        "isRequired": { "type": "boolean" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "entity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "fullName", "properties"],
+      "properties": {
+        "name": { "type": "string" },
+        "namespace": { "type": "string", "minLength": 1 },
+        "fullName": { "type": "string" },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" },
+        "properties": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entityProperty" }
+        }
+      }
+    },
+    "entityRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principalEntity", "dependentEntity", "isRequired", "kind"],
+      "properties": {
+        "principalEntity": { "type": "string" },
+        "dependentEntity": { "type": "string" },
+        "principalNavigation": { "type": "string" },
+        "dependentNavigation": { "type": "string" },
+        "foreignKey": { "type": "string" },
+        "isRequired": { "type": "boolean" },
+        "kind": { "type": "string", "enum": ["oneToOne", "oneToMany", "manyToMany"] },
+        "configuredBy": { "type": "string" }
+      }
+    },
+    "dbContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "dbSets", "entities", "relationships"],
+      "properties": {
+        "name": { "type": "string" },
+        "namespace": { "type": "string", "minLength": 1 },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" },
+        "dbSets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/dbSet" }
+        },
+        "entities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entity" }
+        },
+        "relationships": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/entityRelationship" }
+        }
+      }
+    },
+    "checkFinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message", "known"],
+      "properties": {
+        "code": { "type": "string" },
+        "severity": { "type": "string", "enum": ["error", "warning"] },
+        "message": { "type": "string" },
+        "target": { "type": "string" },
+        "project": { "type": "string" },
+        "known": { "type": "boolean" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "diagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "severity": { "type": "string", "enum": ["error", "warning", "info"] },
+        "message": { "type": "string" },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "notification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "fullName", "handlers"],
+      "properties": {
+        "name": { "type": "string" },
+        "namespace": { "type": "string", "minLength": 1 },
+        "fullName": { "type": "string" },
+        "viaMarker": { "type": "string" },
+        "project": { "type": "string" },
+        "handlers": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "notificationHandler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "fullName", "notificationName"],
+      "properties": {
+        "name": { "type": "string" },
+        "namespace": { "type": "string", "minLength": 1 },
+        "fullName": { "type": "string" },
+        "notificationName": { "type": "string" },
+        "dependencies": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "touchedEntities": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "publishedNotifications": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "dispatchedRequests": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" }
+        },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "httpMethod", "route", "targetRequest", "inferred"],
+      "properties": {
+        "name": { "type": "string" },
+        "httpMethod": { "type": "string" },
+        "route": { "type": "string" },
+        "targetRequest": { "type": "string" },
+        "targetRequestFullName": { "type": "string" },
+        "inferred": { "type": "boolean" },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "flowEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "endpointToRequest",
+            "requestToHandler",
+            "handlerToRequest",
+            "handlerToNotification",
+            "handlerToDbContext",
+            "unknown"
+          ]
+        },
+        "from": { "type": "string" },
+        "to": { "type": "string" },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "resolvedEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "via", "to"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["handlerToDbContextResolved", "unknown"]
+        },
+        "from": { "type": "string" },
+        "via": { "type": "string" },
+        "to": { "type": "string" },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "serviceCallEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "via", "method", "to"],
+      "properties": {
+        "kind": { "type": "string", "const": "serviceCall" },
+        "from": { "type": "string" },
+        "via": { "type": "string" },
+        "method": { "type": "string" },
+        "to": { "type": "string" },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "dispatchCallSite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "targetKind", "testProject"],
+      "properties": {
+        "target": { "type": "string" },
+        "targetKind": { "type": "string", "enum": ["request", "notification"] },
+        "sender": { "type": "string" },
+        "project": { "type": "string" },
+        "testProject": { "type": "boolean" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "unresolvedDispatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method"],
+      "properties": {
+        "method": { "type": "string" },
+        "receiver": { "type": "string" },
+        "project": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "relationKind": {
+      "type": "string",
+      "enum": [
+        "references",
+        "serves",
+        "validates",
+        "wraps",
+        "dispatches",
+        "publishes",
+        "handlesNotification",
+        "usesData",
+        "usesDataResolved",
+        "resolvesTo",
+        "calls",
+        "touchesData",
+        "relates",
+        "exposes"
+      ]
+    },
+    "nodeReferenceKind": {
+      "type": "string",
+      "enum": [
+        "project",
+        "layer",
+        "component",
+        "endpoint",
+        "interface",
+        "method",
+        "member",
+        "type",
+        "external",
+        "unresolved"
+      ]
+    },
+    "evidenceStrength": {
+      "type": "string",
+      "enum": ["proven", "resolved", "inferred"]
+    },
+    "evidenceOrigin": {
+      "type": "string",
+      "enum": [
+        "declaration",
+        "registration",
+        "callSite",
+        "mappingOrAttribute",
+        "projectFile",
+        "configuration"
+      ]
+    },
+    "resolutionSemantics": {
+      "type": "string",
+      "enum": ["staticCandidate", "declaredBinding", "confirmed"]
+    },
+    "evidenceRule": {
+      "type": "string",
+      "enum": [
+        "projectReference",
+        "requestMarker",
+        "handlerMarker",
+        "validatorMarker",
+        "behaviorClosedBinding",
+        "behaviorOpenGenericRegistration",
+        "notificationMarker",
+        "notificationHandlerMarker",
+        "dbContextInheritance",
+        "entityDiscovery",
+        "endpointMapping",
+        "dispatchCallSite",
+        "publishCallSite",
+        "endpointDispatch",
+        "directDbContextReference",
+        "resolvedDbContextDependency",
+        "serviceDeclarationCandidate",
+        "serviceRegistrationBinding",
+        "serviceConfirmedBinding",
+        "injectedMemberInvocation",
+        "deepSliceDataAccess",
+        "entityNavigation",
+        "entityAnnotation",
+        "entityFluentConfiguration",
+        "controllerDiscovery",
+        "serviceDiscovery",
+        "repositoryDiscovery",
+        "controllerEndpointExposure",
+        "componentMemberInvocation",
+        "repositoryDataAccess",
+        "eventPublishCallSite",
+        "conventionRegistration",
+        "serviceLocatorCall",
+        "reflectionDiscovery",
+        "httpClientRegistration"
+      ]
+    },
+    "componentRole": {
+      "type": "string",
+      "enum": [
+        "request",
+        "handler",
+        "notification",
+        "notificationHandler",
+        "validator",
+        "behavior",
+        "dbContext",
+        "entity",
+        "endpoint",
+        "controller",
+        "service",
+        "repository"
+      ]
+    },
+    "unprovenItemKind": {
+      "type": "string",
+      "enum": [
+        "ambiguousLink",
+        "unresolvedContract",
+        "unresolvedEntity",
+        "unresolvedNavigation",
+        "unresolvedConfiguration",
+        "conventionRegistration",
+        "serviceLocator",
+        "dynamicReflection",
+        "unresolvedEventConsumer",
+        "unimplementedInterface"
+      ]
+    },
+    "unestablishedBehaviorReason": {
+      "type": "string",
+      "enum": [
+        "noRegistrationSite",
+        "assemblyScanningOrExternal",
+        "genericConstraintsNotEvaluated",
+        "closedFormUnknown"
+      ]
+    },
+    "spineNodeRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/nodeReferenceKind" },
+        "key": { "type": "string" },
+        "name": { "type": "string" },
+        "componentId": { "type": "string" },
+        "endpointId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "symbolId": { "type": "string" },
+        "member": { "type": "string" },
+        "reason": { "type": "string" }
+      }
+    },
+    "spineEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "origin", "strength"],
+      "properties": {
+        "rule": { "$ref": "#/$defs/evidenceRule" },
+        "origin": { "$ref": "#/$defs/evidenceOrigin" },
+        "strength": { "$ref": "#/$defs/evidenceStrength" },
+        "location": { "$ref": "#/$defs/location" },
+        "locationOmittedReason": { "type": "string" },
+        "via": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/spineNodeRef" }
+        },
+        "resolutionSemantics": { "$ref": "#/$defs/resolutionSemantics" },
+        "scopeProject": { "type": "string" },
+        "testProject": { "type": "boolean" },
+        "detail": { "type": "string" }
+      }
+    },
+    "spineRelation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "from", "to", "strength", "occurrenceCount", "occurrences"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/relationKind" },
+        "from": { "$ref": "#/$defs/spineNodeRef" },
+        "to": { "$ref": "#/$defs/spineNodeRef" },
+        "via": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/spineNodeRef" }
+        },
+        "method": { "type": "string", "minLength": 1 },
+        "strength": { "$ref": "#/$defs/evidenceStrength" },
+        "occurrenceCount": { "type": "integer", "minimum": 1 },
+        "occurrences": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/spineEvidence" }
+        }
+      }
+    },
+    "spineRoleEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "evidence"],
+      "properties": {
+        "role": { "$ref": "#/$defs/componentRole" },
+        "evidence": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/spineEvidence" }
+        }
+      }
+    },
+    "spineComponent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "fullName", "name", "roles"],
+      "properties": {
+        "id": { "type": "string" },
+        "fullName": { "type": "string" },
+        "name": { "type": "string" },
+        "project": { "type": "string", "minLength": 1 },
+        "location": { "$ref": "#/$defs/location" },
+        "roles": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/spineRoleEvidence" }
+        }
+      }
+    },
+    "spineEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "httpMethod",
+        "route",
+        "verbStrength",
+        "routeStrength",
+        "inferred"
+      ],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "httpMethod": { "type": "string" },
+        "route": { "type": "string" },
+        "verbStrength": { "$ref": "#/$defs/evidenceStrength" },
+        "routeStrength": { "$ref": "#/$defs/evidenceStrength" },
+        "inferred": { "type": "boolean" },
+        "project": { "type": "string", "minLength": 1 },
+        "location": { "$ref": "#/$defs/location" },
+        "evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/spineEvidence" }
+        }
+      }
+    },
+    "serviceCandidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "declaredInScan", "fromRegistration"],
+      "properties": {
+        "type": { "type": "string" },
+        "declaredInScan": { "type": "boolean" },
+        "fromRegistration": { "type": "boolean" },
+        "location": { "$ref": "#/$defs/location" },
+        "registrationLocation": { "$ref": "#/$defs/location" }
+      }
+    },
+    "ambiguousResolution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["interfaceSignature", "interfaceName", "candidates"],
+      "properties": {
+        "interfaceSignature": { "type": "string" },
+        "interfaceName": { "type": "string" },
+        "interfaceLocation": { "$ref": "#/$defs/location" },
+        "candidates": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/serviceCandidate" }
+        }
+      }
+    },
+    "unestablishedBehavior": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["behaviorName", "reason"],
+      "properties": {
+        "behaviorComponentId": { "type": "string" },
+        "behaviorName": { "type": "string" },
+        "reason": { "$ref": "#/$defs/unestablishedBehaviorReason" },
+        "registrationSite": { "type": "string", "minLength": 1 },
+        "project": { "type": "string", "minLength": 1 },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "unprovenDiagnostic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "code", "subject", "message"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/unprovenItemKind" },
+        "code": { "type": "string" },
+        "subject": { "type": "string" },
+        "message": { "type": "string" },
+        "project": { "type": "string", "minLength": 1 },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "unprovenPopulations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["totalCount"],
+      "properties": {
+        "totalCount": { "type": "integer", "minimum": 1 },
+        "unresolvedDispatches": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/unresolvedDispatch" }
+        },
+        "ambiguousResolutions": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/ambiguousResolution" }
+        },
+        "ambiguousLinks": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/unprovenDiagnostic" }
+        },
+        "unresolvedContracts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/unprovenDiagnostic" }
+        },
+        "unestablishedBehaviors": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/unestablishedBehavior" }
+        },
+        "observations": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/unprovenDiagnostic" }
+        }
+      }
+    }
+  }
+}

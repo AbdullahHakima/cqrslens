@@ -336,7 +336,7 @@ public class DeepSliceAndAgentTests
         Assert.Equal(ExitCodes.Success, exitCode);
         Assert.True(File.Exists(agentFile));
         var content = File.ReadAllText(agentFile);
-        Assert.Contains("# CqrsLens Agent Architecture Map", content);
+        Assert.Contains("# Noctua Agent Architecture Map", content);
         Assert.Contains("PingQuery", content);
         Assert.Contains("`Echo: string`", content);
     }

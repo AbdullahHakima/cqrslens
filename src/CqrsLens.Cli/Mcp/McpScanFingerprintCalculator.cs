@@ -75,7 +75,7 @@ internal static class McpScanFingerprintCalculator
                 ReturnSpecialDirectories = false,
             };
 
-            foreach (var name in new[] { "Directory.Build.props", "Directory.Build.targets", ".cqrslens.json" })
+            foreach (var name in new[] { "Directory.Build.props", "Directory.Build.targets", ".noctua.json", ".cqrslens.json" })
             {
                 foreach (var file in Directory.EnumerateFiles(fullRoot, name, discoveryOptions))
                 {

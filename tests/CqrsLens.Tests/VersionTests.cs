@@ -33,10 +33,10 @@ public class VersionTests
 
         Assert.Contains($"default: '{ToolInfo.Version}'", action);
         Assert.Contains("analysis:", action);
-        Assert.Contains("--analysis \"$CQRSLENS_ANALYSIS\"", action);
+        Assert.Contains("--analysis \"$NOCTUA_ANALYSIS\"", action);
         Assert.Contains("markers:", action);
         Assert.Contains("if: always()", action);
-        Assert.Contains($"AbdullahHakima/cqrslens@v{ToolInfo.Version}", readme);
+        Assert.Contains($"AbdullahHakima/noctua@v{ToolInfo.Version}", readme);
         Assert.Contains($"version: '{ToolInfo.Version}'", readme);
     }
 

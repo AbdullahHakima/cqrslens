@@ -1,6 +1,46 @@
 # Changelog
 
-All notable changes to CqrsLens are documented here.
+All notable changes to Noctua (formerly CqrsLens) are documented here.
+
+## [2.0.0] - 2026-11-16
+
+### Changed
+
+- **Renamed the NuGet package and CLI command from CqrsLens (`cqrslens`) to Noctua (`noctua`).**
+  `--version`, `--help`, report headings/footers, SARIF driver metadata, docs
+  exports, and MCP `serverInfo.name` now report `Noctua` / `noctua` at `2.0.0`.
+- **Primary configuration file moved to `.noctua.json` with permanent `.cqrslens.json` fallback.**
+  When both exist in a scan root, `.noctua.json` takes precedence and the CLI
+  prints a notice to stdout. Existing `1.x` artifacts remain compatible:
+  `schemaVersion: 1` JSON models, baseline files, `--diff` snapshots, MCP tool
+  names/outputs, and CI Action input/output/artifact/sticky-marker names stay
+  unchanged.
+- **Updated config schema (`noctua.schema.json`).** Replaced `cqrslens.schema.json`
+  with `noctua.schema.json`, adding the `intent` section and the five rule codes
+  missing from the previous schema (`UnreachableRequest`, `UnpublishedNotification`,
+  `C-BOUNDARY`, `C-SURFACE`, `C-INTENT-STALE`).
+
+### Added
+
+- **Public model schema and stability contract (`noctua.model.schema.json` and [`docs/model-schema.md`](docs/model-schema.md)).**
+  Published a draft `2020-12` JSON Schema covering all 22 required and 12
+  conditional top-level properties plus all 43 `$defs` (including the unified
+  `relations`, `components`, `spineEndpoints`, and `unproven` spine structures),
+  alongside the `schemaVersion: 1` additive-evolution compatibility policy.
+- **Unified evidence-backed architecture spine (`components`, `spineEndpoints`, `relations`, `unproven`).**
+  Every admitted component role (including multi-role components), HTTP endpoint,
+  and relation carries explicit structured evidence occurrences and strength,
+  with unresolved dispatches, ambiguous interface resolutions, and unestablished
+  pipeline behaviors surfaced in dedicated `unproven` buckets instead of being
+  guessed.
+- **Arc42 documentation export and CI freshness gate (`--export-docs`, `--check-docs`).**
+  Generates a structured multi-page Markdown architecture documentation tree plus
+  standalone `.svg` diagrams and fails non-zero when an exported docs directory
+  is stale or incomplete.
+- **Human-declared `intent` rules (`C-BOUNDARY`, `C-SURFACE`, `C-INTENT-STALE`, `ownership`).**
+  Declare logical modules, forbidden cross-module calls, public surface, and
+  team ownership in `.noctua.json` (`intent`), checked strictly read-only against
+  observed static evidence.
 
 ## [1.1.0] - 2026-11-13
 

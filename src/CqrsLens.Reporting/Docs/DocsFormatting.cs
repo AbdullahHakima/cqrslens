@@ -23,7 +23,7 @@ internal static class DocsFormatting
         Line(md);
         Line(
             md,
-            $"> Source: generated from the model, CqrsLens {ToolInfo.Version}, {generatedAt} · " +
+            $"> Source: generated from the model, Noctua {ToolInfo.Version}, {generatedAt} · " +
             $"root: {MarkdownEscaping.CodeSpan(rootName)}");
         Line(md);
     }

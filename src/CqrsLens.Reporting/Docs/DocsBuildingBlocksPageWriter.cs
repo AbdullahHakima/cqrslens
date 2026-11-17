@@ -327,7 +327,7 @@ internal static class DocsBuildingBlocksPageWriter
     {
         DocsFormatting.Line(md, "## Declared Intent");
         DocsFormatting.Line(md);
-        DocsFormatting.Line(md, "_Human-declared modules, boundaries, and ownership from `.cqrslens.json`. Ownership is never checked against static source evidence and is always labelled **declared, unverified**. Modules not referenced by any boundary rule have no checkable boundary consequence and are labelled **declared, unverified**._");
+        DocsFormatting.Line(md, "_Human-declared modules, boundaries, and ownership from `.noctua.json` (or legacy `.cqrslens.json`). Ownership is never checked against static source evidence and is always labelled **declared, unverified**. Modules not referenced by any boundary rule have no checkable boundary consequence and are labelled **declared, unverified**._");
         DocsFormatting.Line(md);
 
         var checkedModules = new HashSet<string>(StringComparer.Ordinal);

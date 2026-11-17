@@ -1,10 +1,12 @@
-# CqrsLens configuration
+# Noctua configuration
 
-CqrsLens looks for `.cqrslens.json` at the scan root:
+Noctua looks for `.noctua.json` at the scan root, and permanently falls back to
+`.cqrslens.json` when `.noctua.json` is absent. When both files exist at the
+scan root, `.noctua.json` takes precedence and the CLI prints a notice to stdout:
 
 ```bash
-cqrslens .                 # reads ./.cqrslens.json when present
-cqrslens src --config ci/cqrslens.json
+noctua .                 # reads ./.noctua.json (or ./.cqrslens.json) when present
+noctua src --config ci/noctua.json
 ```
 
 `--config` points at an explicit file (relative to the current directory). CLI
@@ -15,7 +17,7 @@ unknown key or invalid value fails with exit code `1` instead of being ignored.
 
 ```json
 {
-  "$schema": "https://raw.githubusercontent.com/AbdullahHakima/cqrslens/main/cqrslens.schema.json",
+  "$schema": "https://raw.githubusercontent.com/AbdullahHakima/noctua/main/noctua.schema.json",
   "analysis": "text",
   "render": "mermaid",
   "cqrsMapSplit": "count",
@@ -37,6 +39,18 @@ unknown key or invalid value fails with exit code `1` instead of being ignored.
     "LayerViolation": "error",
     "CommandWithoutValidator": "warning",
     "AmbiguousProjectName": "off"
+  },
+  "intent": {
+    "modules": {
+      "Ordering": { "projects": ["Contoso.Ordering"] },
+      "Billing": { "projects": ["Contoso.Billing"] }
+    },
+    "boundaries": [
+      { "from": "Billing", "to": "Ordering", "severity": "error" }
+    ],
+    "ownership": {
+      "Ordering": "Team Checkout"
+    }
   }
 }
 ```
@@ -55,6 +69,7 @@ unknown key or invalid value fails with exit code `1` instead of being ignored.
 | `exclude` | Root-relative globs removed after `include`. |
 | `layers` | Project-name to layer overrides; they replace the naming/folder classifier and feed the layer checks. |
 | `rules` | Per-rule severity: `off`, `warning`, or `error`. |
+| `intent` | Optional human-declared `modules` (non-glob `projects`/`components` selectors), `boundaries` (`from`/`to`/`severity`), `publicSurface` (`endpoints`/`components`/`severity`), and `ownership` (rendered as declared, unverified). |
 
 Glob patterns use `/` separators and are matched case-insensitively:
 
@@ -78,6 +93,9 @@ For example, `**/Generated/**` excludes generated source in every folder, while
 - `UnreachableRequest`
 - `UnpublishedNotification`
 - `AmbiguousProjectName`
+- `C-BOUNDARY`
+- `C-SURFACE`
+- `C-INTENT-STALE`
 
 Turning a rule `off` removes its findings from the report and from `--strict`
 evaluation. Promoting a rule to `error` makes `--strict` fail when that finding
@@ -113,10 +131,10 @@ is not in the scanned source, name it explicitly as a handler root:
 or on the command line:
 
 ```bash
-cqrslens . --markers ICommand,IQuery --handler-markers ICommandHandler,IQueryHandler
+noctua . --markers ICommand,IQuery --handler-markers ICommandHandler,IQueryHandler
 ```
 
-CqrsLens then reads the first generic argument as the request type, matching the
+Noctua then reads the first generic argument as the request type, matching the
 MediatR convention. Explicit configuration avoids guessing from a type name; the
 default scan is unchanged.
 

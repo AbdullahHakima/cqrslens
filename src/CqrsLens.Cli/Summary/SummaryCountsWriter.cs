@@ -7,7 +7,7 @@ internal static class SummaryCountsWriter
 {
     public static void Write(StringBuilder markdown, AnalysisResult result, ArchitectureDiff? diff)
     {
-        markdown.AppendLine("## CqrsLens architecture summary");
+        markdown.AppendLine("## Noctua architecture summary");
         markdown.AppendLine();
         markdown.AppendLine(
             $"Scanned **{result.Projects.Count}** project(s) with the " +

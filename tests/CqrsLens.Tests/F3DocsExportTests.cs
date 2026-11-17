@@ -88,7 +88,7 @@ public sealed class F3DocsExportTests : IDisposable
         {
             Assert.Contains(expectedPage, snapA.Keys);
             var text = File.ReadAllText(Path.Combine(pinnedA, expectedPage));
-            Assert.Contains($"> Source: generated from the model, CqrsLens {ToolInfo.Version}, 2026-01-01T00:00:00Z", text);
+            Assert.Contains($"> Source: generated from the model, Noctua {ToolInfo.Version}, 2026-01-01T00:00:00Z", text);
         }
 
         // Unpinned runs omit wall-clock timestamps and stay byte-identical across runs.

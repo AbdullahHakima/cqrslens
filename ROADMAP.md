@@ -1,9 +1,25 @@
-# CqrsLens Roadmap
+# Noctua Roadmap
 
 What is planned, in the order I expect to work on it. Issues are linked
 where they exist; the dates are not promises.
 
 ## Done
+
+**2.0.0** (November 2026)
+
+- **Noctua release**: renamed NuGet tool package (`Noctua`) and CLI (`noctua`),
+  switched primary config discovery to `.noctua.json` with permanent
+  `.cqrslens.json` fallback and `schemaVersion: 1` JSON/baseline/diff/MCP
+  compatibility
+- **Public model & config schemas**: published [`noctua.model.schema.json`](noctua.model.schema.json)
+  (draft `2020-12`), [`docs/model-schema.md`](docs/model-schema.md), and
+  [`noctua.schema.json`](noctua.schema.json) with full `intent` and rule support
+- **Unified architecture spine**: multi-role components, mapping-level HTTP
+  endpoints, evidenced relations, and separate fail-closed `unproven` buckets in
+  `ARCHITECTURE.json`
+- **Documentation export & intent layer**: `--export-docs` / `--check-docs`
+  arc42 Markdown + SVG tree and read-only `.noctua.json` `intent` checks
+  (`C-BOUNDARY`, `C-SURFACE`, `C-INTENT-STALE`, declared `ownership`)
 
 **1.1.0** (November 2026)
 

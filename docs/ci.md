@@ -1,6 +1,6 @@
 # CI integration
 
-CqrsLens can produce the human report, an architecture diff against a base scan,
+Noctua (formerly CqrsLens) can produce the human report, an architecture diff against a base scan,
 a sticky pull request comment, a SARIF file, GitHub Actions annotations, and a
 job summary in a single scan. The same switches work locally, so CI can be
 debugged with the installed tool.
@@ -16,14 +16,14 @@ permissions:
 steps:
   - uses: actions/checkout@v4
 
-  - uses: AbdullahHakima/cqrslens@v1.1.0
+  - uses: AbdullahHakima/noctua@v2.0.0
     with:
       path: src
       output: ARCHITECTURE.md
       format: md
       strict: 'true'
       baseline: cqrslens-baseline.json
-      config: .cqrslens.json
+      config: .noctua.json
       comment-pr: 'true'
       sarif-output: cqrslens-results.sarif
       upload-sarif: 'true'
@@ -47,7 +47,7 @@ update a sticky pull request comment marked with
 - You can also pass an explicit `diff-base` path (either a base `ARCHITECTURE.json`
   file or a base checkout folder) and `diff-output` path (defaults to
   `cqrslens-diff.md`).
-- Subsequent pushes to the same pull request update the existing CqrsLens comment
+- Subsequent pushes to the same pull request update the existing Noctua comment
   in place rather than creating duplicate comments.
 
 ### Inputs
@@ -63,7 +63,7 @@ update a sticky pull request comment marked with
 | `markers` | empty | Comma-separated custom request markers. |
 | `handler-markers` | empty | Comma-separated handler roots for external wrapper interfaces. |
 | `analysis` | empty | `text` or `roslyn`; empty uses config, then text. |
-| `config` | empty | `.cqrslens.json` path; empty auto-discovers at the scan root. |
+| `config` | empty | `.noctua.json` (or `.cqrslens.json`) path; empty auto-discovers at the scan root. |
 | `baseline` | empty | Baseline file for known/new matching. |
 | `diff-base` | empty | Base `ARCHITECTURE.json` file or folder to diff against; auto-scanned on PRs when `comment-pr: 'true'`. |
 | `diff-output` | empty | Diff report file path (`cqrslens-diff.md` when diffing is active, or `.json`). |
@@ -87,11 +87,11 @@ upload is disabled, so another tool can consume it.
 
 ```bash
 # Optional: export a base snapshot once (or pass a base checkout folder directly to --diff)
-cqrslens src -o base-architecture.json
+noctua src -o base-architecture.json
 
 # Scan current branch and emit report + diff + SARIF + summary + annotations
-cqrslens src \
-  --config .cqrslens.json \
+noctua src \
+  --config .noctua.json \
   --baseline cqrslens-baseline.json \
   --diff base-architecture.json \
   --diff-output cqrslens-diff.md \

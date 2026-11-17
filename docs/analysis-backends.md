@@ -1,6 +1,6 @@
 # Analysis backends
 
-CqrsLens has two separate jobs during a scan:
+Noctua has two separate jobs during a scan:
 
 1. find the source-level architecture shapes (requests, handlers, validators,
    behaviors and DbContexts);

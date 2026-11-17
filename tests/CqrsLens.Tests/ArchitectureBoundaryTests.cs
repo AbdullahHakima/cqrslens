@@ -68,8 +68,8 @@ public sealed class ArchitectureBoundaryTests
 
         Assert.Equal("cqrslens", properties["AssemblyName"]);
         Assert.Equal("true", properties["PackAsTool"]);
-        Assert.Equal("cqrslens", properties["ToolCommandName"]);
-        Assert.Equal("CqrsLens", properties["PackageId"]);
+        Assert.Equal("noctua", properties["ToolCommandName"]);
+        Assert.Equal("Noctua", properties["PackageId"]);
         Assert.Equal("README.md", properties["PackageReadmeFile"]);
         Assert.Equal("LatestMajor", properties["RollForward"]);
 

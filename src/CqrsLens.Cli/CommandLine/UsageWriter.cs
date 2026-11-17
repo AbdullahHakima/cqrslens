@@ -20,7 +20,7 @@ internal static class UsageWriter
 
         WriteLine(writer, $"NOCTUA {ToolInfo.Version} - see your MediatR codebase.", useColor, palette.Ink, bold: true);
         writer.WriteLine();
-        WriteLine(writer, "Usage: cqrslens <path> [options]", useColor, palette.Ink, bold: false);
+        WriteLine(writer, "Usage: noctua <path> [options]", useColor, palette.Ink, bold: false);
         writer.WriteLine();
 
         foreach (var (heading, entries) in Sections())
@@ -81,8 +81,8 @@ internal static class UsageWriter
                 ("--cqrs-map-split MODE",
                     "count (default), feature, or unsplit. Overrides the cqrsMapSplit config key."),
                 ("--config FILE",
-                    "Config file. Default: <path>/.cqrslens.json when present. Holds analysis, render, " +
-                    "watermark, markers, layers, and rules."),
+                    "Config file. Default: <path>/.noctua.json (or .cqrslens.json) when present. " +
+                    "Holds analysis, render, watermark, markers, layers, and rules."),
             }),
             ("Checks and CI", new[]
             {
