@@ -60,7 +60,7 @@ public static class HtmlReportGenerator
         }
         var checkErrors = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Error);
         var checkWarnings = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Warning);
-        AppendCard(html, "Architecture checks", $"{checkErrors} error(s), {checkWarnings} warning(s)");
+        AppendCard(html, "Architecture checks (errors / warnings)", $"{checkErrors} / {checkWarnings}");
         html.AppendLine("</section>");
 
         HtmlConfigurationSectionRenderer.Append(html, result);
