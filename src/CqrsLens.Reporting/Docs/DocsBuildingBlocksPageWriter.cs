@@ -71,6 +71,9 @@ internal static class DocsBuildingBlocksPageWriter
         WriteDiagramLinks(md, result, cqrsMapSplit);
         WriteRolesTable(md, components, endpoints);
         WriteRelationsSummary(md, relations, totalOccurrences);
+        var spineView = SpineReportView.Build(result);
+        MarkdownSpineWriter.WriteEndpointInventoryTable(md, spineView.Endpoints, lfOnly: true);
+        MarkdownSpineWriter.WriteComponentIndexTable(md, spineView.Components, lfOnly: true);
         WriteLayersTable(md, spine, components, endpoints);
         WriteComponentInventory(md, components, projectsById, outgoingCounts, incomingCounts);
         WriteUnprovenSummary(md, spine.Unproven);

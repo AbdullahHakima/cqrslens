@@ -88,6 +88,7 @@ public static class HtmlReportGenerator
                             "Infrastructure / Api / Web / UI); projects matching no convention are grouped by " +
                             "their top-level folder.</p>");
         }
+        HtmlSpineSectionRenderer.Append(html, result);
         HtmlDiagramSectionRenderer.AppendCqrs(html, result, renderMode, cqrsMapSplit);
         HtmlValidationCoverageSectionRenderer.Append(html, result);
         HtmlDiagramSectionRenderer.AppendFlow(html, result, renderMode);

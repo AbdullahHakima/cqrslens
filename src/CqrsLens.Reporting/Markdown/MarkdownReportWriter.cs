@@ -16,6 +16,7 @@ internal static class MarkdownReportWriter
         MarkdownConfigurationWriter.Write(md, result);
         MarkdownDiagramWriter.WriteProjectGraph(md, result);
         MarkdownDiagramWriter.WriteLayers(md, result);
+        MarkdownSpineWriter.Write(md, result);
         MarkdownCqrsWriter.Write(md, result, cqrsMapSplit);
         MarkdownValidationCoverageWriter.Write(md, result);
         MarkdownDiagramWriter.WriteFlow(md, result);
