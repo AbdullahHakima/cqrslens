@@ -27,8 +27,8 @@ internal static partial class MediatorLibraryDetector
     private static bool UsesMediator(IReadOnlyList<ProjectInfo> projects, IReadOnlyList<SourceFile> files)
         => projects.Any(p =>
                p.PackageReferences.Any(r =>
-                   r.Equals("Mediator.Abstractions", StringComparison.OrdinalIgnoreCase) ||
-                   r.Equals("Mediator.SourceGenerator", StringComparison.OrdinalIgnoreCase)) ||
+                   r.Equals("Mediator", StringComparison.OrdinalIgnoreCase) ||
+                   r.StartsWith("Mediator.", StringComparison.OrdinalIgnoreCase)) ||
                p.ProjectUsings.Any(u => u.Target == "Mediator")) ||
            files.Any(f => MediatorUsingRegex().IsMatch(f.Code));
 
