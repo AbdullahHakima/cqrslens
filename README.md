@@ -2,6 +2,8 @@
 
 **See your MediatR codebase: every command, its handler, and its validators — drawn.**
 
+**Website:** [https://noctua-map.pages.dev](https://noctua-map.pages.dev)
+
 CqrsLens is a .NET CLI tool that statically scans a solution, **without building it**,
 and generates an `ARCHITECTURE.md` report with Mermaid diagrams: your project dependency
 graph, your Clean Architecture layers, a full CQRS map (requests → handlers, validators),
