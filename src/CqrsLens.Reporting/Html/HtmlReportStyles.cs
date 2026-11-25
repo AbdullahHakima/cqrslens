@@ -8,7 +8,43 @@ internal static class HtmlReportStyles
         * { box-sizing: border-box; }
         body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
                background: #f6f7f9; color: #1c1e21; }
-        main { max-width: 1080px; margin: 0 auto; padding: 2rem 1.25rem 3rem; }
+        .portal-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 1.5rem;
+                        max-width: 1380px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; align-items: start; }
+        nav.toc { position: sticky; top: 1rem; background: #ffffff; border: 1px solid #d6d9de;
+                  border-radius: 10px; padding: .9rem 1rem; font-size: .88rem; }
+        .toc-title { font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em;
+                     color: #5a6068; margin-bottom: .5rem; }
+        nav.toc ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .35rem; }
+        nav.toc a { text-decoration: none; font-weight: 500; display: block; padding: .2rem .35rem; border-radius: 6px; }
+        nav.toc a:hover { background: #eef2ff; }
+        main { max-width: 1120px; width: 100%; min-width: 0; margin: 0; padding: 0; }
+        @media (max-width: 959px) {
+          .portal-shell { display: block; padding: 1rem .9rem 2.5rem; }
+          nav.toc { position: static; margin-bottom: 1.25rem; }
+          nav.toc ul { flex-direction: row; flex-wrap: wrap; gap: .35rem .55rem; }
+        }
+        .service-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: .85rem; margin: 1rem 0 1.25rem; }
+        .service-card { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; padding: .9rem 1rem;
+                        display: flex; flex-direction: column; gap: .55rem; }
+        .service-card-header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; flex-wrap: wrap; }
+        .role-pill { display: inline-block; padding: .15rem .55rem; border-radius: 999px; font-size: .74rem;
+                     font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+        .role-api { background: #eff6ff; color: #1e40af; border: 1px solid #93c5fd; }
+        .role-worker { background: #fff7ed; color: #9a3412; border: 1px solid #fdba74; }
+        .role-ui { background: #fdf4ff; color: #86198f; border: 1px solid #f0abfc; }
+        .role-orchestrator { background: #f5f3ff; color: #5b21b6; border: 1px solid #c4b5fd; }
+        .role-library, .role-tests { background: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; }
+        .tech-badges, .service-metrics { display: flex; flex-wrap: wrap; gap: .35rem; }
+        .tech-badge { font-size: .76rem; padding: .14rem .45rem; border-radius: 5px; background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; }
+        .start-here { font-size: .82rem; color: #475569; line-height: 1.5; word-break: break-word; }
+        details.portal-section { background: #ffffff; border: 1px solid #d6d9de; border-radius: 10px; margin: 1rem 0; overflow: hidden; }
+        summary.portal-summary { cursor: pointer; padding: .75rem 1rem; font-weight: 600; font-size: .96rem;
+                                 list-style: none; display: flex; align-items: center; gap: .5rem; background: #f8fafc; }
+        summary.portal-summary::-webkit-details-marker { display: none; }
+        summary.portal-summary::before { content: "▸"; color: #64748b; font-size: .85rem; }
+        details.portal-section[open] > summary.portal-summary::before { content: "▾"; }
+        .portal-body { padding: .85rem 1rem 1rem; border-top: 1px solid #e5e7eb; overflow-x: auto; }
+        .portal-body > h2:first-child { margin-top: .25rem; }
         h1 { font-size: 1.8rem; margin: 0 0 .25rem; }
         h2 { font-size: 1.25rem; margin: 2rem 0 .75rem; border-bottom: 1px solid #d6d9de; padding-bottom: .35rem; }
         h3 { font-size: 1.05rem; margin: 1.4rem 0 .5rem; }
@@ -99,7 +135,17 @@ internal static class HtmlReportStyles
         pre.ascii-watermark { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #38bdf8; border: 1px solid #312e81; border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .78rem; line-height: 1.15; overflow-x: auto; text-align: center; box-shadow: 0 4px 14px rgba(15, 23, 42, .12); }
         @media (prefers-color-scheme: dark) {
           body { background: #16181c; color: #e6e8eb; }
-          .card, table, pre.mermaid, .svg-diagram, details.explorer-item, .explorer-panel, .filter-pill, .explorer-search, .explorer-btn { background: #1f2227; border-color: #3a3e45; color: #e6e8eb; }
+          .card, table, pre.mermaid, .svg-diagram, details.explorer-item, .explorer-panel, .filter-pill, .explorer-search, .explorer-btn, nav.toc, .service-card, details.portal-section { background: #1f2227; border-color: #3a3e45; color: #e6e8eb; }
+          summary.portal-summary { background: #26292f; color: #e6e8eb; }
+          .portal-body { border-color: #3a3e45; }
+          nav.toc a:hover { background: #2b303b; }
+          .toc-title, .start-here { color: #9aa0a8; }
+          .tech-badge { background: #1e293b; color: #c7d2fe; border-color: #4338ca; }
+          .role-api { background: #1e3a8a; color: #dbeafe; border-color: #3b82f6; }
+          .role-worker { background: #7c2d12; color: #ffedd5; border-color: #f97316; }
+          .role-ui { background: #701a75; color: #fae8ff; border-color: #d946ef; }
+          .role-orchestrator { background: #4c1d95; color: #ede9fe; border-color: #8b5cf6; }
+          .role-library, .role-tests { background: #26292f; color: #cbd5e1; border-color: #475569; }
           .explorer-body { background: #181a1f; border-color: #3a3e45; }
           .meta-pill { background: #26292f; color: #cbd5e1; }
           .badge-command { background: #1e3a8a; color: #dbeafe; border-color: #3b82f6; }

@@ -31,6 +31,8 @@ public static class SarifReportGenerator
                 ("ApplicationLayerViolation", "Application dependency points to an outer layer", "error"),
             [ArchitectureChecker.CircularProjectDependencyCode] =
                 ("CircularProjectDependency", "Project reference cycle detected", "error"),
+            [ArchitectureChecker.CircularServiceDependencyCode] =
+                ("CircularServiceDependency", "Dependency cycle detected between scanned services", "warning"),
             [ArchitectureChecker.OrphanValidatorCode] =
                 ("OrphanValidator", "Validator target does not match any discovered CQRS request", "warning"),
             [ArchitectureChecker.OrphanNotificationCode] =

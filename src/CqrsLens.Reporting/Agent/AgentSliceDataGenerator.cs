@@ -43,15 +43,27 @@ internal static class AgentSliceDataGenerator
         var matched = new List<CqrsRequest>();
         var genericKindFilter = false;
 
+        var directCandidates = result.SystemEntrypoints
+            .Where(e => e.ExecutionStyle != SystemExecutionStyle.Cqrs)
+            .ToList();
+        var matchedDirectCount = 0;
+        var matchedDirect = new List<SystemEntrypointInfo>();
+
         if (filter is null)
         {
             matched.AddRange(result.Requests);
             matchedCount = matched.Count;
+            matchedDirect.AddRange(directCandidates);
+            matchedDirectCount = matchedDirect.Count;
         }
         else
         {
             var hasExactName = result.Requests.Any(r =>
-                string.Equals(r.Name, filter, StringComparison.OrdinalIgnoreCase));
+                string.Equals(r.Name, filter, StringComparison.OrdinalIgnoreCase)) ||
+                directCandidates.Any(e =>
+                    string.Equals(e.Name, filter, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(e.RouteOrTrigger, filter, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(e.DisplayLabel, filter, StringComparison.OrdinalIgnoreCase));
 
             if (GenericKindFilters.Contains(filter) && !hasExactName)
             {
@@ -72,6 +84,18 @@ internal static class AgentSliceDataGenerator
                 matchedCount = ranked.Count;
                 var limit = maxSlices > 0 ? Math.Min(maxSlices, MaxSliceLimit) : DefaultSliceLimit;
                 matched.AddRange(ranked.Take(limit).Select(hit => hit.Request));
+
+                var rankedDirect = directCandidates
+                    .Select(e => (Entrypoint: e, Score: ScoreEntrypoint(e, filter)))
+                    .Where(hit => hit.Score > 0)
+                    .OrderByDescending(hit => hit.Score)
+                    .ThenBy(hit => hit.Entrypoint.Name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(hit => hit.Entrypoint.RouteOrTrigger, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(hit => hit.Entrypoint.ProjectName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                matchedDirectCount = rankedDirect.Count;
+                matchedDirect.AddRange(rankedDirect.Take(limit).Select(hit => hit.Entrypoint));
             }
         }
 
@@ -79,8 +103,8 @@ internal static class AgentSliceDataGenerator
         {
             ["root"] = rootName,
             ["query"] = filter,
-            ["totalMatched"] = matchedCount,
-            ["shown"] = matched.Count,
+            ["totalMatched"] = matchedCount + matchedDirectCount,
+            ["shown"] = matched.Count + matchedDirect.Count,
         };
 
         if (genericKindFilter)
@@ -110,7 +134,43 @@ internal static class AgentSliceDataGenerator
         }
 
         root["slices"] = slices;
+        if (matchedDirect.Count > 0)
+        {
+            var directNodes = new JsonArray();
+            foreach (var ep in matchedDirect)
+                directNodes.Add(DirectEntrypointNode(ep));
+            root["directEntrypoints"] = directNodes;
+        }
         return root.ToJsonString();
+    }
+
+    private static JsonObject DirectEntrypointNode(SystemEntrypointInfo ep)
+    {
+        var node = new JsonObject
+        {
+            ["name"] = ep.Name,
+            ["kind"] = SystemViewFilter.KindLabel(ep.Kind),
+            ["executionStyle"] = SystemViewFilter.StyleLabel(ep.ExecutionStyle),
+            ["method"] = ep.Method,
+            ["routeOrTrigger"] = ep.RouteOrTrigger,
+            ["displayLabel"] = ep.DisplayLabel,
+            ["inferred"] = ep.IsInferred,
+        };
+        if (!string.IsNullOrEmpty(ep.ProjectName))
+            node["project"] = ep.ProjectName;
+        if (ep.Location is not null)
+            node["location"] = $"{ep.Location.File}:{ep.Location.Line}";
+        if (ep.CalledServices.Count > 0)
+            node["calledServices"] = StringArray(ep.CalledServices);
+        if (ep.TouchedDbContexts.Count > 0)
+            node["touchedDbContexts"] = StringArray(ep.TouchedDbContexts);
+        if (ep.TouchedEntities.Count > 0)
+            node["touchedEntities"] = StringArray(ep.TouchedEntities);
+        if (ep.PublishedMessages.Count > 0)
+            node["publishedMessages"] = StringArray(ep.PublishedMessages);
+        if (ep.TargetRequests.Count > 0)
+            node["targetRequests"] = StringArray(ep.TargetRequests);
+        return node;
     }
 
     private static JsonObject BuildBehaviors(IReadOnlyList<BehaviorInfo> behaviors)

@@ -24,17 +24,37 @@ internal static class ConsoleSummaryCardRenderer
         var errors = result.Checks.Count(check => check.Severity == CheckSeverity.Error);
         var warnings = result.Checks.Count - errors;
         var dot = glyphs.Separator;
+        var isZeroCqrsSystem = result.Requests.Count == 0 &&
+                               result.Handlers.Count == 0 &&
+                               result.Behaviors.Count == 0 &&
+                               (result.SystemEntrypoints.Count > 0 || result.ServiceProfiles.Count > 0);
 
-        var rows = new (string Label, string Value)[]
+        var rows = new List<(string Label, string Value)>
         {
             ("Projects", Count(result.Projects.Count)),
-            ("Requests (Commands / Queries)", Count(result.Requests.Count)),
-            ("Handlers", Count(result.Handlers.Count)),
-            ("Validators", Count(result.Validators.Count)),
-            ("Pipeline Behaviors", Count(result.Behaviors.Count)),
-            ("EF Core DbContexts", Count(result.DbContexts.Count)),
-            ($"Scanner {dot} Timing", $"{result.ScannerName} {dot} {result.ElapsedMilliseconds} ms"),
         };
+
+        if (result.ArchitectureStyles.Count > 0)
+            rows.Add(("Architecture Styles", string.Join(", ", result.ArchitectureStyles)));
+
+        if (isZeroCqrsSystem)
+        {
+            rows.Add(("System Entrypoints", Count(result.SystemEntrypoints.Count)));
+            rows.Add(("Integration Flows", Count(result.IntegrationFlows.Count)));
+            if (result.Validators.Count > 0)
+                rows.Add(("Validators", Count(result.Validators.Count)));
+            rows.Add(("EF Core DbContexts", Count(result.DbContexts.Count)));
+        }
+        else
+        {
+            rows.Add(("Requests (Commands / Queries)", Count(result.Requests.Count)));
+            rows.Add(("Handlers", Count(result.Handlers.Count)));
+            rows.Add(("Validators", Count(result.Validators.Count)));
+            rows.Add(("Pipeline Behaviors", Count(result.Behaviors.Count)));
+            rows.Add(("EF Core DbContexts", Count(result.DbContexts.Count)));
+        }
+
+        rows.Add(($"Scanner {dot} Timing", $"{result.ScannerName} {dot} {result.ElapsedMilliseconds} ms"));
 
         var (statusIcon, statusText, statusColor) = Status(errors, warnings, dot, palette, glyphs);
 

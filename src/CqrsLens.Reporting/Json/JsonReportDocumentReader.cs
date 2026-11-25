@@ -20,7 +20,7 @@ internal static class JsonReportDocumentReader
         JsonReportDocument? document;
         try
         {
-            var json = File.ReadAllText(path);
+            var json = BoundedFileReader.ReadAllText(path);
             if (string.IsNullOrWhiteSpace(json))
                 throw new DiffException($"diff file is empty: {path}");
             document = JsonSerializer.Deserialize<JsonReportDocument>(json, ReadOptions);
@@ -33,7 +33,7 @@ internal static class JsonReportDocumentReader
         {
             throw new DiffException($"invalid diff JSON '{path}': {ex.Message}");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             throw new DiffException($"could not read diff file '{path}': {ex.Message}");
         }

@@ -146,7 +146,7 @@ internal static class FindingsClustering
             Add(result.Validators.Select(v => (v.FullName, v.Name, v.Namespace, v.ProjectName)));
         }
 
-        private void Add(IEnumerable<(string Full, string Simple, string? Namespace, string? Project)> shapes)
+        private void Add(IEnumerable<(string Full, string Simple, string Namespace, string? Project)> shapes)
         {
             foreach (var (full, simple, ns, project) in shapes)
             {

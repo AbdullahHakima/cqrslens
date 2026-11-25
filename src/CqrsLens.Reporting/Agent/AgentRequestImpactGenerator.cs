@@ -343,6 +343,7 @@ internal static class AgentRequestImpactGenerator
         string From,
         string To,
         string? Via,
+        IReadOnlyList<string>? ViaChain,
         bool Resolved,
         SourceLocation? Location,
         string? Project);
@@ -361,16 +362,16 @@ internal static class AgentRequestImpactGenerator
         {
             if (edge.Kind == FlowEdgeKind.HandlerToDbContext && handlerNames.Contains(edge.From))
                 rows.Add(new DbContextEdgeRow(
-                    "handlerToDbContext", edge.From, edge.To, Via: null, Resolved: false, edge.Location, edge.ProjectName));
+                    "handlerToDbContext", edge.From, edge.To, Via: null, ViaChain: null, Resolved: false, edge.Location, edge.ProjectName));
         }
 
-        // Resolved through the service-resolution index: the interface is named so the
-        // hop is never mistaken for a direct reference.
+        // Resolved through the service-resolution index: the interface or hop chain is named
+        // so the hop is never mistaken for a direct reference.
         foreach (var edge in result.ResolvedEdges)
         {
             if (edge.Kind == FlowEdgeKind.HandlerToDbContextResolved && handlerNames.Contains(edge.From))
                 rows.Add(new DbContextEdgeRow(
-                    "handlerToDbContextResolved", edge.From, edge.To, edge.Via, Resolved: true, edge.Location, edge.ProjectName));
+                    "handlerToDbContextResolved", edge.From, edge.To, edge.Via, edge.ViaChain, Resolved: true, edge.Location, edge.ProjectName));
         }
 
         return rows
@@ -392,8 +393,11 @@ internal static class AgentRequestImpactGenerator
 
         foreach (var edge in edges)
         {
+            var viaDisplay = edge.ViaChain is { Count: > 1 }
+                ? string.Join(" -> ", edge.ViaChain)
+                : edge.Via;
             var resolved = edge.Resolved
-                ? $" (resolved through DI via `{edge.Via}`)"
+                ? $" (resolved through DI via `{viaDisplay}`)"
                 : "";
             sb.AppendLine($"- `{edge.Kind}` `{edge.From}` → `{edge.To}`{resolved}{FormatLoc(edge.Location)}" +
                           ProjectSuffix(edge.Project));

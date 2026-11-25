@@ -13,6 +13,48 @@ internal static class MarkdownChecksWriter
         md.AppendLine();
     }
 
+    /// <summary>
+    /// Concise Architecture Checks summary for <see cref="ReportViewMode.Overview"/>:
+    /// severity counts plus rule/module rollups without listing individual findings.
+    /// </summary>
+    internal static void WriteSummary(StringBuilder md, AnalysisResult result)
+    {
+        md.AppendLine("## Architecture Checks");
+        md.AppendLine();
+        if (result.Checks.Count == 0)
+        {
+            md.AppendLine("All checks passed.");
+            md.AppendLine();
+            return;
+        }
+
+        var newChecks = result.BaselineApplied
+            ? result.Checks.Where(c => !c.IsKnown).ToList()
+            : result.Checks;
+        var knownCount = result.BaselineApplied
+            ? result.Checks.Count(c => c.IsKnown)
+            : 0;
+
+        var errors = newChecks.Count(c => c.Severity == CheckSeverity.Error);
+        var warnings = newChecks.Count - errors;
+        md.AppendLine(result.BaselineApplied
+            ? $"{errors} new error(s), {warnings} new warning(s); {knownCount} known finding(s) from the baseline."
+            : $"{errors} error(s), {warnings} warning(s).");
+
+        if (newChecks.Count > 0)
+        {
+            var metrics = FindingsClustering.Analyze(newChecks, result);
+            md.AppendLine();
+            md.AppendLine($"**Findings summary:** {metrics.Total} finding(s) — " +
+                          $"{metrics.Errors} error(s), {metrics.Warnings} warning(s) across " +
+                          $"{metrics.ByModule.Count} module(s) and {metrics.Clusters.Count} cluster(s).");
+            md.AppendLine();
+            AppendRuleAndModuleTables(md, metrics);
+        }
+
+        md.AppendLine();
+    }
+
     internal static void AppendChecksMarkdown(
         StringBuilder md,
         IReadOnlyList<CheckFinding> checks,
@@ -83,21 +125,7 @@ internal static class MarkdownChecksWriter
                       $"{metrics.ByModule.Count} module(s) and {metrics.Clusters.Count} cluster(s).");
         md.AppendLine();
 
-        md.AppendLine("### Findings by rule");
-        md.AppendLine();
-        md.AppendLine("| Rule | Errors | Warnings | Total |");
-        md.AppendLine("| --- | ---: | ---: | ---: |");
-        foreach (var rule in metrics.ByRule)
-            md.AppendLine($"| {MarkdownEscaping.TableCell(rule.Code)} | {rule.Errors} | {rule.Warnings} | {rule.Total} |");
-        md.AppendLine();
-
-        md.AppendLine("### Findings by module");
-        md.AppendLine();
-        md.AppendLine("| Module | Errors | Warnings | Total |");
-        md.AppendLine("| --- | ---: | ---: | ---: |");
-        foreach (var module in metrics.ByModule)
-            md.AppendLine($"| {MarkdownEscaping.TableCell(module.Module)} | {module.Errors} | {module.Warnings} | {module.Total} |");
-        md.AppendLine();
+        AppendRuleAndModuleTables(md, metrics);
 
         md.AppendLine("### Findings by module and feature");
         md.AppendLine();
@@ -116,6 +144,25 @@ internal static class MarkdownChecksWriter
                           $"{MarkdownEscaping.TableCell(rules)} | " +
                           $"{cluster.Errors} | {cluster.Warnings} | {cluster.Total} |");
         }
+    }
+
+    private static void AppendRuleAndModuleTables(StringBuilder md, FindingsClustering.FindingsMetrics metrics)
+    {
+        md.AppendLine("### Findings by rule");
+        md.AppendLine();
+        md.AppendLine("| Rule | Errors | Warnings | Total |");
+        md.AppendLine("| --- | ---: | ---: | ---: |");
+        foreach (var rule in metrics.ByRule)
+            md.AppendLine($"| {MarkdownEscaping.TableCell(rule.Code)} | {rule.Errors} | {rule.Warnings} | {rule.Total} |");
+        md.AppendLine();
+
+        md.AppendLine("### Findings by module");
+        md.AppendLine();
+        md.AppendLine("| Module | Errors | Warnings | Total |");
+        md.AppendLine("| --- | ---: | ---: | ---: |");
+        foreach (var module in metrics.ByModule)
+            md.AppendLine($"| {MarkdownEscaping.TableCell(module.Module)} | {module.Errors} | {module.Warnings} | {module.Total} |");
+        md.AppendLine();
     }
 
     internal sealed record CheckFindingGroup(

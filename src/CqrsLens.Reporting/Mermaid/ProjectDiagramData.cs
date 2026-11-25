@@ -24,14 +24,27 @@ internal sealed class ProjectDiagramData
     public HashSet<(string Source, string Target)> Violations { get; }
 
     internal static ProjectDiagramData Create(AnalysisResult result)
+        => Create(result, null);
+
+    /// <summary>
+    /// Builds diagram data over <paramref name="projects"/> (a filtered subset of
+    /// <see cref="AnalysisResult.Projects"/>), or over every project when it is null.
+    /// References to projects outside the subset are not drawn.
+    /// </summary>
+    internal static ProjectDiagramData Create(AnalysisResult result, IReadOnlyList<ProjectInfo>? projects)
     {
-        var projects = OrderedProjects(result);
-        var projectsByName = UniqueProjectsByName(projects);
+        var ordered = projects is null
+            ? OrderedProjects(result)
+            : projects
+                .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(p => p.FilePath, StringComparer.Ordinal)
+                .ToList();
+        var projectsByName = UniqueProjectsByName(ordered);
         return new ProjectDiagramData(
-            projects,
-            ProjectLabels(result, projects),
+            ordered,
+            ProjectLabels(result, ordered),
             projectsByName,
-            ResolvedReferenceCount(projects, projectsByName),
+            ResolvedReferenceCount(ordered, projectsByName),
             LayerViolationPairs(result.Checks));
     }
 

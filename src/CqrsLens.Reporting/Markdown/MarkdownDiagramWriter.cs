@@ -5,11 +5,17 @@ namespace CqrsLens;
 /// <summary>Writes the project and layer dependency diagram sections.</summary>
 internal static class MarkdownDiagramWriter
 {
-    internal static void WriteProjectGraph(StringBuilder md, AnalysisResult result)
+    internal static void WriteProjectGraph(
+        StringBuilder md,
+        AnalysisResult result,
+        bool excludeTests = false,
+        string? focusService = null)
     {
         md.AppendLine("## Project Dependency Graph");
         md.AppendLine();
-        var projectGraph = DiagramBuilder.ProjectGraph(result);
+        var projectGraph = excludeTests || !string.IsNullOrWhiteSpace(focusService)
+            ? DiagramBuilder.ProjectGraph(result, excludeTests, focusService)
+            : DiagramBuilder.ProjectGraph(result);
         if (projectGraph is null)
         {
             md.AppendLine("_No projects found._");
@@ -31,11 +37,17 @@ internal static class MarkdownDiagramWriter
         md.AppendLine();
     }
 
-    internal static void WriteLayers(StringBuilder md, AnalysisResult result)
+    internal static void WriteLayers(
+        StringBuilder md,
+        AnalysisResult result,
+        bool excludeTests = false,
+        string? focusService = null)
     {
         md.AppendLine("## Layers");
         md.AppendLine();
-        var layerGraph = DiagramBuilder.LayerGraph(result);
+        var layerGraph = excludeTests || !string.IsNullOrWhiteSpace(focusService)
+            ? DiagramBuilder.LayerGraph(result, excludeTests, focusService)
+            : DiagramBuilder.LayerGraph(result);
         if (layerGraph is null)
         {
             md.AppendLine("_No projects found._");

@@ -109,6 +109,36 @@ internal static class HtmlDiagnosticsSectionRenderer
         }
     }
 
+    /// <summary>
+    /// Concise Architecture Checks summary for <see cref="ReportViewMode.Overview"/>:
+    /// severity totals and module/feature cluster rollups without individual finding lists.
+    /// </summary>
+    internal static void AppendChecksSummary(StringBuilder html, AnalysisResult result)
+    {
+        html.AppendLine("<h2>Architecture Checks</h2>");
+        if (result.Checks.Count == 0)
+        {
+            html.AppendLine("<p>All checks passed.</p>");
+            return;
+        }
+
+        var newChecks = result.BaselineApplied
+            ? result.Checks.Where(c => !c.IsKnown).ToList()
+            : result.Checks;
+        var knownCount = result.BaselineApplied
+            ? result.Checks.Count(c => c.IsKnown)
+            : 0;
+
+        var errors = newChecks.Count(c => c.Severity == CheckSeverity.Error);
+        var warnings = newChecks.Count - errors;
+        html.AppendLine(result.BaselineApplied
+            ? $"<p>{errors} new error(s), {warnings} new warning(s); {knownCount} known finding(s) from the baseline.</p>"
+            : $"<p>{errors} error(s), {warnings} warning(s):</p>");
+
+        if (newChecks.Count > 0)
+            HtmlFindingsClusterRenderer.Append(html, FindingsClustering.Analyze(newChecks, result));
+    }
+
     private static void AppendCheckGroup(
         StringBuilder html,
         MarkdownChecksWriter.CheckFindingGroup group,

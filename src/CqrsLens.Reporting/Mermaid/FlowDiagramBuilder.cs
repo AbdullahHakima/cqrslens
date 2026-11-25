@@ -182,7 +182,9 @@ internal static class FlowDiagramBuilder
         _ => "to",
     };
 
-    /// <summary>Edge label for a DI-resolved hop: names the interface it resolves through.</summary>
+    /// <summary>Edge label for a DI-resolved hop: names the interface or hop chain it resolves through.</summary>
     private static string ResolvedEdgeLabel(ResolvedEdge edge)
-        => $"resolved via {ShortTypeName(edge.Via)}";
+        => edge.ViaChain is { Count: > 1 }
+            ? $"resolved via {string.Join(" → ", edge.ViaChain.Select(n => ShortTypeName(n)))}"
+            : $"resolved via {ShortTypeName(edge.Via)}";
 }

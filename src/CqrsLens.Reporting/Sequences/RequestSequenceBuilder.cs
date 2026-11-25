@@ -288,7 +288,9 @@ internal static class RequestSequenceBuilder
                 foreach (var resolved in resolvedContexts)
                 {
                     var dsets = TouchedDbSets(resolved.To, handlerFull, contextsByFull, touchedByHandler);
-                    var via = MermaidDiagramText.ShortTypeName(resolved.Via);
+                    var via = resolved.ViaChain is { Count: > 1 }
+                        ? string.Join(" → ", resolved.ViaChain.Select(n => MermaidDiagramText.ShortTypeName(n)))
+                        : MermaidDiagramText.ShortTypeName(resolved.Via);
                     var text = dsets.Count == 0
                         ? $"uses via {via}"
                         : $"uses {string.Join(", ", dsets)} via {via}";
@@ -385,10 +387,10 @@ internal static class RequestSequenceBuilder
     /// </summary>
     private static string Sanitize(string? value)
     {
-        var escaped = MermaidDiagramText.MermaidLabel(value);
-        var sb = new StringBuilder(escaped.Length);
-        foreach (var c in escaped)
-            sb.Append(c == ';' ? ',' : c);
-        return sb.ToString().Trim();
+        if (string.IsNullOrEmpty(value))
+            return "";
+        // Neutralize statement semicolons before MermaidLabel introduces `#...;` entities.
+        var noSemicolons = value.Replace(';', ',');
+        return MermaidDiagramText.MermaidLabel(noSemicolons).Trim();
     }
 }

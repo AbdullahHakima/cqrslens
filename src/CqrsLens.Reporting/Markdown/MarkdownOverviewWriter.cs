@@ -26,20 +26,45 @@ internal static class MarkdownOverviewWriter
             md.AppendLine();
         }
 
+        var isZeroCqrsSystem = result.Requests.Count == 0 &&
+                               result.Handlers.Count == 0 &&
+                               result.Behaviors.Count == 0 &&
+                               result.SystemEntrypoints.Count > 0;
+
         md.AppendLine("## Overview");
         md.AppendLine();
         md.AppendLine("| Metric | Count |");
         md.AppendLine("| --- | ---: |");
         md.AppendLine($"| Projects | {result.Projects.Count} |");
-        md.AppendLine($"| Requests (commands + queries) | {result.Requests.Count} |");
-        md.AppendLine($"| Handlers | {result.Handlers.Count} |");
-        md.AppendLine($"| Validators | {result.Validators.Count} |");
-        md.AppendLine($"| Pipeline behaviors | {result.Behaviors.Count} |");
-        md.AppendLine($"| DbContexts | {result.DbContexts.Count} |");
+        if (result.ArchitectureStyles.Count > 0)
+        {
+            md.AppendLine($"| Architecture styles | {MarkdownEscaping.TableCell(string.Join(", ", result.ArchitectureStyles))} |");
+        }
+        if (isZeroCqrsSystem)
+        {
+            md.AppendLine($"| System entrypoints | {result.SystemEntrypoints.Count} |");
+            md.AppendLine($"| Integration flows | {result.IntegrationFlows.Count} |");
+            if (result.Validators.Count > 0)
+                md.AppendLine($"| Validators | {result.Validators.Count} |");
+            md.AppendLine($"| DbContexts | {result.DbContexts.Count} |");
+        }
+        else
+        {
+            md.AppendLine($"| Requests (commands + queries) | {result.Requests.Count} |");
+            md.AppendLine($"| Handlers | {result.Handlers.Count} |");
+            md.AppendLine($"| Validators | {result.Validators.Count} |");
+            md.AppendLine($"| Pipeline behaviors | {result.Behaviors.Count} |");
+            md.AppendLine($"| DbContexts | {result.DbContexts.Count} |");
+        }
         if (result.Notifications.Count > 0 || result.NotificationHandlers.Count > 0)
         {
             md.AppendLine($"| Notifications (domain events) | {result.Notifications.Count} |");
             md.AppendLine($"| Notification handlers | {result.NotificationHandlers.Count} |");
+        }
+        if (!isZeroCqrsSystem && (result.SystemEntrypoints.Count > 0 || result.IntegrationFlows.Count > 0))
+        {
+            md.AppendLine($"| System entrypoints | {result.SystemEntrypoints.Count} |");
+            md.AppendLine($"| Integration flows | {result.IntegrationFlows.Count} |");
         }
         var checkErrors = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Error);
         var checkWarnings = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Warning);

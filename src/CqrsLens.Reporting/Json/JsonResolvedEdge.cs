@@ -13,8 +13,12 @@ internal sealed class JsonResolvedEdge
 
     public string From { get; set; } = "";
 
-    /// <summary>Full name of the interface the hop resolves through.</summary>
+    /// <summary>Full name of the interface or initial service the hop resolves through.</summary>
     public string Via { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? ViaChain { get; set; }
 
     public string To { get; set; } = "";
     public string? Project { get; set; }

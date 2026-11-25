@@ -2,28 +2,69 @@ using System.Text;
 
 namespace CqrsLens;
 
-/// <summary>Composes the full Markdown architecture report.</summary>
+/// <summary>Composes the Markdown architecture report (full or executive overview).</summary>
 internal static class MarkdownReportWriter
 {
     internal static string Generate(AnalysisResult result)
-        => Generate(result, CqrsMapSplitMode.Count);
+        => Generate(result, CqrsMapSplitMode.Count, ReportViewMode.Full, focusService: null, excludeTests: false);
 
     internal static string Generate(AnalysisResult result, CqrsMapSplitMode cqrsMapSplit)
+        => Generate(result, cqrsMapSplit, ReportViewMode.Full, focusService: null, excludeTests: false);
+
+    internal static string Generate(
+        AnalysisResult result,
+        CqrsMapSplitMode cqrsMapSplit,
+        ReportViewMode viewMode,
+        string? focusService,
+        bool excludeTests)
     {
+        ArgumentNullException.ThrowIfNull(result);
         var md = new StringBuilder();
+        var isZeroCqrsSystem = result.Requests.Count == 0 &&
+                               result.Handlers.Count == 0 &&
+                               result.Behaviors.Count == 0 &&
+                               result.SystemEntrypoints.Count > 0;
+
+        if (viewMode == ReportViewMode.Overview)
+        {
+            MarkdownOverviewWriter.Write(md, result);
+            SystemOverviewMarkdownWriter.Write(md, result, focusService, excludeTests);
+            if (isZeroCqrsSystem)
+            {
+                MarkdownDirectFlowWriter.Write(md, result, focusService, excludeTests);
+                MarkdownDirectSequenceWriter.Write(md, result, focusService, excludeTests, "Operation Sequences");
+            }
+            MarkdownChecksWriter.WriteSummary(md, result);
+            WriteFooter(md, result);
+            return md.ToString();
+        }
 
         MarkdownOverviewWriter.Write(md, result);
         MarkdownConfigurationWriter.Write(md, result);
-        MarkdownDiagramWriter.WriteProjectGraph(md, result);
-        MarkdownDiagramWriter.WriteLayers(md, result);
-        MarkdownCqrsWriter.Write(md, result, cqrsMapSplit);
-        MarkdownValidationCoverageWriter.Write(md, result);
-        MarkdownDiagramWriter.WriteFlow(md, result);
-        MarkdownSequenceWriter.Write(md, result);
-        MarkdownEndpointWriter.Write(md, result);
-        MarkdownCqrsWriter.WriteRequestsTable(md, result);
+        SystemOverviewMarkdownWriter.Write(md, result, focusService, excludeTests);
+        MarkdownDiagramWriter.WriteProjectGraph(md, result, excludeTests, focusService);
+        MarkdownDiagramWriter.WriteLayers(md, result, excludeTests, focusService);
+
+        if (isZeroCqrsSystem)
+        {
+            MarkdownDirectFlowWriter.Write(md, result, focusService, excludeTests);
+            MarkdownDirectSequenceWriter.Write(md, result, focusService, excludeTests, "Operation Sequences");
+        }
+        else
+        {
+            MarkdownCqrsWriter.Write(md, result, cqrsMapSplit);
+            MarkdownValidationCoverageWriter.Write(md, result);
+            MarkdownDiagramWriter.WriteFlow(md, result);
+            MarkdownDirectFlowWriter.Write(md, result, focusService, excludeTests);
+            MarkdownSequenceWriter.Write(md, result);
+            MarkdownDirectSequenceWriter.Write(md, result, focusService, excludeTests, "Direct Operation Sequences");
+            MarkdownEndpointWriter.Write(md, result);
+            MarkdownCqrsWriter.WriteRequestsTable(md, result);
+        }
+
         MarkdownNotificationWriter.Write(md, result);
-        MarkdownBehaviorWriter.Write(md, result);
+        if (!isZeroCqrsSystem)
+            MarkdownBehaviorWriter.Write(md, result);
         MarkdownDbContextWriter.Write(md, result);
         MarkdownDiagnosticsWriter.WriteScanDiagnostics(md, result);
         MarkdownDiagnosticsWriter.WriteAnalysisDiagnostics(md, result);

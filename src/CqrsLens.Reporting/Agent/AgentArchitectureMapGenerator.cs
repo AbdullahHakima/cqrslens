@@ -57,17 +57,28 @@ internal static class AgentArchitectureMapGenerator
 
         var matchedCount = 0;
         var matchedRequests = new List<CqrsRequest>();
+        var directCandidates = result.SystemEntrypoints
+            .Where(e => e.ExecutionStyle != SystemExecutionStyle.Cqrs)
+            .ToList();
+        var matchedDirectCount = 0;
+        var matchedDirect = new List<SystemEntrypointInfo>();
         var genericKindFilter = false;
 
         if (filter is null)
         {
             matchedRequests.AddRange(result.Requests);
             matchedCount = matchedRequests.Count;
+            matchedDirect.AddRange(directCandidates.Take(200));
+            matchedDirectCount = directCandidates.Count;
         }
         else
         {
             var hasExactName = result.Requests.Any(r =>
-                string.Equals(r.Name, filter, StringComparison.OrdinalIgnoreCase));
+                string.Equals(r.Name, filter, StringComparison.OrdinalIgnoreCase)) ||
+                directCandidates.Any(e =>
+                    string.Equals(e.Name, filter, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(e.RouteOrTrigger, filter, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(e.DisplayLabel, filter, StringComparison.OrdinalIgnoreCase));
 
             if (GenericKindFilters.Contains(filter) && !hasExactName)
             {
@@ -90,63 +101,122 @@ internal static class AgentArchitectureMapGenerator
                 matchedCount = ranked.Count;
                 var limit = maxSlices > 0 ? Math.Min(maxSlices, MaxSliceLimit) : DefaultSliceLimit;
                 matchedRequests.AddRange(ranked.Take(limit).Select(hit => hit.Request));
+
+                var rankedDirect = directCandidates
+                    .Select(e => (Entrypoint: e, Score: ScoreEntrypoint(e, filter)))
+                    .Where(hit => hit.Score > 0)
+                    .OrderByDescending(hit => hit.Score)
+                    .ThenBy(hit => hit.Entrypoint.Name, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(hit => hit.Entrypoint.RouteOrTrigger, StringComparer.OrdinalIgnoreCase)
+                    .ThenBy(hit => hit.Entrypoint.ProjectName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                matchedDirectCount = rankedDirect.Count;
+                matchedDirect.AddRange(rankedDirect.Take(limit).Select(hit => hit.Entrypoint));
             }
         }
 
-        sb.AppendLine(filter is null
-            ? $"## End-to-End Vertical Slices ({matchedRequests.Count})"
-            : $"## Matched Vertical Slices (showing {matchedRequests.Count} of {matchedCount})");
-        sb.AppendLine();
-
+        var showCqrsSection = matchedRequests.Count > 0 || matchedDirect.Count == 0;
         var outputTruncated = false;
-        if (matchedRequests.Count == 0)
+        var sliceBudgetUsed = 0;
+
+        if (showCqrsSection)
         {
             sb.AppendLine(filter is null
-                ? "_No CQRS requests discovered._"
-                : genericKindFilter
-                    ? $"_`{filter}` names a CQRS kind, not a slice. Search by a domain noun or exact request name (for example `CreateOrder` or `Order`)._"
-                    : $"_No vertical slices matched filter `{filter}`._");
+                ? $"## End-to-End Vertical Slices ({matchedRequests.Count})"
+                : $"## Matched Vertical Slices (showing {matchedRequests.Count} of {matchedCount})");
             sb.AppendLine();
+
+            if (matchedRequests.Count == 0)
+            {
+                sb.AppendLine(filter is null
+                    ? "_No CQRS requests discovered._"
+                    : genericKindFilter
+                        ? $"_`{filter}` names a CQRS kind, not a slice. Search by a domain noun or exact request name (for example `CreateOrder` or `Order`)._"
+                        : $"_No vertical slices matched filter `{filter}`._");
+                sb.AppendLine();
+            }
+            else
+            {
+                var sliceText = new StringBuilder();
+                foreach (var r in matchedRequests)
+                {
+                    var one = new StringBuilder();
+                    AppendSlice(
+                        one,
+                        r,
+                        endpointsByRequest,
+                        handlersByFull,
+                        handlersBySimple,
+                        validatorsByFull,
+                        validatorsBySimple,
+                        notificationsByFull,
+                        notificationsBySimple,
+                        notifHandlersByFull,
+                        notifHandlersBySimple,
+                        allowSimpleNameEndpointFallback: !duplicateRequestNames.Contains(r.Name));
+
+                    // Keep a single trace under roughly 4k tokens even when a payload or handler
+                    // dependency list is unusually large. Full (unfiltered) reports are not capped.
+                    if (filter is not null && sliceText.Length > 0 && sliceText.Length + one.Length > MaxTraceCharacters)
+                    {
+                        outputTruncated = true;
+                        break;
+                    }
+
+                    sliceText.Append(one);
+                }
+
+                sliceBudgetUsed = sliceText.Length;
+                sb.Append(sliceText);
+
+                var hiddenByLimit = matchedCount - matchedRequests.Count;
+                if (hiddenByLimit > 0)
+                    sb.AppendLine($"_+{hiddenByLimit} more slice(s) matched — refine the query or raise `limit` (max {MaxSliceLimit})._");
+                if (outputTruncated)
+                    sb.AppendLine("_Output capped to stay inside the agent context budget; narrow the query to see later slices._");
+                if (hiddenByLimit > 0 || outputTruncated)
+                    sb.AppendLine();
+            }
         }
-        else
+
+        if (matchedDirect.Count > 0)
         {
-            var sliceText = new StringBuilder();
-            foreach (var r in matchedRequests)
+            if (matchedRequests.Count == 0 && filter is not null)
+            {
+                sb.AppendLine($"## Matched Operations (showing {matchedDirect.Count} of {matchedDirectCount})");
+                sb.AppendLine();
+            }
+
+            sb.AppendLine(filter is null
+                ? $"### Direct Operations & Non-CQRS Entrypoints ({matchedDirectCount})"
+                : $"### Direct Operations & Non-CQRS Entrypoints (showing {matchedDirect.Count} of {matchedDirectCount})");
+            sb.AppendLine();
+
+            var directText = new StringBuilder();
+            var directTruncated = false;
+            foreach (var ep in matchedDirect)
             {
                 var one = new StringBuilder();
-                AppendSlice(
-                    one,
-                    r,
-                    endpointsByRequest,
-                    handlersByFull,
-                    handlersBySimple,
-                    validatorsByFull,
-                    validatorsBySimple,
-                    notificationsByFull,
-                    notificationsBySimple,
-                    notifHandlersByFull,
-                    notifHandlersBySimple,
-                    allowSimpleNameEndpointFallback: !duplicateRequestNames.Contains(r.Name));
-
-                // Keep a single trace under roughly 4k tokens even when a payload or handler
-                // dependency list is unusually large. Full (unfiltered) reports are not capped.
-                if (filter is not null && sliceText.Length > 0 && sliceText.Length + one.Length > MaxTraceCharacters)
+                AppendDirectEntrypoint(one, ep);
+                if (filter is not null && (sliceBudgetUsed > 0 || directText.Length > 0) &&
+                    sliceBudgetUsed + directText.Length + one.Length > MaxTraceCharacters)
                 {
-                    outputTruncated = true;
+                    directTruncated = true;
                     break;
                 }
 
-                sliceText.Append(one);
+                directText.Append(one);
             }
 
-            sb.Append(sliceText);
+            sb.Append(directText);
 
-            var hiddenByLimit = matchedCount - matchedRequests.Count;
-            if (hiddenByLimit > 0)
-                sb.AppendLine($"_+{hiddenByLimit} more slice(s) matched — refine the query or raise `limit` (max {MaxSliceLimit})._");
-            if (outputTruncated)
-                sb.AppendLine("_Output capped to stay inside the agent context budget; narrow the query to see later slices._");
-            if (hiddenByLimit > 0 || outputTruncated)
+            var hiddenDirect = matchedDirectCount - matchedDirect.Count;
+            if (hiddenDirect > 0)
+                sb.AppendLine($"_+{hiddenDirect} more direct operation(s) matched — refine the query or raise `limit` (max {MaxSliceLimit})._");
+            if (directTruncated)
+                sb.AppendLine("_Direct operations output capped to stay inside the agent context budget; narrow the query to see later operations._");
+            if (hiddenDirect > 0 || directTruncated)
                 sb.AppendLine();
         }
 
@@ -181,7 +251,12 @@ internal static class AgentArchitectureMapGenerator
         // Data Model section
         if (result.DbContexts.Count > 0)
         {
-            AppendDataModelSummary(sb, result, filter, matchedRequests);
+            AppendDataModelSummary(
+                sb,
+                result,
+                filter,
+                matchedRequests,
+                extraTouchedEntities: matchedDirect.SelectMany(e => e.TouchedEntities));
         }
 
         // Architecture Checks

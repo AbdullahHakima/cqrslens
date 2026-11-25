@@ -116,4 +116,39 @@ internal static class AgentSliceWriter
 
         sb.AppendLine();
     }
+
+    internal static void AppendDirectEntrypoint(StringBuilder sb, SystemEntrypointInfo ep)
+    {
+        var kind = SystemViewFilter.KindLabel(ep.Kind);
+        var style = SystemViewFilter.StyleLabel(ep.ExecutionStyle);
+        var inferred = ep.IsInferred ? " _(inferred)_" : "";
+        sb.AppendLine($"#### [{kind} / {style}] `{ep.DisplayLabel}` (`{ep.Name}`){inferred}");
+
+        var projLabel = string.IsNullOrEmpty(ep.ProjectName) ? "" : $" [Project: `{ep.ProjectName}`]";
+        var trigger = string.IsNullOrEmpty(ep.RouteOrTrigger) ? ep.Name : ep.RouteOrTrigger;
+        sb.AppendLine($"- **Target**: `{trigger}`{FormatLoc(ep.Location)}{projLabel}");
+
+        if (ep.CalledServices.Count > 0)
+        {
+            sb.AppendLine($"- **Called Services**: {JoinLimited(ep.CalledServices, MaxListItems, s => $"`{CSharpScanner.SimpleName(s)}`")}");
+        }
+        if (ep.TouchedDbContexts.Count > 0)
+        {
+            sb.AppendLine($"- **Touches DbContexts**: {JoinLimited(ep.TouchedDbContexts, MaxListItems, c => $"`{CSharpScanner.SimpleName(c)}`")}");
+        }
+        if (ep.TouchedEntities.Count > 0)
+        {
+            sb.AppendLine($"- **Touches DbSets / Entities**: {JoinLimited(ep.TouchedEntities, MaxListItems, e => $"`{e}`")}");
+        }
+        if (ep.PublishedMessages.Count > 0)
+        {
+            sb.AppendLine($"- **Publishes Events**: {JoinLimited(ep.PublishedMessages, MaxListItems, m => $"`{CSharpScanner.SimpleName(m)}`")}");
+        }
+        if (ep.TargetRequests.Count > 0)
+        {
+            sb.AppendLine($"- **Dispatches Requests**: {JoinLimited(ep.TargetRequests, MaxListItems, r => $"`{CSharpScanner.SimpleName(r)}`")}");
+        }
+
+        sb.AppendLine();
+    }
 }

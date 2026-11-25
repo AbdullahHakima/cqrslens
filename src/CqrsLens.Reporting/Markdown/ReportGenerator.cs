@@ -34,6 +34,20 @@ public static class ReportGenerator
     public static string Generate(AnalysisResult result, CqrsMapSplitMode cqrsMapSplit)
         => MarkdownReportWriter.Generate(result, cqrsMapSplit);
 
+    /// <summary>
+    /// Generates the Markdown report in the requested <paramref name="viewMode"/>
+    /// (<see cref="ReportViewMode.Full"/> or concise <see cref="ReportViewMode.Overview"/>),
+    /// optionally focusing on a service (<paramref name="focusService"/>) and/or excluding
+    /// test projects (<paramref name="excludeTests"/>).
+    /// </summary>
+    public static string Generate(
+        AnalysisResult result,
+        CqrsMapSplitMode cqrsMapSplit = CqrsMapSplitMode.Count,
+        ReportViewMode viewMode = ReportViewMode.Full,
+        string? focusService = null,
+        bool excludeTests = false)
+        => MarkdownReportWriter.Generate(result, cqrsMapSplit, viewMode, focusService, excludeTests);
+
     internal static void AppendDiagnosticsMarkdown(
         StringBuilder md,
         IReadOnlyList<AnalysisDiagnostic> diagnostics)

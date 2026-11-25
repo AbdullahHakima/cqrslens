@@ -12,4 +12,5 @@ internal enum ClaimSubjectKind
     Entity,
     Project,
     Notification,
+    Entrypoint,
 }

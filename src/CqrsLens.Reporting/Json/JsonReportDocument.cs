@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace CqrsLens;
 
 internal sealed class JsonReportDocument
@@ -12,6 +14,10 @@ internal sealed class JsonReportDocument
     public int FileCount { get; set; }
     public string? Watermark { get; set; }
     public List<string>? Conventions { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? ArchitectureStyles { get; set; }
+
     public bool BaselineApplied { get; set; }
     public bool CanRunStrictChecks { get; set; }
     public JsonSummary Summary { get; set; } = new();
@@ -45,4 +51,13 @@ internal sealed class JsonReportDocument
 
     public List<JsonDispatchCallSite>? DispatchCallSites { get; set; }
     public List<JsonUnresolvedDispatch>? UnresolvedDispatches { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<JsonSystemEntrypoint>? SystemEntrypoints { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<JsonIntegrationFlow>? IntegrationFlows { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<JsonServiceProfile>? ServiceProfiles { get; set; }
 }

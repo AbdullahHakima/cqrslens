@@ -27,6 +27,7 @@ internal static class JsonReportDocumentFactory
             RootName = rootName,
             Watermark = result.Watermark,
             Conventions = result.Conventions.Count > 0 ? result.Conventions.ToList() : null,
+            ArchitectureStyles = result.ArchitectureStyles.Count > 0 ? result.ArchitectureStyles.ToList() : null,
             DiscoveredFileCount = result.DiscoveredFileCount,
             FileCount = result.FileCount,
             BaselineApplied = result.BaselineApplied,
@@ -286,6 +287,7 @@ internal static class JsonReportDocumentFactory
                         Kind = ResolvedEdgeKindName(e.Kind),
                         From = e.From,
                         Via = e.Via,
+                        ViaChain = e.ViaChain is { Count: > 1 } ? e.ViaChain.ToList() : null,
                         To = e.To,
                         Project = e.ProjectName,
                         Location = ToJsonLocation(e.Location),
@@ -330,6 +332,59 @@ internal static class JsonReportDocumentFactory
                     })
                     .ToList()
                 : null,
+            SystemEntrypoints = result.SystemEntrypoints.Count > 0
+                ? result.SystemEntrypoints
+                    .Select(e => new JsonSystemEntrypoint
+                    {
+                        Name = e.Name,
+                        Kind = SystemEntrypointKindName(e.Kind),
+                        ExecutionStyle = SystemExecutionStyleName(e.ExecutionStyle),
+                        Method = e.Method,
+                        RouteOrTrigger = e.RouteOrTrigger,
+                        Project = e.ProjectName,
+                        Inferred = e.IsInferred,
+                        TargetRequests = e.TargetRequests.Count > 0 ? e.TargetRequests.ToList() : null,
+                        CalledServices = e.CalledServices.Count > 0 ? e.CalledServices.ToList() : null,
+                        TouchedDbContexts = e.TouchedDbContexts.Count > 0 ? e.TouchedDbContexts.ToList() : null,
+                        TouchedEntities = e.TouchedEntities.Count > 0 ? e.TouchedEntities.ToList() : null,
+                        PublishedMessages = e.PublishedMessages.Count > 0 ? e.PublishedMessages.ToList() : null,
+                        Location = ToJsonLocation(e.Location),
+                    })
+                    .ToList()
+                : null,
+            IntegrationFlows = result.IntegrationFlows.Count > 0
+                ? result.IntegrationFlows
+                    .Select(f => new JsonIntegrationFlow
+                    {
+                        Kind = IntegrationFlowKindName(f.Kind),
+                        FromProject = f.FromProject,
+                        ToProject = f.ToProject,
+                        Label = f.Label,
+                        MessageType = EmptyToNull(f.MessageType),
+                        Location = ToJsonLocation(f.Location),
+                    })
+                    .ToList()
+                : null,
+            ServiceProfiles = result.ServiceProfiles.Count > 0
+                ? result.ServiceProfiles
+                    .Select(p => new JsonServiceProfile
+                    {
+                        ProjectName = p.ProjectName,
+                        Layer = p.Layer,
+                        RuntimeRole = ServiceRuntimeRoleName(p.RuntimeRole),
+                        Technologies = p.Technologies.ToList(),
+                        EntryFiles = p.EntryFiles.ToList(),
+                        HttpEndpointCount = p.HttpEndpointCount,
+                        GrpcEndpointCount = p.GrpcEndpointCount,
+                        WorkerCount = p.WorkerCount,
+                        MessageConsumerCount = p.MessageConsumerCount,
+                        RequestCount = p.RequestCount,
+                        DbContextCount = p.DbContextCount,
+                        PublishedEventCount = p.PublishedEventCount,
+                        ConsumedEventCount = p.ConsumedEventCount,
+                    })
+                    .ToList()
+                : null,
         };
     }
 
@@ -346,6 +401,47 @@ internal static class JsonReportDocumentFactory
     private static string ResolvedEdgeKindName(FlowEdgeKind kind) => kind switch
     {
         FlowEdgeKind.HandlerToDbContextResolved => "handlerToDbContextResolved",
+        _ => "unknown",
+    };
+
+    private static string SystemEntrypointKindName(SystemEntrypointKind kind) => kind switch
+    {
+        SystemEntrypointKind.Http => "http",
+        SystemEntrypointKind.Grpc => "grpc",
+        SystemEntrypointKind.Blazor => "blazor",
+        SystemEntrypointKind.RazorPage => "razorPage",
+        SystemEntrypointKind.Worker => "worker",
+        SystemEntrypointKind.MessageConsumer => "messageConsumer",
+        _ => "unknown",
+    };
+
+    private static string SystemExecutionStyleName(SystemExecutionStyle style) => style switch
+    {
+        SystemExecutionStyle.Cqrs => "cqrs",
+        SystemExecutionStyle.Direct => "direct",
+        SystemExecutionStyle.Worker => "worker",
+        SystemExecutionStyle.EventConsumer => "eventConsumer",
+        _ => "unknown",
+    };
+
+    private static string IntegrationFlowKindName(IntegrationFlowKind kind) => kind switch
+    {
+        IntegrationFlowKind.IntegrationEvent => "integrationEvent",
+        IntegrationFlowKind.AspireReference => "aspireReference",
+        IntegrationFlowKind.HttpClient => "httpClient",
+        IntegrationFlowKind.GrpcClient => "grpcClient",
+        IntegrationFlowKind.SharedDbContext => "sharedDbContext",
+        _ => "unknown",
+    };
+
+    private static string ServiceRuntimeRoleName(ServiceRuntimeRole role) => role switch
+    {
+        ServiceRuntimeRole.Api => "api",
+        ServiceRuntimeRole.Worker => "worker",
+        ServiceRuntimeRole.Ui => "ui",
+        ServiceRuntimeRole.Orchestrator => "orchestrator",
+        ServiceRuntimeRole.Library => "library",
+        ServiceRuntimeRole.Tests => "tests",
         _ => "unknown",
     };
 

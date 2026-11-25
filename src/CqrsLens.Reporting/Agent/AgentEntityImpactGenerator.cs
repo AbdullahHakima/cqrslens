@@ -33,6 +33,7 @@ internal static class AgentEntityImpactGenerator
             var entity = EntityNameFromLabel(label);
             var property = EntityPropertyFromLabel(label);
             return entity.Equals(filter, StringComparison.OrdinalIgnoreCase) ||
+                   CSharpScanner.SimpleName(entity).Equals(filter, StringComparison.OrdinalIgnoreCase) ||
                    property.Equals(filter, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -58,53 +59,103 @@ internal static class AgentEntityImpactGenerator
                 }))
             .ToList();
 
+        var impactedEntrypoints = result.SystemEntrypoints
+            .Where(e => e.ExecutionStyle != SystemExecutionStyle.Cqrs &&
+                        e.TouchedEntities.Any(MatchesEntityLabel))
+            .OrderBy(e => e.Kind)
+            .ThenBy(e => e.ProjectName ?? string.Empty, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.DisplayLabel, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(e => e.Name, StringComparer.Ordinal)
+            .ToList();
+
         var limit = maxResults > 0 ? Math.Min(maxResults, 50) : 25;
         var shownRequests = impactedRequests.Take(limit).ToList();
+        var shownEntrypoints = impactedEntrypoints.Take(limit).ToList();
 
-        AppendDataModelSummary(sb, result, filter, impactedRequests, exactFilter: !containsFilter);
+        AppendDataModelSummary(
+            sb,
+            result,
+            filter,
+            impactedRequests,
+            exactFilter: !containsFilter,
+            extraTouchedEntities: impactedEntrypoints.SelectMany(e => e.TouchedEntities));
 
-        sb.AppendLine(shownRequests.Count == impactedRequests.Count
-            ? $"## Impacted Vertical Slices ({impactedRequests.Count})"
-            : $"## Impacted Vertical Slices (showing {shownRequests.Count} of {impactedRequests.Count})");
-        sb.AppendLine();
-        if (impactedRequests.Count == 0)
+        if (impactedRequests.Count > 0 || impactedEntrypoints.Count == 0)
         {
-            sb.AppendLine($"_No commands or queries directly touch or depend on `{filter}`._");
-            var known = KnownEntityNames(result);
-            if (known.Count > 0)
+            sb.AppendLine(shownRequests.Count == impactedRequests.Count
+                ? $"## Impacted Vertical Slices ({impactedRequests.Count})"
+                : $"## Impacted Vertical Slices (showing {shownRequests.Count} of {impactedRequests.Count})");
+            sb.AppendLine();
+            if (impactedRequests.Count == 0)
             {
-                sb.AppendLine();
-                sb.AppendLine($"Known entities: {JoinLimited(known, 20, e => $"`{e}`")}. " +
-                              (containsFilter ? "" : "Use `match: \"contains\"` for a substring search."));
-            }
-        }
-        else
-        {
-            foreach (var r in shownRequests)
-            {
-                var response = string.IsNullOrEmpty(r.ResponseType) ? "void" : r.ResponseType;
-                var ep = r.Entrypoints.Count > 0
-                    ? $" · Entrypoints: {JoinLimited(r.Entrypoints, 3, e => $"`{e}`")}"
-                    : "";
-                sb.AppendLine($"- **[{r.Kind}] `{r.Name}`** → `{response}`{FormatLoc(r.Location)}{ep}");
-                foreach (var hName in r.Handlers.Take(3))
+                sb.AppendLine($"_No commands or queries directly touch or depend on `{filter}`._");
+                var known = KnownEntityNames(result);
+                if (known.Count > 0)
                 {
-                    var h = Resolve(hName, handlersByFull, handlersBySimple);
-                    if (h is null) continue;
-                    var deps = h.Dependencies.Count > 0
-                        ? $" · Deps: {JoinLimited(h.Dependencies, MaxListItems, d => $"`{d}`")}"
-                        : "";
-                    var sets = h.TouchedEntities.Count > 0
-                        ? $" · DbSets: {JoinLimited(h.TouchedEntities, MaxListItems, e => $"`{e}`")}"
-                        : "";
-                    sb.AppendLine($"  - Handler: `{h.Name}`{FormatLoc(h.Location)}{deps}{sets}");
+                    sb.AppendLine();
+                    sb.AppendLine($"Known entities: {JoinLimited(known, 20, e => $"`{e}`")}. " +
+                                  (containsFilter ? "" : "Use `match: \"contains\"` for a substring search."));
                 }
             }
+            else
+            {
+                foreach (var r in shownRequests)
+                {
+                    var response = string.IsNullOrEmpty(r.ResponseType) ? "void" : r.ResponseType;
+                    var ep = r.Entrypoints.Count > 0
+                        ? $" · Entrypoints: {JoinLimited(r.Entrypoints, 3, e => $"`{e}`")}"
+                        : "";
+                    sb.AppendLine($"- **[{r.Kind}] `{r.Name}`** → `{response}`{FormatLoc(r.Location)}{ep}");
+                    foreach (var hName in r.Handlers.Take(3))
+                    {
+                        var h = Resolve(hName, handlersByFull, handlersBySimple);
+                        if (h is null) continue;
+                        var deps = h.Dependencies.Count > 0
+                            ? $" · Deps: {JoinLimited(h.Dependencies, MaxListItems, d => $"`{d}`")}"
+                            : "";
+                        var sets = h.TouchedEntities.Count > 0
+                            ? $" · DbSets: {JoinLimited(h.TouchedEntities, MaxListItems, e => $"`{e}`")}"
+                            : "";
+                        sb.AppendLine($"  - Handler: `{h.Name}`{FormatLoc(h.Location)}{deps}{sets}");
+                    }
+                }
 
-            if (impactedRequests.Count > shownRequests.Count)
-                sb.AppendLine($"_+{impactedRequests.Count - shownRequests.Count} more impacted slice(s) — narrow the entity or raise `limit`._");
+                if (impactedRequests.Count > shownRequests.Count)
+                    sb.AppendLine($"_+{impactedRequests.Count - shownRequests.Count} more impacted slice(s) — narrow the entity or raise `limit`._");
+            }
+            sb.AppendLine();
         }
-        sb.AppendLine();
+
+        if (impactedEntrypoints.Count > 0)
+        {
+            sb.AppendLine(shownEntrypoints.Count == impactedEntrypoints.Count
+                ? $"## Direct Entrypoints & Workers Touching {filter} ({impactedEntrypoints.Count})"
+                : $"## Direct Entrypoints & Workers Touching {filter} (showing {shownEntrypoints.Count} of {impactedEntrypoints.Count})");
+            sb.AppendLine();
+            foreach (var ep in shownEntrypoints)
+            {
+                var kind = SystemViewFilter.KindLabel(ep.Kind);
+                var style = SystemViewFilter.StyleLabel(ep.ExecutionStyle);
+                var proj = string.IsNullOrEmpty(ep.ProjectName) ? "" : $" · Project: `{ep.ProjectName}`";
+                var services = ep.CalledServices.Count > 0
+                    ? $" · Services: {JoinLimited(ep.CalledServices, MaxListItems, s => $"`{CSharpScanner.SimpleName(s)}`")}"
+                    : "";
+                var contexts = ep.TouchedDbContexts.Count > 0
+                    ? $" · DbContexts: {JoinLimited(ep.TouchedDbContexts, MaxListItems, c => $"`{CSharpScanner.SimpleName(c)}`")}"
+                    : "";
+                var sets = ep.TouchedEntities.Count > 0
+                    ? $" · DbSets: {JoinLimited(ep.TouchedEntities, MaxListItems, e => $"`{e}`")}"
+                    : "";
+                var publishes = ep.PublishedMessages.Count > 0
+                    ? $" · Publishes: {JoinLimited(ep.PublishedMessages, MaxListItems, m => $"`{CSharpScanner.SimpleName(m)}`")}"
+                    : "";
+                sb.AppendLine($"- **[{kind}/{style}] `{ep.DisplayLabel}`** (`{ep.Name}`){FormatLoc(ep.Location)}{proj}{services}{contexts}{sets}{publishes}");
+            }
+
+            if (impactedEntrypoints.Count > shownEntrypoints.Count)
+                sb.AppendLine($"_+{impactedEntrypoints.Count - shownEntrypoints.Count} more direct entrypoint(s) — narrow the entity or raise `limit`._");
+            sb.AppendLine();
+        }
 
         return sb.ToString();
     }
@@ -120,7 +171,9 @@ internal static class AgentEntityImpactGenerator
                 names.Add(entity.Name);
         }
         foreach (var label in result.Requests.SelectMany(r => r.TouchedEntities))
-            names.Add(EntityNameFromLabel(label));
+            names.Add(CSharpScanner.SimpleName(EntityNameFromLabel(label)));
+        foreach (var label in result.SystemEntrypoints.SelectMany(e => e.TouchedEntities))
+            names.Add(CSharpScanner.SimpleName(EntityNameFromLabel(label)));
         return names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
     }
 

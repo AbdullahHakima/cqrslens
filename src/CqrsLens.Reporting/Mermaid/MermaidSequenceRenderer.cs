@@ -36,7 +36,8 @@ internal static class MermaidSequenceRenderer
 
     internal static string Render(string[] rawLines)
     {
-        var title = "Request sequence";
+        var titlePrefix = "Request sequence";
+        var title = "";
         var participants = new List<Participant>();
         var participantIds = new HashSet<string>(StringComparer.Ordinal);
         var rows = new List<Row>();
@@ -49,10 +50,23 @@ internal static class MermaidSequenceRenderer
 
             if (line.StartsWith("%%", StringComparison.Ordinal))
             {
-                const string marker = "Request sequence:";
-                var at = line.IndexOf(marker, StringComparison.Ordinal);
-                if (at >= 0)
-                    title = line[(at + marker.Length)..].Trim();
+                const string reqMarker = "Request sequence:";
+                const string opMarker = "Operation sequence:";
+                var reqAt = line.IndexOf(reqMarker, StringComparison.Ordinal);
+                if (reqAt >= 0)
+                {
+                    titlePrefix = "Request sequence";
+                    title = line[(reqAt + reqMarker.Length)..].Trim();
+                }
+                else
+                {
+                    var opAt = line.IndexOf(opMarker, StringComparison.Ordinal);
+                    if (opAt >= 0)
+                    {
+                        titlePrefix = "Operation sequence";
+                        title = line[(opAt + opMarker.Length)..].Trim();
+                    }
+                }
                 continue;
             }
 
@@ -93,10 +107,12 @@ internal static class MermaidSequenceRenderer
                 AddMessage(line, "->>", dashed: false, rows);
         }
 
-        if (participants.Count == 0)
-            return Empty(title);
+        var fullTitle = string.IsNullOrEmpty(title) ? titlePrefix : $"{titlePrefix}: {title}";
 
-        return Write(title, participants, rows);
+        if (participants.Count == 0)
+            return Empty(fullTitle);
+
+        return Write(fullTitle, participants, rows);
     }
 
     private static void AddMessage(string line, string separator, bool dashed, List<Row> rows)
@@ -154,7 +170,7 @@ internal static class MermaidSequenceRenderer
         svg.Append(
             $"<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {F(canvasWidth)} {F(canvasHeight)}\" " +
             $"width=\"{F(canvasWidth)}\" height=\"{F(canvasHeight)}\" role=\"img\">");
-        svg.Append($"<title>Request sequence: {E(title)}</title>");
+        svg.Append($"<title>{E(title)}</title>");
         svg.Append("<defs>");
         svg.Append(
             "<marker id=\"arrow-default\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" " +
@@ -260,7 +276,7 @@ internal static class MermaidSequenceRenderer
         svg.Append("<div class=\"svg-diagram\">");
         svg.Append(
             "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 200 60\" width=\"200\" height=\"60\" role=\"img\">");
-        svg.Append($"<title>Request sequence: {E(title)}</title>");
+        svg.Append($"<title>{E(title)}</title>");
         svg.Append("</svg></div>");
         return svg.ToString();
     }

@@ -83,6 +83,48 @@ internal static class AgentSliceMatcher
         return score;
     }
 
+    internal static int ScoreEntrypoint(SystemEntrypointInfo ep, string filter)
+    {
+        var score = Math.Max(
+            NameScore(ep.Name, filter, exact: 1000, prefix: 900, contains: 750),
+            Math.Max(
+                NameScore(ep.RouteOrTrigger, filter, exact: 950, prefix: 850, contains: 700),
+                NameScore(ep.DisplayLabel, filter, exact: 950, prefix: 850, contains: 700)));
+
+        if (ep.Name.EndsWith("." + filter, StringComparison.OrdinalIgnoreCase))
+            score = Math.Max(score, 950);
+
+        foreach (var svc in ep.CalledServices)
+        {
+            score = Math.Max(score, NameScore(svc, filter, 800, 700, 550));
+            score = Math.Max(score, NameScore(CSharpScanner.SimpleName(svc), filter, 800, 700, 550));
+        }
+
+        foreach (var ctx in ep.TouchedDbContexts)
+        {
+            score = Math.Max(score, NameScore(ctx, filter, 750, 650, 500));
+            score = Math.Max(score, NameScore(CSharpScanner.SimpleName(ctx), filter, 750, 650, 500));
+        }
+
+        foreach (var entity in ep.TouchedEntities)
+        {
+            var entityName = EntityNameFromLabel(entity);
+            score = Math.Max(score, Math.Max(
+                NameScore(entity, filter, 850, 750, 600),
+                NameScore(CSharpScanner.SimpleName(entityName), filter, 850, 750, 600)));
+        }
+
+        foreach (var msg in ep.PublishedMessages)
+        {
+            score = Math.Max(score, NameScore(CSharpScanner.SimpleName(msg), filter, 750, 650, 500));
+        }
+
+        if (!string.IsNullOrEmpty(ep.ProjectName))
+            score = Math.Max(score, NameScore(ep.ProjectName, filter, 500, 400, 300));
+
+        return score;
+    }
+
     internal static int NameScore(string value, string filter, int exact, int prefix, int contains)
     {
         if (value.Length == 0)

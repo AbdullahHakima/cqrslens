@@ -11,11 +11,17 @@ internal static class AgentDataModelWriter
         AnalysisResult result,
         string? filter,
         List<CqrsRequest> matchedRequests,
-        bool exactFilter = false)
+        bool exactFilter = false,
+        IEnumerable<string>? extraTouchedEntities = null)
     {
         var touchedSet = new HashSet<string>(
             matchedRequests.SelectMany(r => r.TouchedEntities),
             StringComparer.OrdinalIgnoreCase);
+        if (extraTouchedEntities is not null)
+        {
+            foreach (var ent in extraTouchedEntities)
+                touchedSet.Add(ent);
+        }
 
         bool Matches(string value, string? property = null)
         {

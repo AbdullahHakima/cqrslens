@@ -29,6 +29,26 @@ public static class DiagramBuilder
     public static string? LayerGraph(AnalysisResult result) => ProjectDiagramBuilder.LayerGraph(result);
 
     /// <summary>
+    /// Project dependency graph without test projects (<paramref name="excludeTests"/>) and/or
+    /// zoomed to the projects matching <paramref name="focusService"/> plus their direct
+    /// neighbors. With no filter active the output equals <see cref="ProjectGraph(AnalysisResult)"/>.
+    /// </summary>
+    public static string? ProjectGraph(AnalysisResult result, bool excludeTests, string? focusService = null)
+        => ProjectDiagramBuilder.ProjectGraph(result, excludeTests, focusService);
+
+    /// <summary>Layer diagram with the same filters as <see cref="ProjectGraph(AnalysisResult, bool, string?)"/>.</summary>
+    public static string? LayerGraph(AnalysisResult result, bool excludeTests, string? focusService = null)
+        => ProjectDiagramBuilder.LayerGraph(result, excludeTests, focusService);
+
+    /// <summary>
+    /// Builds the C4-style System &amp; Container Landscape (<c>flowchart LR</c>), or returns
+    /// <see langword="null"/> when no service profiles, system entrypoints or integration
+    /// flows were discovered. Test projects are never drawn.
+    /// </summary>
+    public static string? SystemLandscape(AnalysisResult result, string? focusService = null)
+        => SystemLandscapeDiagramBuilder.Build(result, focusService);
+
+    /// <summary>
     /// Legacy single-diagram helper. Prefer <see cref="CqrsMapSections"/> for
     /// reports: large solutions are split into multiple bounded diagrams.
     /// </summary>

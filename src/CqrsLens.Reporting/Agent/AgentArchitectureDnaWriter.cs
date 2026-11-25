@@ -50,6 +50,33 @@ internal static class AgentArchitectureDnaWriter
             : "not detected (no mediator/dispatch convention found in source)";
         sb.AppendLine($"- **Mediator / Dispatch**: `{mediatorLabel}`");
 
+        if (result.ArchitectureStyles.Count > 0)
+            sb.AppendLine($"- **Architecture Styles**: {string.Join(", ", result.ArchitectureStyles.Select(s => $"`{s}`"))}");
+
+        var directEntrypoints = result.SystemEntrypoints
+            .Where(e => e.ExecutionStyle != SystemExecutionStyle.Cqrs)
+            .ToList();
+        if (directEntrypoints.Count > 0)
+        {
+            var styleCounts = directEntrypoints
+                .GroupBy(e => SystemViewFilter.StyleLabel(e.ExecutionStyle), StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(g => $"{g.Key} ({g.Count()})");
+            sb.AppendLine($"- **Direct Entrypoints & Workers**: {directEntrypoints.Count} ({string.Join(", ", styleCounts)})");
+        }
+
+        if (result.IntegrationFlows.Count > 0)
+        {
+            var flowKinds = result.IntegrationFlows
+                .GroupBy(f => f.Kind)
+                .OrderByDescending(g => g.Count())
+                .ThenBy(g => g.Key)
+                .Take(4)
+                .Select(g => $"{g.Key} ({g.Count()})");
+            sb.AppendLine($"- **Integration Flows**: {result.IntegrationFlows.Count} ({string.Join(", ", flowKinds)})");
+        }
+
         if (result.Requests.Count > 0)
         {
             AppendSliceLayout(sb, result, handlersByFull, handlersBySimple);

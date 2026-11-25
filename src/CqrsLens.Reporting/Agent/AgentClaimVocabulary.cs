@@ -20,9 +20,9 @@ internal static class AgentClaimVocabulary
             new[] { ClaimSubjectKind.Request }),
 
         new("publishes", "publishes", IsAbsence: false, ObjectRequired: true,
-            new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Handler, ClaimSubjectKind.NotificationHandler }),
+            new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Handler, ClaimSubjectKind.NotificationHandler, ClaimSubjectKind.Entrypoint }),
         new("does not publish", "does not publish", IsAbsence: true, ObjectRequired: true,
-            new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Handler, ClaimSubjectKind.NotificationHandler }),
+            new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Handler, ClaimSubjectKind.NotificationHandler, ClaimSubjectKind.Entrypoint }),
 
         new("handled notification", "handled notification", IsAbsence: false, ObjectRequired: true,
             new[] { ClaimSubjectKind.NotificationHandler }),
@@ -30,9 +30,9 @@ internal static class AgentClaimVocabulary
             new[] { ClaimSubjectKind.NotificationHandler }),
 
         new("uses DbContext", "uses DbContext", IsAbsence: false, ObjectRequired: true,
-            new[] { ClaimSubjectKind.Handler, ClaimSubjectKind.Request }),
+            new[] { ClaimSubjectKind.Handler, ClaimSubjectKind.Request, ClaimSubjectKind.Entrypoint }),
         new("does not use DbContext", "does not use DbContext", IsAbsence: true, ObjectRequired: true,
-            new[] { ClaimSubjectKind.Handler, ClaimSubjectKind.Request }),
+            new[] { ClaimSubjectKind.Handler, ClaimSubjectKind.Request, ClaimSubjectKind.Entrypoint }),
 
         new("depends on", "depends on", IsAbsence: false, ObjectRequired: true,
             new[] { ClaimSubjectKind.Handler, ClaimSubjectKind.NotificationHandler }),
@@ -48,6 +48,31 @@ internal static class AgentClaimVocabulary
             new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Notification }),
         new("not dispatched by", "not dispatched by", IsAbsence: true, ObjectRequired: true,
             new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Notification }),
+
+        new("calls service", "calls service", IsAbsence: false, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Handler, ClaimSubjectKind.NotificationHandler, ClaimSubjectKind.Entrypoint }),
+        new("does not call service", "does not call service", IsAbsence: true, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Handler, ClaimSubjectKind.NotificationHandler, ClaimSubjectKind.Entrypoint }),
+
+        new("references project", "references project", IsAbsence: false, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Project }),
+        new("does not reference project", "does not reference project", IsAbsence: true, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Project }),
+
+        new("communicates with", "communicates with", IsAbsence: false, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Project }),
+        new("does not communicate with", "does not communicate with", IsAbsence: true, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Project }),
+
+        new("touches entity", "touches entity", IsAbsence: false, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Handler, ClaimSubjectKind.Request, ClaimSubjectKind.Entrypoint }),
+        new("does not touch entity", "does not touch entity", IsAbsence: true, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Handler, ClaimSubjectKind.Request, ClaimSubjectKind.Entrypoint }),
+
+        new("has test reference", "has test reference", IsAbsence: false, ObjectRequired: false,
+            new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Handler, ClaimSubjectKind.Validator }),
+        new("has no test reference", "has no test reference", IsAbsence: true, ObjectRequired: false,
+            new[] { ClaimSubjectKind.Request, ClaimSubjectKind.Handler, ClaimSubjectKind.Validator }),
     };
 
     private static IReadOnlyList<ClaimSubjectKind> AllShapeKinds() => new[]
@@ -55,7 +80,7 @@ internal static class AgentClaimVocabulary
         ClaimSubjectKind.Project, ClaimSubjectKind.Request, ClaimSubjectKind.Handler,
         ClaimSubjectKind.Notification, ClaimSubjectKind.NotificationHandler,
         ClaimSubjectKind.Validator, ClaimSubjectKind.Behavior, ClaimSubjectKind.DbContext,
-        ClaimSubjectKind.Entity,
+        ClaimSubjectKind.Entity, ClaimSubjectKind.Entrypoint,
     };
 
     private static readonly Dictionary<string, ClaimRelation> ByCanonical =
@@ -143,6 +168,68 @@ internal static class AgentClaimVocabulary
         ["is not dispatched by"] = "not dispatched by",
         ["not sent by"] = "not dispatched by",
         ["is not sent by"] = "not dispatched by",
+
+        ["calls service"] = "calls service",
+        ["call service"] = "calls service",
+        ["calls"] = "calls service",
+        ["invokes"] = "calls service",
+        ["invokes service"] = "calls service",
+
+        ["does not call service"] = "does not call service",
+        ["does not call"] = "does not call service",
+        ["calls no service"] = "does not call service",
+        ["does not invoke"] = "does not call service",
+        ["does not invoke service"] = "does not call service",
+
+        ["references project"] = "references project",
+        ["reference project"] = "references project",
+        ["project references"] = "references project",
+        ["references"] = "references project",
+
+        ["does not reference project"] = "does not reference project",
+        ["does not reference"] = "does not reference project",
+        ["references no project"] = "does not reference project",
+        ["project does not reference"] = "does not reference project",
+
+        ["communicates with"] = "communicates with",
+        ["communicate with"] = "communicates with",
+        ["integrates with"] = "communicates with",
+        ["integrate with"] = "communicates with",
+
+        ["does not communicate with"] = "does not communicate with",
+        ["does not integrate with"] = "does not communicate with",
+        ["communicates with no"] = "does not communicate with",
+        ["integrates with no"] = "does not communicate with",
+
+        ["touches entity"] = "touches entity",
+        ["touch entity"] = "touches entity",
+        ["touches"] = "touches entity",
+        ["reads or writes entity"] = "touches entity",
+        ["uses entity"] = "touches entity",
+
+        ["does not touch entity"] = "does not touch entity",
+        ["does not touch"] = "does not touch entity",
+        ["touches no entity"] = "does not touch entity",
+        ["does not read or write entity"] = "does not touch entity",
+        ["does not use entity"] = "does not touch entity",
+
+        ["has test reference"] = "has test reference",
+        ["has test references"] = "has test reference",
+        ["has a test reference"] = "has test reference",
+        ["referenced by tests"] = "has test reference",
+        ["is referenced by tests"] = "has test reference",
+        ["has tests"] = "has test reference",
+        ["has test"] = "has test reference",
+
+        ["has no test reference"] = "has no test reference",
+        ["has no test references"] = "has no test reference",
+        ["no test reference"] = "has no test reference",
+        ["not referenced by tests"] = "has no test reference",
+        ["is not referenced by tests"] = "has no test reference",
+        ["has no tests"] = "has no test reference",
+        ["has no test"] = "has no test reference",
+        ["does not have tests"] = "has no test reference",
+        ["does not have test reference"] = "has no test reference",
     };
 
     /// <summary>Canonical relation spellings, for the out-of-vocabulary answer.</summary>
