@@ -28,6 +28,21 @@ public static class CliRunner
             if (command.Options!.Mcp)
                 return McpServer.Run(command.Options, Console.In, stdout, stderr);
 
+            if (command.Options.ProposalPath is not null)
+                return ArchitectureProposalCommand.Run(command.Options, stdout);
+
+            if (command.Options.SliceDesignPath is not null)
+                return SliceDesignCommand.Run(command.Options, stdout);
+
+            if (command.Options.DraftSliceRequest is not null)
+                return DraftSliceCommand.Run(command.Options, stdout);
+
+            if (command.Options.ImpactTarget is not null)
+                return ChangeImpactCommand.Run(command.Options, stdout);
+
+            if (command.Options.TddCheckPath is not null)
+                return TddCycleCommand.Run(command.Options, stdout);
+
             return ScanCommand.Run(command.Options!, stdout, stderr);
         }
         catch (CliFailureException ex)

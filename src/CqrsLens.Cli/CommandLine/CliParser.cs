@@ -13,6 +13,19 @@ public static class CliParser
         "agent",
     };
 
+    private static readonly HashSet<string> SupportedImpactKinds = new(StringComparer.Ordinal)
+    {
+        "project",
+        "entity",
+        "dbcontext",
+        "service",
+        "notification",
+        "handler",
+        "request",
+        "entrypoint",
+        "event",
+    };
+
     public static CliCommand Parse(string[] args)
     {
         try
@@ -53,9 +66,44 @@ public static class CliParser
                 case "--slice":
                     options.SliceFilter = ReadSliceFilter(reader);
                     break;
+                case "--proposal":
+                    options.ProposalPath = reader.ReadValue("--proposal", "a JSON file, e.g. --proposal proposal.json");
+                    break;
+                case "--slice-design":
+                    options.SliceDesignPath = reader.ReadValue("--slice-design", "a JSON file or directory, e.g. --slice-design feature.slice.json");
+                    break;
+                case "--draft-slice":
+                    options.DraftSliceRequest = ReadNonEmptyValue(reader, "--draft-slice", "a value, e.g. --draft-slice CreateOrderCommand");
+                    break;
+                case "--impact":
+                    options.ImpactTarget = ReadNonEmptyValue(reader, "--impact", "a value, e.g. --impact Order");
+                    break;
+                case "--impact-kind":
+                    options.ImpactKind = ParseImpactKind(
+                        reader.ReadValue("--impact-kind", "a value: project, entity, dbcontext, service, notification, handler, request, entrypoint, or event"));
+                    break;
+                case "--tdd-check":
+                    options.TddCheckPath = ReadNonEmptyValue(reader, "--tdd-check", "a value, e.g. --tdd-check feature.slice.json");
+                    break;
+                case "--test-results":
+                    options.TestResultsPath = ReadNonEmptyValue(reader, "--test-results", "a value, e.g. --test-results TestResults/run.trx");
+                    break;
                 case "--render":
                     options.RenderMode = ParseRenderMode(reader.ReadValue("--render", "a value: mermaid or svg"));
                     options.RenderModeSpecified = true;
+                    break;
+                case "--view":
+                    options.ViewMode = ParseViewMode(reader.ReadValue("--view", "a value: overview or full"));
+                    options.ViewModeSpecified = true;
+                    break;
+                case "--focus":
+                    options.FocusService = ReadNonEmptyValue(
+                        reader,
+                        "--focus",
+                        "a value, e.g. --focus Ordering.API");
+                    break;
+                case "--exclude-tests":
+                    options.ExcludeTests = true;
                     break;
                 case "--analysis":
                     options.AnalysisMode = ParseAnalysisMode(reader.ReadValue("--analysis", "a value: text or roslyn"));
@@ -137,6 +185,12 @@ public static class CliParser
                 case "--mcp":
                     options.Mcp = true;
                     break;
+                case "--allow-root":
+                    options.AllowedRoots.Add(ReadNonEmptyValue(reader, "--allow-root", "a value, e.g. --allow-root ../shared"));
+                    break;
+                case "--allow-external-paths":
+                    options.AllowExternalPaths = true;
+                    break;
                 case "--profile":
                     options.Profile = true;
                     break;
@@ -180,6 +234,27 @@ public static class CliParser
             throw new CliParseException("error: --slice filter cannot be empty.");
 
         return slice;
+    }
+
+    private static string ReadNonEmptyValue(ArgumentReader reader, string flag, string hint)
+    {
+        var value = reader.ReadValue(flag, hint).Trim();
+        if (value.Length == 0)
+            throw new CliParseException($"error: {flag} cannot be empty.");
+
+        return value;
+    }
+
+    private static string ParseImpactKind(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        if (!SupportedImpactKinds.Contains(normalized))
+        {
+            throw new CliParseException(
+                $"error: unknown --impact-kind value '{value}' - use project, entity, dbcontext, service, notification, handler, request, entrypoint, or event.");
+        }
+
+        return normalized;
     }
 
     private static string ReadExportSvgDirectory(ArgumentReader reader)
@@ -238,6 +313,14 @@ public static class CliParser
             _ => throw new CliParseException($"error: unknown render mode '{value}' - use mermaid or svg."),
         };
 
+    private static ReportViewMode ParseViewMode(string value)
+        => value.Trim().ToLowerInvariant() switch
+        {
+            "full" => ReportViewMode.Full,
+            "overview" => ReportViewMode.Overview,
+            _ => throw new CliParseException($"error: unknown view mode '{value}' - use overview or full."),
+        };
+
     private static AnalysisMode ParseAnalysisMode(string value)
         => value.ToLowerInvariant() switch
         {
@@ -268,5 +351,60 @@ public static class CliParser
 
         if (options.DiffOutputPath is not null && options.DiffPath is null)
             throw new CliParseException("error: --diff-output requires --diff <path-or-json>.");
+
+        if (options.ImpactKind is not null && options.ImpactTarget is null)
+            throw new CliParseException("error: --impact-kind requires --impact <target>.");
+
+        if (options.TestResultsPath is not null && options.TddCheckPath is null)
+            throw new CliParseException("error: --test-results requires --tdd-check <file>.");
+
+        var activeJsonModes =
+            (options.ProposalPath is not null ? 1 : 0) +
+            (options.SliceDesignPath is not null ? 1 : 0) +
+            (options.DraftSliceRequest is not null ? 1 : 0) +
+            (options.ImpactTarget is not null ? 1 : 0) +
+            (options.TddCheckPath is not null ? 1 : 0);
+        if (activeJsonModes > 1)
+            throw new CliParseException("error: use only one of --proposal, --slice-design, --draft-slice, --impact, or --tdd-check.");
+
+        if (options.ProposalPath is not null)
+            ValidateModelingCommand(options, "--proposal", allowStrict: true);
+
+        if (options.SliceDesignPath is not null)
+            ValidateModelingCommand(options, "--slice-design", allowStrict: true);
+
+        if (options.DraftSliceRequest is not null && (HasReportOptions(options) || options.Strict))
+            throw new CliParseException("error: --draft-slice writes JSON to stdout and cannot be combined with scan report, CI, or MCP options.");
+
+        if (options.ImpactTarget is not null)
+            ValidateModelingCommand(options, "--impact", allowStrict: false);
+
+        if (options.TddCheckPath is not null)
+            ValidateModelingCommand(options, "--tdd-check", allowStrict: true);
     }
+
+    private static void ValidateModelingCommand(CliOptions options, string flag, bool allowStrict)
+    {
+        if (!allowStrict && options.Strict)
+            throw new CliParseException($"error: {flag} cannot be combined with --strict.");
+
+        if (string.Equals(options.Format, "agent", StringComparison.Ordinal))
+            throw new CliParseException($"error: {flag} supports --format json, md, or html (not agent).");
+
+        if (HasScanOnlyOptions(options))
+            throw new CliParseException($"error: {flag} cannot be combined with full-scan report, CI diff/baseline, or MCP options.");
+    }
+
+    private static bool HasScanOnlyOptions(CliOptions options)
+        => options.Mcp || options.SliceFilter is not null ||
+           options.ViewModeSpecified || options.FocusService is not null || options.ExcludeTests ||
+           options.CqrsMapSplitSpecified || options.DiffPath is not null ||
+           options.BaselinePath is not null || options.WriteBaselinePath is not null ||
+           options.SarifPath is not null || options.SummaryPath is not null || options.GitHubAnnotations ||
+           options.CiRoot is not null || options.ExportSvgDirectory is not null || options.ExportMermaidDirectory is not null ||
+           options.Profile || options.WatermarkSpecified || options.GeneratedAt is not null;
+
+    private static bool HasReportOptions(CliOptions options)
+        => options.Output is not null || options.Format is not null || options.RenderModeSpecified ||
+           HasScanOnlyOptions(options);
 }

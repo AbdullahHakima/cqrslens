@@ -24,6 +24,14 @@ internal static class MermaidExporter
         AnalysisResult result,
         string directory,
         CqrsMapSplitMode cqrsMapSplit)
+        => Export(result, directory, cqrsMapSplit, focusService: null, excludeTests: false);
+
+    internal static IReadOnlyList<string> Export(
+        AnalysisResult result,
+        string directory,
+        CqrsMapSplitMode cqrsMapSplit,
+        string? focusService,
+        bool excludeTests)
     {
         var fullDirectory = Path.GetFullPath(directory);
         if (File.Exists(fullDirectory))
@@ -33,7 +41,7 @@ internal static class MermaidExporter
                 ExitCodes.Usage);
         }
 
-        var diagrams = SvgExporter.BuildDiagrams(result, cqrsMapSplit);
+        var diagrams = SvgExporter.BuildDiagrams(result, cqrsMapSplit, focusService, excludeTests);
 
         try
         {
@@ -56,7 +64,7 @@ internal static class MermaidExporter
             {
                 File.WriteAllText(
                     path,
-                    source.EndsWith("\n", StringComparison.Ordinal) ? source : source + "\n",
+                    source.EndsWith('\n') ? source : source + "\n",
                     new UTF8Encoding(false));
                 written.Add(path);
             }

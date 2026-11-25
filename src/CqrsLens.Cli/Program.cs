@@ -11,10 +11,11 @@ public static class Program
             try
             {
                 Console.OutputEncoding = Encoding.UTF8;
+                Console.InputEncoding = Encoding.UTF8;
             }
             catch
             {
-                // Some hosts disallow changing OutputEncoding; continue with the current encoding.
+                // Some hosts disallow changing console encodings.
             }
 
             return CliRunner.Run(args);

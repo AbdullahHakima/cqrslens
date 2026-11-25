@@ -43,6 +43,12 @@ internal static class McpDiffAnswerGenerator
     {
         sb.AppendLine("## Shape delta");
         sb.AppendLine(Metric(
+            "Projects",
+            diff.Projects.Added.Count,
+            diff.Projects.Removed.Count,
+            diff.Summary.Projects.Base - diff.Projects.Removed.Count - diff.Projects.Modified.Count,
+            diff.Projects.Modified.Count));
+        sb.AppendLine(Metric(
             "Requests",
             diff.Requests.Added.Count,
             diff.Requests.Removed.Count,
@@ -122,14 +128,15 @@ internal static class McpDiffAnswerGenerator
 
     private static void AppendItemLists(StringBuilder sb, ArchitectureDiff diff, int limit)
     {
-        var anyItems = AppendSection(sb, "Requests", limit, RequestLines(diff.Requests));
+        var anyItems = AppendSection(sb, "Projects", limit, DiffProjectsSectionWriter.Lines(diff.Projects).ToList());
+        anyItems |= AppendSection(sb, "Requests", limit, RequestLines(diff.Requests));
         anyItems |= AppendSection(sb, "Handlers", limit, HandlerLines(diff.Handlers));
         anyItems |= AppendSection(sb, "Validators", limit, ValidatorLines(diff.Validators));
         anyItems |= AppendSection(sb, "Pipeline behaviors", limit, BehaviorLines(diff.Behaviors));
         anyItems |= AppendSection(sb, "DbContexts", limit, DbContextLines(diff.DbContexts));
         anyItems |= AppendSection(sb, "Endpoints", limit, EndpointLines(diff.Endpoints));
 
-        if (!anyItems)
+        if (!anyItems && !diff.Checks.HasChanges)
             sb.AppendLine("_No architecture delta: 0 added, 0 removed, 0 modified, 0 new, 0 resolved._");
     }
 

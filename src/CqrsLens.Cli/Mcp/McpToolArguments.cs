@@ -10,7 +10,7 @@ internal sealed record McpToolArguments(
     string? Entity,
     string? Match,
     bool IncludeIndex,
-    int Limit,
+    int? RequestedLimit,
     string? Subject,
     string? Relation,
     string? ClaimObject,
@@ -20,8 +20,15 @@ internal sealed record McpToolArguments(
     string? Format,
     string? Request,
     string? GroupBy,
-    string? Base)
+    string? Base,
+    string? TargetKind = null,
+    int? MaxDepth = null,
+    string? TestResultsPath = null,
+    string? Service = null,
+    bool IncludeTests = false)
 {
+    public int Limit => RequestedLimit.GetValueOrDefault();
+
     public static bool TryRead(
         JsonObject? raw,
         out McpToolArguments arguments,
@@ -36,7 +43,7 @@ internal sealed record McpToolArguments(
                 raw?["entity"]?.GetValue<string>(),
                 raw?["match"]?.GetValue<string>(),
                 raw?["includeIndex"]?.GetValue<bool>() ?? false,
-                raw?["limit"] is { } limitNode ? limitNode.GetValue<int>() : 0,
+                raw?["limit"]?.GetValue<int>(),
                 raw?["subject"]?.GetValue<string>(),
                 raw?["relation"]?.GetValue<string>(),
                 raw?["object"]?.GetValue<string>(),
@@ -46,7 +53,12 @@ internal sealed record McpToolArguments(
                 raw?["format"]?.GetValue<string>(),
                 raw?["request"]?.GetValue<string>(),
                 raw?["groupBy"]?.GetValue<string>(),
-                raw?["base"]?.GetValue<string>());
+                raw?["base"]?.GetValue<string>(),
+                raw?["targetKind"]?.GetValue<string>(),
+                raw?["maxDepth"]?.GetValue<int>(),
+                raw?["testResultsPath"]?.GetValue<string>(),
+                raw?["service"]?.GetValue<string>(),
+                raw?["includeTests"]?.GetValue<bool>() ?? false);
             error = null;
             return true;
         }

@@ -7,7 +7,8 @@ internal static class McpScanProvider
         string path,
         string? analysisOverride,
         CliOptions defaultOptions,
-        McpScanCache cache)
+        McpScanCache cache,
+        bool refresh = false)
     {
         var fullRoot = Path.GetFullPath(path);
         var (mode, analysisOptions) = ResolveScanInputs(fullRoot, analysisOverride, defaultOptions);
@@ -17,7 +18,7 @@ internal static class McpScanProvider
             defaultOptions.ConfigPath,
             defaultOptions.BaselinePath);
 
-        if (cache.TryGet(cacheKey, fingerprint, out var cached))
+        if (!refresh && cache.TryGet(cacheKey, fingerprint, out var cached))
             return cached;
 
         var result = Analyzer.Analyze(fullRoot, mode, analysisOptions);

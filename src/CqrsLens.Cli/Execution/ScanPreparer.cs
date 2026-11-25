@@ -3,7 +3,7 @@ namespace CqrsLens;
 /// <summary>Validates scan inputs and merges command-line flags with .cqrslens.json.</summary>
 internal static class ScanPreparer
 {
-    public static PreparedScan Prepare(CliOptions options)
+    public static PreparedScan Prepare(CliOptions options, bool requireProjects = true)
     {
         var path = options.Path!;
         if (!Directory.Exists(path))
@@ -13,7 +13,7 @@ internal static class ScanPreparer
         var settings = ConfigurationLoader.Load(root, options.ConfigPath);
         var ciRoot = ResolveCiRoot(options.CiRoot);
 
-        if (CsprojParser.FindProjectFiles(root).Count == 0)
+        if (requireProjects && CsprojParser.FindProjectFiles(root).Count == 0)
         {
             throw new CliFailureException(
                 $"no .csproj files found under: {path}{Environment.NewLine}" +

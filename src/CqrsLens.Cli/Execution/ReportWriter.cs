@@ -28,9 +28,20 @@ internal static class ReportWriter
         CqrsMapSplitMode cqrsMapSplit)
         => format switch
         {
-            ReportFormat.Html => HtmlReportGenerator.Generate(result, renderMode, cqrsMapSplit),
+            ReportFormat.Html => HtmlReportGenerator.Generate(
+                result,
+                renderMode,
+                cqrsMapSplit,
+                options.ViewMode,
+                options.FocusService,
+                options.ExcludeTests),
             ReportFormat.Json => JsonReportGenerator.Generate(result),
             ReportFormat.Agent => AgentReportGenerator.Generate(result, options.SliceFilter),
-            _ => ReportGenerator.Generate(result, cqrsMapSplit),
+            _ => ReportGenerator.Generate(
+                result,
+                cqrsMapSplit,
+                options.ViewMode,
+                options.FocusService,
+                options.ExcludeTests),
         };
 }

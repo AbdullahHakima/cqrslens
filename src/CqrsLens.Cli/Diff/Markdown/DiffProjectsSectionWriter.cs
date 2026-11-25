@@ -12,22 +12,26 @@ internal static class DiffProjectsSectionWriter
 
         markdown.AppendLine("### Project & Layer Changes");
         markdown.AppendLine();
+        foreach (var line in Lines(projects))
+            markdown.AppendLine(line);
+        markdown.AppendLine();
+    }
 
+    internal static IEnumerable<string> Lines(ProjectDiffSection projects)
+    {
         foreach (var project in projects.Added)
         {
             var references = project.References.Count > 0
                 ? $" → references: {string.Join(", ", project.References)}"
                 : "";
-            markdown.AppendLine(
-                $"- ➕ Added project **{ReportGenerator.InlineText(project.Name)}** " +
-                $"(`{ReportGenerator.InlineText(project.Layer)}`){ReportGenerator.InlineText(references)}");
+            yield return $"- ➕ Added project **{ReportGenerator.InlineText(project.Name)}** " +
+                $"(`{ReportGenerator.InlineText(project.Layer)}`){ReportGenerator.InlineText(references)}";
         }
 
         foreach (var project in projects.Removed)
         {
-            markdown.AppendLine(
-                $"- ➖ Removed project **{ReportGenerator.InlineText(project.Name)}** " +
-                $"(`{ReportGenerator.InlineText(project.Layer)}`)");
+            yield return $"- ➖ Removed project **{ReportGenerator.InlineText(project.Name)}** " +
+                $"(`{ReportGenerator.InlineText(project.Layer)}`)";
         }
 
         foreach (var project in projects.Modified)
@@ -43,11 +47,8 @@ internal static class DiffProjectsSectionWriter
                 parts.Add($"+packages: {string.Join(", ", project.AddedPackages)}");
             if (project.RemovedPackages.Count > 0)
                 parts.Add($"-packages: {string.Join(", ", project.RemovedPackages)}");
-            markdown.AppendLine(
-                $"- 🔄 Modified project **{ReportGenerator.InlineText(project.Name)}**: " +
-                $"{ReportGenerator.InlineText(string.Join("; ", parts))}");
+            yield return $"- 🔄 Modified project **{ReportGenerator.InlineText(project.Name)}**: " +
+                ReportGenerator.InlineText(string.Join("; ", parts));
         }
-
-        markdown.AppendLine();
     }
 }

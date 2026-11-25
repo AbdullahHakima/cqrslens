@@ -18,7 +18,7 @@ internal static class UsageWriter
         if (ConsoleArtwork.ShouldShowBanner(writer, options?.Banner, false))
             writer.WriteLine(ConsoleArtwork.RenderLogoBanner(ToolInfo.Version, useColor, options?.Ascii));
 
-        WriteLine(writer, $"NOCTUA {ToolInfo.Version} - see your MediatR codebase.", useColor, palette.Ink, bold: true);
+        WriteLine(writer, $"NOCTUA {ToolInfo.Version} - architectural intelligence for any .NET codebase.", useColor, palette.Ink, bold: true);
         writer.WriteLine();
         WriteLine(writer, "Usage: cqrslens <path> [options]", useColor, palette.Ink, bold: false);
         writer.WriteLine();
@@ -55,6 +55,12 @@ internal static class UsageWriter
                     "md (default), html, json, or agent. A matching -o extension implies the format."),
                 ("--render MODE",
                     "HTML diagrams: mermaid (default) or svg (zero-JS inline SVG)."),
+                ("--view MODE",
+                    "full (default) or overview (detected architecture styles, C4 landscape, service capabilities, entrypoints, and flows)."),
+                ("--focus NAME",
+                    "Focus reports and system/project graphs on one project or service and its neighbors."),
+                ("--exclude-tests",
+                    "Exclude test projects from system overview and architecture graphs."),
                 ("--export-svg DIR",
                     "Also write every diagram as a standalone .svg file into DIR (created when missing)."),
                 ("--export-mermaid DIR",
@@ -69,13 +75,31 @@ internal static class UsageWriter
                 ("--analysis MODE",
                     "text (default) or roslyn (opt-in)."),
                 ("--slice FILTER",
-                    "Trace vertical slices matching FILTER (endpoint, request, handler, entity, or event). " +
-                    "Streams to stdout when -o is omitted."),
+                    "Trace CQRS vertical slices or direct operations (Minimal API/MVC, gRPC, workers, consumers, services) " +
+                    "matching FILTER. Streams to stdout when -o is omitted."),
+                ("--proposal FILE",
+                    "Evaluate proposed projects and references from FILE against the scan (--format json|md|html, -o, --render, --strict)."),
+                ("--slice-design PATH",
+                    "Compare a saved *.slice.json file or directory against the scan across Command, Query, Request, " +
+                    "Endpoint, Grpc, Worker, Consumer, or Service kinds (--format json|md|html, -o, --render, --strict)."),
+                ("--draft-slice REQUEST",
+                    "Draft a schema-valid v1 slice design JSON from scanned facts for REQUEST (CQRS request, direct endpoint, " +
+                    "gRPC method, worker, consumer, or service). Writes JSON to stdout."),
+                ("--impact TARGET",
+                    "Trace bidirectional dependency, slice, entrypoint, cross-service flow, and test-coverage impact for " +
+                    "TARGET (--format json|md|html, -o, --render)."),
+                ("--impact-kind KIND",
+                    "Optional target kind for --impact: project, entity, dbcontext, service, notification, handler, request, entrypoint, or event."),
+                ("--tdd-check FILE|DIR",
+                    "Evaluate the closed-loop TDD phase for a *.slice.json file or directory across CQRS or universal kinds " +
+                    "(Endpoint, Grpc, Worker, Consumer, Service; --format json|md|html, -o, --render, --strict)."),
+                ("--test-results FILE",
+                    "Optional Visual Studio .trx runtime test results file passed to --tdd-check."),
                 ("--markers LIST",
-                    "Extra request roots, e.g. ICommand,IQuery,IMessage. Requests behind interfaces " +
-                    "deriving from IRequest are always followed."),
+                    "Extra CQRS request roots, e.g. ICommand,IQuery,IMessage. Optional: Layered/N-Tier, MVC, Minimal APIs, " +
+                    "gRPC, Blazor/Razor, Workers, Event-Driven, and MediatR/Wolverine codebases work automatically."),
                 ("--handler-markers LIST",
-                    "Extra handler roots for external wrappers, e.g. ICommandHandler,IQueryHandler."),
+                    "Extra CQRS handler roots for external wrappers, e.g. ICommandHandler,IQueryHandler."),
                 ("--cqrs-map-split MODE",
                     "count (default), feature, or unsplit. Overrides the cqrsMapSplit config key."),
                 ("--config FILE",
@@ -119,6 +143,10 @@ internal static class UsageWriter
             {
                 ("--mcp",
                     "Start the built-in Model Context Protocol server over JSON-RPC 2.0 stdio."),
+                ("--allow-root DIR",
+                    "Allow an extra root directory for --mcp tool path arguments (repeatable)."),
+                ("--allow-external-paths",
+                    "Allow --mcp tool path arguments outside the workspace and configured roots."),
                 ("-h, --help",
                     "Show this help."),
                 ("--version",

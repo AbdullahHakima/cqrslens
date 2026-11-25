@@ -22,6 +22,14 @@ internal static class SvgExporter
         AnalysisResult result,
         string directory,
         CqrsMapSplitMode cqrsMapSplit)
+        => Export(result, directory, cqrsMapSplit, focusService: null, excludeTests: false);
+
+    internal static IReadOnlyList<string> Export(
+        AnalysisResult result,
+        string directory,
+        CqrsMapSplitMode cqrsMapSplit,
+        string? focusService,
+        bool excludeTests)
     {
         var fullDirectory = Path.GetFullPath(directory);
         if (File.Exists(fullDirectory))
@@ -31,7 +39,7 @@ internal static class SvgExporter
                 ExitCodes.Usage);
         }
 
-        var diagrams = BuildDiagrams(result, cqrsMapSplit);
+        var diagrams = BuildDiagrams(result, cqrsMapSplit, focusService, excludeTests);
 
         try
         {
@@ -82,11 +90,25 @@ internal static class SvgExporter
     internal static IReadOnlyList<(string Name, string Source)> BuildDiagrams(
         AnalysisResult result,
         CqrsMapSplitMode cqrsMapSplit)
+        => BuildDiagrams(result, cqrsMapSplit, focusService: null, excludeTests: false);
+
+    internal static IReadOnlyList<(string Name, string Source)> BuildDiagrams(
+        AnalysisResult result,
+        CqrsMapSplitMode cqrsMapSplit,
+        string? focusService,
+        bool excludeTests)
     {
         var entries = new List<(string Name, string Source)>();
 
-        AddSingle(entries, "project-graph.svg", DiagramBuilder.ProjectGraph(result));
-        AddSingle(entries, "layers.svg", DiagramBuilder.LayerGraph(result));
+        AddSingle(entries, "system-landscape.svg", DiagramBuilder.SystemLandscape(result, focusService));
+        var projectGraph = excludeTests || !string.IsNullOrWhiteSpace(focusService)
+            ? DiagramBuilder.ProjectGraph(result, excludeTests, focusService)
+            : DiagramBuilder.ProjectGraph(result);
+        var layerGraph = excludeTests || !string.IsNullOrWhiteSpace(focusService)
+            ? DiagramBuilder.LayerGraph(result, excludeTests, focusService)
+            : DiagramBuilder.LayerGraph(result);
+        AddSingle(entries, "project-graph.svg", projectGraph);
+        AddSingle(entries, "layers.svg", layerGraph);
         AddFamily(entries, "cqrs-map", DiagramBuilder.CqrsMapSections(result, cqrsMapSplit).Select(s => s.Source));
         AddFamily(entries, "flow", DiagramBuilder.FlowDiagramSections(result).Select(s => s.Source));
         AddSingle(entries, "notifications.svg", DiagramBuilder.NotificationMap(result));

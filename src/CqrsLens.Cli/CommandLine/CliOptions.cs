@@ -7,8 +7,19 @@ public sealed class CliOptions
     public string? Output { get; set; }
     public string? Format { get; set; }
     public string? SliceFilter { get; set; }
+    public string? ProposalPath { get; set; }
+    public string? SliceDesignPath { get; set; }
+    public string? DraftSliceRequest { get; set; }
+    public string? ImpactTarget { get; set; }
+    public string? ImpactKind { get; set; }
+    public string? TddCheckPath { get; set; }
+    public string? TestResultsPath { get; set; }
     public DiagramRenderMode RenderMode { get; set; } = DiagramRenderMode.Mermaid;
     public bool RenderModeSpecified { get; set; }
+    public ReportViewMode ViewMode { get; set; } = ReportViewMode.Full;
+    public bool ViewModeSpecified { get; set; }
+    public string? FocusService { get; set; }
+    public bool ExcludeTests { get; set; }
     public string? ConfigPath { get; set; }
     public string? BaselinePath { get; set; }
     public string? WriteBaselinePath { get; set; }
@@ -36,5 +47,7 @@ public sealed class CliOptions
     public bool? Color { get; set; }
     public bool? Ascii { get; set; }
     public bool Mcp { get; set; }
+    public List<string> AllowedRoots { get; } = new();
+    public bool AllowExternalPaths { get; set; }
     public bool Profile { get; set; }
 }

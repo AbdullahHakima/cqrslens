@@ -13,6 +13,11 @@ internal static class McpResponses
         TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
     };
 
+    private static readonly JsonSerializerOptions StructuredOptions = new(JsonSerializerDefaults.Web)
+    {
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver(),
+    };
+
     public static string? ReadString(JsonNode? node)
         => node is JsonValue value && value.TryGetValue<string>(out var text) ? text : null;
 
@@ -43,6 +48,15 @@ internal static class McpResponses
     }
 
     public static string BuildToolResult(JsonNode? idNode, string text, bool isError)
+        => BuildToolResult(idNode, text, isError, structuredContent: null);
+
+    public static string BuildStructuredToolResult<T>(JsonNode? idNode, T content)
+        => BuildStructuredToolResult(idNode, JsonSerializer.SerializeToNode(content, StructuredOptions)!.AsObject());
+
+    public static string BuildStructuredToolResult(JsonNode? idNode, JsonObject content)
+        => BuildToolResult(idNode, content.ToJsonString(JsonOptions), isError: false, content);
+
+    private static string BuildToolResult(JsonNode? idNode, string text, bool isError, JsonObject? structuredContent)
     {
         var result = new JsonObject
         {
@@ -56,6 +70,8 @@ internal static class McpResponses
             },
             ["isError"] = isError,
         };
+        if (structuredContent is not null)
+            result["structuredContent"] = structuredContent;
         return BuildResult(idNode, result);
     }
 }

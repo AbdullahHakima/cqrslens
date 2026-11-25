@@ -79,8 +79,11 @@
         "MultipleHandlers": { "$ref": "#/$defs/severity" },
         "ApplicationLayerViolation": { "$ref": "#/$defs/severity" },
         "CircularProjectDependency": { "$ref": "#/$defs/severity" },
+        "CircularServiceDependency": { "$ref": "#/$defs/severity" },
         "OrphanValidator": { "$ref": "#/$defs/severity" },
         "OrphanNotification": { "$ref": "#/$defs/severity" },
+        "UnreachableRequest": { "$ref": "#/$defs/severity" },
+        "UnpublishedNotification": { "$ref": "#/$defs/severity" },
         "LayerViolation": { "$ref": "#/$defs/severity" },
         "CommandWithoutValidator": { "$ref": "#/$defs/severity" },
         "AmbiguousProjectName": { "$ref": "#/$defs/severity" }

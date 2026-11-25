@@ -8,12 +8,19 @@ internal static class McpToolCatalog
     public static readonly HashSet<string> KnownTools = new(StringComparer.Ordinal)
     {
         "get_architecture_dna",
+        "get_system_overview",
         "trace_slice",
         "trace_entity_impact",
         "check_architecture",
         "trace_request_impact",
         "verify_claim",
         "diff_architecture",
+        McpModelingTools.EvaluateArchitectureProposal,
+        McpModelingTools.PlanSliceTests,
+        McpModelingTools.VerifySliceDesign,
+        McpModelingTools.DraftSliceDesign,
+        McpModelingTools.AnalyzeChangeImpact,
+        McpModelingTools.VerifyTddCycle,
     };
 
     public static string List(JsonNode? idNode)
@@ -23,7 +30,7 @@ internal static class McpToolCatalog
             new JsonObject
             {
                 ["name"] = "get_architecture_dna",
-                ["description"] = "Returns a compact, token-efficient Architectural DNA summary of the .NET solution: layer & project topology, CQRS conventions (mediator library, co-located vs separate handler layout, active pipeline behaviors), EF Core DbContexts, and counts. Call this first to orient yourself. Set includeIndex=true only when you need the full one-line slice index.",
+                ["description"] = "Returns a compact, token-efficient Architectural DNA summary of any .NET solution: detected architecture styles (Layered / N-Tier, MVC + Service Layer, Minimal APIs, gRPC, Event-Driven / Microservices, Blazor / Razor, Workers, Clean Architecture, Modular Monolith, plus CQRS / MediatR / Wolverine when present), layer & project topology, direct entrypoint/flow counts, EF Core DbContexts, and CQRS conventions when used. Call this first to orient yourself. Set includeIndex=true only when you need the full one-line slice index.",
                 ["annotations"] = ReadOnlyAnnotation(),
                 ["inputSchema"] = new JsonObject
                 {
@@ -44,8 +51,35 @@ internal static class McpToolCatalog
             },
             new JsonObject
             {
+                ["name"] = "get_system_overview",
+                ["description"] = "Returns a compact, high-signal system overview across any .NET solution: detected architecture styles, runtime service roles (Api, Worker, Ui, Orchestrator, Library), detected technologies, cross-service integration flows (integration events, Aspire wiring, HTTP/gRPC clients, shared DbContexts), all HTTP/gRPC/Blazor/Razor/worker/consumer entrypoints (both direct non-MediatR and CQRS paths), and uncovered blind spots. Optionally pass 'service' to zoom into one project/service or set includeTests=true to include test projects.",
+                ["annotations"] = ReadOnlyAnnotation(),
+                ["inputSchema"] = new JsonObject
+                {
+                    ["type"] = "object",
+                    ["properties"] = new JsonObject
+                    {
+                        ["path"] = PathProperty(
+                            "Optional solution or repository folder path. Defaults to the path configured when launching the MCP server."),
+                        ["analysis"] = AnalysisProperty(
+                            "Optional scanner backend: 'text' (default, fast) or 'roslyn'."),
+                        ["service"] = new JsonObject
+                        {
+                            ["type"] = "string",
+                            ["description"] = "Optional project or service name filter to zoom into one service/project.",
+                        },
+                        ["includeTests"] = new JsonObject
+                        {
+                            ["type"] = "boolean",
+                            ["description"] = "Include test projects in the overview (default false).",
+                        },
+                    },
+                },
+            },
+            new JsonObject
+            {
                 ["name"] = "trace_slice",
-                ["description"] = "Traces end-to-end CQRS vertical slices matching a keyword (request/handler/validator name, API route, entity, or domain event). Results are ranked exact > prefix > substring and capped. Returns File:Line source locations for API Entrypoint -> Request(Payload) -> Validator -> Handler(DI Dependencies) -> Touched DbSets + Published Events -> Event Handlers. Values marked (inferred) were guessed from a convention, not read from source. Set format='json' to receive the same slice as structured typed data (requests, handlers, validators, behaviors in registered order, notifications and their handlers, endpoint and DbContext edges as the scan model holds them).",
+                ["description"] = "Traces end-to-end CQRS vertical slices and direct non-MediatR operations matching a keyword (endpoint, gRPC/worker/consumer operation, service, request, handler, validator, entity, or event). Results are ranked exact > prefix > substring and capped. Returns File:Line source locations for CQRS slices (API Entrypoint -> Request(Payload) -> Validator -> Handler(DI Dependencies) -> Touched DbSets + Published Events -> Event Handlers) and Direct Operations (Entrypoint/gRPC/Worker/Consumer -> Services -> DbContexts/Entities + Published Events). Values marked (inferred) were guessed from a convention, not read from source. Set format='json' to receive structured typed data (CQRS slices plus directEntrypoints when present).",
                 ["annotations"] = ReadOnlyAnnotation(),
                 ["inputSchema"] = new JsonObject
                 {
@@ -55,7 +89,7 @@ internal static class McpToolCatalog
                         ["query"] = new JsonObject
                         {
                             ["type"] = "string",
-                            ["description"] = "Keyword or substring to filter vertical slices (e.g. 'Order', 'TodoItem', '/api/orders', 'Checkout'). A bare kind such as 'Command' is rejected as too broad.",
+                            ["description"] = "Keyword or substring to filter vertical slices or direct operations (e.g. 'Order', 'TodoItem', '/api/orders', 'CatalogApi', 'BasketService', 'Checkout'). A bare kind such as 'Command' is rejected as too broad.",
                         },
                         ["limit"] = LimitProperty(25, "Maximum slices to return (default 5). Remaining matches are counted, not printed."),
                         ["format"] = new JsonObject
@@ -73,7 +107,7 @@ internal static class McpToolCatalog
             new JsonObject
             {
                 ["name"] = "trace_entity_impact",
-                ["description"] = "Traces an EF Core entity or DbSet across the architecture. By default the entity name must match exactly, so 'Order' never matches OrderItem or PurchaseOrder. Returns the entity's schema (PKs, FKs, scalar properties, relationships) and every Command, Query, Handler, and API Endpoint that reads, writes, or depends on it.",
+                ["description"] = "Traces an EF Core entity or DbSet across the entire architecture (direct endpoints, gRPC, workers, consumers, and services as well as CQRS). By default the entity name must match exactly, so 'Order' never matches OrderItem or PurchaseOrder. Returns the entity's schema (PKs, FKs, scalar properties, relationships) and every Direct Entrypoint, Worker, Consumer, Command, Query, and Handler that reads, writes, or depends on it.",
                 ["annotations"] = ReadOnlyAnnotation(),
                 ["inputSchema"] = new JsonObject
                 {
@@ -101,7 +135,7 @@ internal static class McpToolCatalog
             new JsonObject
             {
                 ["name"] = "check_architecture",
-                ["description"] = "Runs CqrsLens static architecture rules (MissingHandler, MultipleHandlers, CommandWithoutValidator, LayerViolation, ApplicationLayerViolation, CircularProjectDependency, OrphanValidator, OrphanNotification, etc.) and returns all active findings with File:Line locations. Optionally filter by rule code, severity and target scope; filters compose (AND). A filtered query states the filter and the total matching count, then a page of findings. With no filter the answer is the unfiltered finding list. Set groupBy='project' to return counts first, grouped by project (module) with the per-project rule breakdown, ordered by count descending.",
+                ["description"] = "Runs CqrsLens static architecture rules (LayerViolation, ApplicationLayerViolation, CircularProjectDependency, CircularServiceDependency, MissingHandler, MultipleHandlers, CommandWithoutValidator, OrphanValidator, OrphanNotification, etc.) and returns all active findings with File:Line locations. Optionally filter by rule code, severity and target scope; filters compose (AND). A filtered query states the filter and the total matching count, then a page of findings. With no filter the answer is the unfiltered finding list. Set groupBy='project' to return counts first, grouped by project (module) with the per-project rule breakdown, ordered by count descending.",
                 ["annotations"] = ReadOnlyAnnotation(),
                 ["inputSchema"] = new JsonObject
                 {
@@ -116,7 +150,7 @@ internal static class McpToolCatalog
                                 ["type"] = "string",
                                 ["enum"] = RuleCodeEnum(),
                             },
-                            ["description"] = "Optional rule-code filter: one or more of the eleven architecture rules. A finding matches when its code is any of them. Composes (AND) with severity and target.",
+                            ["description"] = "Optional rule-code filter: one or more supported architecture rules. A finding matches when its code is any of them. Composes (AND) with severity and target.",
                         },
                         ["severity"] = new JsonObject
                         {
@@ -174,7 +208,7 @@ internal static class McpToolCatalog
             new JsonObject
             {
                 ["name"] = "verify_claim",
-                ["description"] = "Verifies one structured design claim against the scan model and fails closed. Give a subject (a named request, handler, validator, behavior, DbContext, entity, or project), a relation from the fixed vocabulary (e.g. 'has handler', 'has no validator', 'has validator', 'publishes', 'handled notification', 'uses DbContext', 'depends on', 'belongs to layer', 'dispatched by', and their absence forms), and an object (or omit it for a bare existence/absence claim). Returns exactly one verdict — supported (with the model facts and File:Line provenance), not supported (with the contradicting facts), or not determinable (with the reason: unresolved dispatch, runtime-typed send, package-opaque wrapper, ambiguity, or outside the scan model). Claims about execution order or conventions are outside the model and return not determinable.",
+                ["description"] = "Verifies one structured design claim against the scan model and fails closed. Give a subject (a named request, handler, validator, behavior, DbContext, entity, direct entrypoint/worker/consumer, service, or project), a relation from the fixed vocabulary (e.g. 'has handler', 'has no validator', 'has validator', 'publishes', 'handled notification', 'uses DbContext', 'touches entity', 'calls service', 'communicates with', 'depends on', 'references project', 'belongs to layer', 'dispatched by', 'has test reference', and their absence forms), and an object (or omit it for a bare existence/absence claim). Returns exactly one verdict — supported (with the model facts and File:Line provenance), not supported (with the contradicting facts), or not determinable (with the reason: unresolved dispatch, runtime-typed send, package-opaque wrapper, ambiguity, or outside the scan model). Claims about execution order or conventions are outside the model and return not determinable.",
                 ["annotations"] = ReadOnlyAnnotation(),
                 ["inputSchema"] = new JsonObject
                 {
@@ -184,12 +218,12 @@ internal static class McpToolCatalog
                         ["subject"] = new JsonObject
                         {
                             ["type"] = "string",
-                            ["description"] = "The named shape the claim is about, e.g. 'CreateOrderCommand' or 'CreateOrderCommandHandler'.",
+                            ["description"] = "The named shape, entrypoint, or project the claim is about, e.g. 'CreateOrderCommand', 'CreateOrderCommandHandler', 'CatalogApi.CreateItem', 'BasketService.UpdateBasket', or 'Ordering.API'.",
                         },
                         ["relation"] = new JsonObject
                         {
                             ["type"] = "string",
-                            ["description"] = "The relation to verify, e.g. 'has handler', 'has no validator', 'publishes', 'handled notification', 'uses DbContext', 'depends on', 'belongs to layer', 'dispatched by', or an absence form. Unknown relations return not determinable.",
+                            ["description"] = "The relation to verify, e.g. 'has handler', 'has no validator', 'publishes', 'handled notification', 'uses DbContext', 'touches entity', 'calls service', 'communicates with', 'depends on', 'references project', 'belongs to layer', 'dispatched by', 'has test reference', or an absence form. Unknown relations return not determinable.",
                         },
                         ["object"] = new JsonObject
                         {
@@ -205,7 +239,7 @@ internal static class McpToolCatalog
             new JsonObject
             {
                 ["name"] = "diff_architecture",
-                ["description"] = "Diffs the current scan against a base — a saved report JSON snapshot produced by this tool, or a second folder to scan — with exactly the CLI's --diff operand semantics. Returns counts first (added / removed / unchanged for requests, handlers, validators, pipeline behaviors, DbContexts and endpoints), then the findings delta (new and resolved findings, each identified by its stable baseline key of rule + target + normalized file), then the paged item lists. Identical scans return an explicitly empty delta; a base that cannot be read or parsed is a clean error, never a partial delta.",
+                ["description"] = "Diffs the current scan against a base, either a saved CqrsLens report JSON snapshot or a second folder to scan. Returns counts, the findings delta (new and resolved findings identified by their stable baseline keys), and changes to projects and their references, requests, handlers, validators, pipeline behaviors, DbContexts, and endpoints. Identical scans return an empty delta. A base that cannot be read or parsed returns an error.",
                 ["annotations"] = ReadOnlyAnnotation(),
                 ["inputSchema"] = new JsonObject
                 {
@@ -226,6 +260,48 @@ internal static class McpToolCatalog
                     ["required"] = new JsonArray("base"),
                 },
             },
+            new JsonObject
+            {
+                ["name"] = McpModelingTools.EvaluateArchitectureProposal,
+                ["description"] = "Models project boundaries before implementation. Give proposed projects with layers, and project references to add or remove. The evaluator overlays the changes on the scanned project graph and reports dependency and layering feedback. Use this to compare design options before editing project files.",
+                ["annotations"] = ReadOnlyAnnotation(),
+                ["inputSchema"] = McpModelingTools.ArchitectureProposalSchema(),
+            },
+            new JsonObject
+            {
+                ["name"] = McpModelingTools.PlanSliceTests,
+                ["description"] = "Turns user-confirmed Given/When/Then scenarios into a test-first plan for an existing or proposed vertical slice or direct operation (CQRS request, Minimal API/MVC endpoint, gRPC method, BackgroundService worker, message consumer, or service). The plan preserves acceptance criteria, uses discovered boundaries, collaborators, and source locations where available, and calls out questions to resolve. Use before writing or changing production code.",
+                ["annotations"] = ReadOnlyAnnotation(),
+                ["inputSchema"] = McpModelingTools.SliceTestPlanSchema(),
+            },
+            new JsonObject
+            {
+                ["name"] = McpModelingTools.VerifySliceDesign,
+                ["description"] = "Compares a saved v1 slice design (CQRS Command/Query/Request or universal Endpoint/Grpc/Worker/Consumer/Service) with a fresh source scan. Before coding, inspect missing shapes and conflicts in the current implementation. After coding, run it again with the same design to verify the expected target, project, response type, handler/validator (when CQRS), endpoint/trigger, persistence, dependencies, publishes, and dispatches. Use the returned evidence to investigate mismatches and inconclusive checks. Run the scenario tests to verify behavior.",
+                ["annotations"] = ReadOnlyAnnotation(),
+                ["inputSchema"] = McpModelingTools.SliceDesignSchema(),
+            },
+            new JsonObject
+            {
+                ["name"] = McpModelingTools.DraftSliceDesign,
+                ["description"] = "Drafts a schema-valid v1 slice design from scanned static facts for an existing CQRS request, direct entrypoint (Endpoint, Grpc, Worker, Consumer), or concrete service, surfacing missing links, inferred-only endpoint gaps, and open questions.",
+                ["annotations"] = ReadOnlyAnnotation(),
+                ["inputSchema"] = McpModelingTools.DraftSliceSchema(),
+            },
+            new JsonObject
+            {
+                ["name"] = McpModelingTools.AnalyzeChangeImpact,
+                ["description"] = "Traces bounded bidirectional dependency impact across projects, direct entrypoints (Minimal API, MVC, gRPC, Blazor, Razor, workers, consumers), integration events and cross-service flows, CQRS slices, DI services, notifications, DbContexts, entities, and static test references (supporting targetKind: project, entity, dbcontext, service, notification, handler, request, entrypoint, event), reporting affected projects, uncovered hotspots, and explicit blind spots.",
+                ["annotations"] = ReadOnlyAnnotation(),
+                ["inputSchema"] = McpModelingTools.ChangeImpactSchema(),
+            },
+            new JsonObject
+            {
+                ["name"] = McpModelingTools.VerifyTddCycle,
+                ["description"] = "Evaluates the closed-loop TDD phase (spec_draft, red, green_incomplete, verified, drifted, or inconclusive) for any CQRS or universal slice design (Command, Query, Request, Endpoint, Grpc, Worker, Consumer, Service) by combining a fresh static scan, slice-scoped architecture checks, static test discovery, and optional runtime .trx test results.",
+                ["annotations"] = ReadOnlyAnnotation(),
+                ["inputSchema"] = McpModelingTools.VerifyTddCycleSchema(),
+            },
         };
 
         return McpResponses.BuildResult(idNode, new JsonObject { ["tools"] = tools });
@@ -236,14 +312,14 @@ internal static class McpToolCatalog
         ["readOnlyHint"] = true,
     };
 
-    private static JsonObject PathProperty(
+    internal static JsonObject PathProperty(
         string description = "Optional solution or repository folder path.") => new()
     {
         ["type"] = "string",
         ["description"] = description,
     };
 
-    private static JsonObject AnalysisProperty(
+    internal static JsonObject AnalysisProperty(
         string description = "Optional scanner backend: 'text' or 'roslyn'.") => new()
     {
         ["type"] = "string",

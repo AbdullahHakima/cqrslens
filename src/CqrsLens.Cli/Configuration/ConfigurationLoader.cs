@@ -29,7 +29,7 @@ public static class ConfigurationLoader
         CqrsLensConfiguration? config;
         try
         {
-            var json = File.ReadAllText(path);
+            var json = BoundedFileReader.ReadAllText(path);
             if (string.IsNullOrWhiteSpace(json))
                 throw new ConfigurationException($"config file is empty: {path}");
 
@@ -43,7 +43,7 @@ public static class ConfigurationLoader
         {
             throw new ConfigurationException($"invalid config '{path}': {ex.Message}");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             throw new ConfigurationException($"could not read config '{path}': {ex.Message}");
         }
