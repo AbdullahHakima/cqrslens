@@ -13,8 +13,10 @@ artifacts/
 *.snupkg
 
 ## Tool output (when generated at the repo root by accident)
-## (anchored to root only — docs/sample-output/ARCHITECTURE.md is a kept demo asset)
+## (anchored to root only — docs/sample-output/ARCHITECTURE.md
+/ARCHITECTURE.json is a kept demo asset)
 /ARCHITECTURE.md
+/ARCHITECTURE.json
 
 ## IDE / OS
 .vs/
