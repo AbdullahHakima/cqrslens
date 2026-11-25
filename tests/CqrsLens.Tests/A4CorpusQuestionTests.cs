@@ -30,8 +30,7 @@ public sealed class A4CorpusQuestionTests : IDisposable
         try { Directory.Delete(_temp, recursive: true); } catch { /* best effort */ }
     }
 
-    public static IEnumerable<object[]> DiffCases =>
-        FrozenQuestionSet.DiffQueries.Select(q => new object[] { q.Id });
+    public static TheoryData<string> DiffCases => new(FrozenQuestionSet.DiffQueries.Select(q => q.Id));
 
     [SkippableTheory]
     [MemberData(nameof(DiffCases))]
@@ -85,10 +84,14 @@ public sealed class A4CorpusQuestionTests : IDisposable
             },
         };
 
+        var options = new CliOptions { Path = headPath, Mcp = true };
+        var baseRoot = Directory.Exists(basePath) ? basePath : Path.GetDirectoryName(basePath)!;
+        options.AllowedRoots.Add(baseRoot);
+
         var json = McpToolInvoker.Call(
             JsonValue.Create(1),
             parameters,
-            new CliOptions { Path = headPath, Mcp = true },
+            options,
             Cache);
 
         return JsonNode.Parse(json)!.AsObject()["result"]!.AsObject()["content"]![0]!["text"]!.GetValue<string>();

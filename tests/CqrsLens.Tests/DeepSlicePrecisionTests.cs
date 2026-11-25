@@ -850,7 +850,7 @@ public class DeepSlicePrecisionTests
 
         var badVersion = JsonNode.Parse(McpServer.ProcessMessage(
             """{"jsonrpc":"2.0","id":3,"method":"initialize","params":{"protocolVersion":42}}""", options)!)!;
-        Assert.Equal("2024-11-05", badVersion["result"]!["protocolVersion"]!.GetValue<string>());
+        Assert.Equal("2025-06-18", badVersion["result"]!["protocolVersion"]!.GetValue<string>());
     }
 
     [Fact]

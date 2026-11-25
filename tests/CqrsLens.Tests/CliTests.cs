@@ -77,8 +77,81 @@ public class CliTests : IDisposable
         Assert.Contains("--format FORMAT", result.Stdout);
         Assert.Contains("md (default), html, json, or agent", result.Stdout);
         Assert.Contains("--render", result.Stdout);
+        Assert.Contains("--view MODE", result.Stdout);
+        Assert.Contains("--focus NAME", result.Stdout);
+        Assert.Contains("--exclude-tests", result.Stdout);
         Assert.Contains("--handler-markers", result.Stdout);
+        Assert.Contains("--proposal FILE", result.Stdout);
+        Assert.Contains("--draft-slice REQUEST", result.Stdout);
+        Assert.Contains("--impact TARGET", result.Stdout);
+        Assert.Contains("--tdd-check FILE", result.Stdout);
+        Assert.Contains("--allow-root DIR", result.Stdout);
+        Assert.Contains("--allow-external-paths", result.Stdout);
         Assert.Contains("--version", result.Stdout);
+    }
+
+    [Fact]
+    public void Proposal_EvaluatesExistingReferences_WithoutWritingAReportOrProject()
+    {
+        WriteFile("Shop.Application/Shop.Application.csproj", "<Project />");
+        const string infrastructureProject = """
+            <Project><ItemGroup>
+              <ProjectReference Include="../Shop.Application/Shop.Application.csproj" />
+            </ItemGroup></Project>
+            """;
+        WriteFile("Shop.Infrastructure/Shop.Infrastructure.csproj", infrastructureProject);
+        WriteFile("proposal.json", """
+            {"references":[{"from":"Shop.Application","to":"Shop.Infrastructure"}]}
+            """);
+        var before = Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal).ToArray();
+
+        var run = Run([_root, "--proposal", Path.Combine(_root, "proposal.json")]);
+
+        Assert.Equal(ExitCodes.Success, run.Code);
+        Assert.Empty(run.Stderr);
+        using var response = JsonDocument.Parse(run.Stdout);
+        Assert.Equal("conflicts", response.RootElement.GetProperty("status").GetString());
+        Assert.Contains(response.RootElement.GetProperty("findings").EnumerateArray(), finding =>
+            finding.GetProperty("code").GetString() == "CircularProjectDependency");
+        Assert.Equal(before, Directory.GetFiles(_root, "*", SearchOption.AllDirectories).Order(StringComparer.Ordinal));
+        Assert.Equal(infrastructureProject, File.ReadAllText(Path.Combine(_root, "Shop.Infrastructure", "Shop.Infrastructure.csproj")));
+    }
+
+    [Fact]
+    public void Proposal_SupportsGreenfieldModelInAnExistingEmptyDirectory()
+    {
+        WriteFile("proposal.json", """
+            {
+              "projects":[{"name":"Shop.Domain","layer":"Domain"},{"name":"Shop.Application","layer":"Application"}],
+              "references":[{"from":"Shop.Application","to":"Shop.Domain"}]
+            }
+            """);
+
+        var run = Run([_root, "--proposal", Path.Combine(_root, "proposal.json")]);
+
+        Assert.Equal(ExitCodes.Success, run.Code);
+        Assert.Empty(run.Stderr);
+        using var response = JsonDocument.Parse(run.Stdout);
+        Assert.Equal("checks_passed", response.RootElement.GetProperty("status").GetString());
+        Assert.Equal(0, response.RootElement.GetProperty("existingProjectCount").GetInt32());
+    }
+
+    [Theory]
+    [InlineData("{", "invalid proposal")]
+    [InlineData("[]", "Expected a JSON object")]
+    [InlineData("{}", "at least one proposed project or reference")]
+    [InlineData("""{"referecnes":[]}""", "Unexpected field 'referecnes'")]
+    [InlineData("""{"references":[{"from":"App","to":"Domain","op":"remove"}]}""", "Unexpected field 'op'")]
+    [InlineData("""{"projects":[{"name":"App","layer":null}]}""", "'projects[0].layer'")]
+    public void Proposal_RejectsMalformedInputBeforeScanning(string json, string message)
+    {
+        WriteFile("proposal.json", json);
+
+        var run = Run([_root, "--proposal", Path.Combine(_root, "proposal.json")]);
+
+        Assert.Equal(ExitCodes.Usage, run.Code);
+        Assert.Empty(run.Stdout);
+        Assert.Contains(message, run.Stderr);
     }
 
     [Fact]
@@ -158,6 +231,8 @@ public class CliTests : IDisposable
     [InlineData("--output")]
     [InlineData("--format")]
     [InlineData("--render")]
+    [InlineData("--view")]
+    [InlineData("--focus")]
     [InlineData("--config")]
     [InlineData("--analysis")]
     [InlineData("--markers")]
@@ -168,6 +243,12 @@ public class CliTests : IDisposable
     [InlineData("--summary")]
     [InlineData("--ci-root")]
     [InlineData("--watermark")]
+    [InlineData("--draft-slice")]
+    [InlineData("--impact")]
+    [InlineData("--impact-kind")]
+    [InlineData("--tdd-check")]
+    [InlineData("--test-results")]
+    [InlineData("--allow-root")]
     public void OptionWithoutValue_IsUsageError(string option)
     {
         var result = Run(new[] { option });
@@ -506,5 +587,202 @@ public class CliTests : IDisposable
         var colored = ConsoleArtwork.FormatProgressBar(progress, useColor: true, barWidth: 20);
         Assert.Contains("\x1b[38;2;", colored);
         Assert.Contains("50%", colored);
+    }
+
+    [Fact]
+    public void DraftSlice_OutputsSchemaValidDesignThatRoundTripsWithSliceDesign()
+    {
+        WriteValidFixture();
+
+        var run = Run([_root, "--draft-slice", "PingQuery"]);
+
+        Assert.Equal(ExitCodes.Success, run.Code);
+        Assert.Empty(run.Stderr);
+        using var draft = JsonDocument.Parse(run.Stdout);
+        Assert.Equal("drafted", draft.RootElement.GetProperty("status").GetString());
+        Assert.Equal("App.PingQuery", draft.RootElement.GetProperty("request").GetString());
+
+        var designJson = draft.RootElement.GetProperty("design").GetRawText();
+        WriteFile("ping.slice.json", designJson);
+
+        var verify = Run([_root, "--slice-design", Path.Combine(_root, "ping.slice.json"), "--strict"]);
+        Assert.Equal(ExitCodes.Success, verify.Code);
+        using var eval = JsonDocument.Parse(verify.Stdout);
+        Assert.Equal("matched", eval.RootElement.GetProperty("status").GetString());
+    }
+
+    [Fact]
+    public void Impact_ReportsBidirectionalImpactAndHotspots()
+    {
+        WriteValidFixture();
+
+        var run = Run([_root, "--impact", "PingQuery", "--impact-kind", "request"]);
+
+        Assert.Equal(ExitCodes.Success, run.Code);
+        Assert.Empty(run.Stderr);
+        using var report = JsonDocument.Parse(run.Stdout);
+        Assert.Equal("analyzed", report.RootElement.GetProperty("status").GetString());
+        Assert.Equal("PingQuery", report.RootElement.GetProperty("target").GetProperty("name").GetString());
+        Assert.Contains(report.RootElement.GetProperty("impactedItems").EnumerateArray(), item =>
+            item.GetProperty("kind").GetString() == "handler" &&
+            item.GetProperty("name").GetString() == "PingQueryHandler");
+        Assert.Contains(report.RootElement.GetProperty("uncoveredHotspots").EnumerateArray(), spot =>
+            spot.GetString()!.Contains("App.PingQuery", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void TddCheck_EvaluatesPhasesWithOptionalTrxAndStrictGate()
+    {
+        WriteFile("App/App.csproj", "<Project Sdk=\"Microsoft.NET.Sdk\"></Project>");
+        WriteFile("App/Ping.cs", """
+            using MediatR;
+
+            namespace App;
+
+            public sealed record PingQuery : IRequest<int>;
+            public sealed class PingQueryHandler : IRequestHandler<PingQuery, int>
+            {
+                public Task<int> Handle(PingQuery request, CancellationToken cancellationToken) => Task.FromResult(1);
+            }
+
+            public static class PingEndpoints
+            {
+                public static void Map(object app)
+                {
+                    app.MapGet("/ping", (IMediator mediator) => mediator.Send(new PingQuery()));
+                }
+            }
+            """);
+        WriteFile("App.Tests/App.Tests.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk">
+              <ItemGroup>
+                <PackageReference Include="xunit" Version="2.9.0" />
+                <ProjectReference Include="..\App\App.csproj" />
+              </ItemGroup>
+            </Project>
+            """);
+        WriteFile("App.Tests/PingQueryTests.cs", """
+            using App;
+            using Xunit;
+
+            namespace App.Tests;
+
+            public sealed class PingQueryTests
+            {
+                [Fact]
+                public void PingQuery_ReturnsOne()
+                {
+                    var q = new PingQuery();
+                    _ = q;
+                }
+            }
+            """);
+        WriteFile("ping.slice.json", """
+            {
+              "schemaVersion": 1,
+              "project": "App",
+              "request": "App.PingQuery",
+              "kind": "Query",
+              "responseType": "int",
+              "handler": "App.PingQueryHandler",
+              "scenarios": [
+                { "name": "returns one", "given": "a ping", "when": "handled", "then": "returns 1" }
+              ]
+            }
+            """);
+
+        var slicePath = Path.Combine(_root, "ping.slice.json");
+
+        // Without TRX -> green_incomplete, exit 0 non-strict, exit 4 strict.
+        var withoutTrx = Run([_root, "--tdd-check", slicePath]);
+        Assert.Equal(ExitCodes.Success, withoutTrx.Code);
+        using (var doc = JsonDocument.Parse(withoutTrx.Stdout))
+        {
+            Assert.Equal("green_incomplete", doc.RootElement.GetProperty("phase").GetString());
+            Assert.True(doc.RootElement.GetProperty("hasDiscoveredTests").GetBoolean());
+            Assert.False(doc.RootElement.GetProperty("hasRuntimeResults").GetBoolean());
+        }
+        Assert.Equal(ExitCodes.StrictFailure, Run([_root, "--tdd-check", slicePath, "--strict"]).Code);
+
+        // Failing TRX -> red, exit 4 under --strict.
+        WriteFile("red.trx", """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results>
+                <UnitTestResult testName="App.Tests.PingQueryTests.PingQuery_ReturnsOne" outcome="Failed" />
+              </Results>
+            </TestRun>
+            """);
+        var redRun = Run([_root, "--tdd-check", slicePath, "--test-results", Path.Combine(_root, "red.trx"), "--strict"]);
+        Assert.Equal(ExitCodes.StrictFailure, redRun.Code);
+        using (var redDoc = JsonDocument.Parse(redRun.Stdout))
+            Assert.Equal("red", redDoc.RootElement.GetProperty("phase").GetString());
+
+        // Passing TRX -> verified, exit 0 under --strict.
+        WriteFile("green.trx", """
+            <TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+              <Results>
+                <UnitTestResult testName="App.Tests.PingQueryTests.PingQuery_ReturnsOne" outcome="Passed" />
+              </Results>
+            </TestRun>
+            """);
+        var greenRun = Run([_root, "--tdd-check", slicePath, "--test-results", Path.Combine(_root, "green.trx"), "--strict"]);
+        Assert.Equal(ExitCodes.Success, greenRun.Code);
+        using (var greenDoc = JsonDocument.Parse(greenRun.Stdout))
+            Assert.Equal("verified", greenDoc.RootElement.GetProperty("phase").GetString());
+
+        // XXE TRX -> usage error before scanning.
+        WriteFile("xxe.trx", """
+            <?xml version="1.0"?>
+            <!DOCTYPE foo [ <!ENTITY xxe SYSTEM "file:///etc/passwd"> ]>
+            <TestRun><Results><UnitTestResult testName="&xxe;" outcome="Passed" /></Results></TestRun>
+            """);
+        var xxeRun = Run([_root, "--tdd-check", slicePath, "--test-results", Path.Combine(_root, "xxe.trx")]);
+        Assert.Equal(ExitCodes.Usage, xxeRun.Code);
+        Assert.Contains("invalid test results", xxeRun.Stderr);
+    }
+
+    [Fact]
+    public void Parser_ReadsAllowRootAndRejectsOptionConflicts()
+    {
+        var mcp = CliParser.Parse([_root, "--mcp", "--allow-root", "/extra/one", "--allow-root", " /extra/two ", "--allow-external-paths"]);
+        Assert.Equal(CliCommandKind.Run, mcp.Kind);
+        Assert.Equal(["/extra/one", "/extra/two"], mcp.Options!.AllowedRoots);
+        Assert.True(mcp.Options.AllowExternalPaths);
+
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--impact-kind", "entity"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--impact", "Order", "--impact-kind", "bogus"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--test-results", "a.trx"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--draft-slice", "PingQuery", "--strict"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--impact", "Order", "--strict"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--draft-slice", "PingQuery", "--impact", "Order"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--tdd-check", "a.json", "--sarif", "out.sarif"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--tdd-check", "a.json", "--format", "agent"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--slice-design", "a.json", "--view", "overview"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--draft-slice", "PingQuery", "--focus", "App"]).Kind);
+        Assert.Equal(CliCommandKind.Error, CliParser.Parse([_root, "--impact", "Order", "--exclude-tests"]).Kind);
+    }
+
+    [Fact]
+    public void Parser_ReadsViewFocusAndExcludeTests_AndRejectsInvalidValues()
+    {
+        var overview = CliParser.Parse(["src", "--view", "overview", "--focus", " Orders.Api ", "--exclude-tests"]);
+        Assert.Equal(CliCommandKind.Run, overview.Kind);
+        Assert.Equal(ReportViewMode.Overview, overview.Options!.ViewMode);
+        Assert.True(overview.Options.ViewModeSpecified);
+        Assert.Equal("Orders.Api", overview.Options.FocusService);
+        Assert.True(overview.Options.ExcludeTests);
+
+        var full = CliParser.Parse(["src", "--view", "FULL"]);
+        Assert.Equal(CliCommandKind.Run, full.Kind);
+        Assert.Equal(ReportViewMode.Full, full.Options!.ViewMode);
+        Assert.True(full.Options.ViewModeSpecified);
+
+        var badView = Run([_root, "--view", "compact"]);
+        Assert.Equal(ExitCodes.Usage, badView.Code);
+        Assert.Contains("unknown view mode 'compact'", badView.Stderr);
+
+        var emptyFocus = Run([_root, "--focus", "   "]);
+        Assert.Equal(ExitCodes.Usage, emptyFocus.Code);
+        Assert.Contains("--focus cannot be empty", emptyFocus.Stderr);
     }
 }

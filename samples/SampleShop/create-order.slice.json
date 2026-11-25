@@ -1,0 +1,18 @@
+{
+  "$schema": "../../cqrslens.slice-design.schema.json",
+  "schemaVersion": 1,
+  "project": "SampleShop.Application",
+  "request": "SampleShop.Application.Orders.CreateOrder.CreateOrderCommand",
+  "kind": "Command",
+  "responseType": "Guid",
+  "handler": "SampleShop.Application.Orders.CreateOrder.CreateOrderCommandHandler",
+  "validator": "SampleShop.Application.Orders.CreateOrder.CreateOrderCommandValidator",
+  "scenarios": [
+    {
+      "name": "rejects an empty order",
+      "given": "A valid customer and no order lines",
+      "when": "The create order command is validated",
+      "then": "Validation reports an error for Lines"
+    }
+  ]
+}

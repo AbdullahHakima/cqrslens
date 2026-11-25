@@ -175,6 +175,32 @@ public sealed class DiffArchitectureToolTests : IDisposable
         Assert.Contains("- **Resolved findings**: 1", fromSnapshot);
     }
 
+    [Fact]
+    public void ReferenceOnlyChange_ReportsTheImplementedProjectDelta()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(_temp, "solution")).FullName;
+        var api = Path.Combine(root, "Shop.Api.csproj");
+        File.WriteAllText(Path.Combine(root, "Shop.Application.csproj"), "<Project />");
+        File.WriteAllText(Path.Combine(root, "Shop.Domain.csproj"), "<Project />");
+        const string apiProject = """
+            <Project><ItemGroup><ProjectReference Include="Shop.Application.csproj" /></ItemGroup></Project>
+            """;
+        File.WriteAllText(api, apiProject);
+        var snapshot = Path.Combine(_temp, "before.json");
+        File.WriteAllText(snapshot, JsonReportGenerator.Generate(ScanFixture(root)));
+
+        File.WriteAllText(api, apiProject.Replace("Shop.Application.csproj", "Shop.Domain.csproj", StringComparison.Ordinal));
+        var answer = Call(root, snapshot);
+
+        Assert.False(answer.IsError);
+        Assert.Contains("- **Changed**: yes", answer.Text);
+        Assert.Contains("- **Projects**: +0 added · -0 removed · =2 unchanged · ~1 modified", answer.Text);
+        Assert.Contains("Modified project **Shop.Api**", answer.Text);
+        Assert.Contains("+refs: Shop.Domain", answer.Text);
+        Assert.Contains("-refs: Shop.Application", answer.Text);
+        Assert.DoesNotContain("No architecture delta", answer.Text);
+    }
+
     // ------------------------------------------------------------------- clean failure
 
     [Fact]
@@ -217,11 +243,35 @@ public sealed class DiffArchitectureToolTests : IDisposable
         Assert.Contains("missing schemaVersion", answer.Text);
     }
 
+    [Fact]
+    public void ExternalBaseOperand_IsRejectedWhenNotInAllowedRoots()
+    {
+        var parameters = new JsonObject
+        {
+            ["name"] = "diff_architecture",
+            ["arguments"] = new JsonObject
+            {
+                ["path"] = _fixtureHead,
+                ["base"] = _fixtureBase,
+            },
+        };
+
+        var json = McpToolInvoker.Call(
+            JsonValue.Create(1),
+            parameters,
+            new CliOptions { Path = _fixtureHead, Mcp = true },
+            new McpScanCache());
+
+        var result = JsonNode.Parse(json)!.AsObject()["result"]!.AsObject();
+        Assert.True(result["isError"]!.GetValue<bool>());
+        Assert.Contains("escapes allowed MCP workspace roots", result["content"]![0]!["text"]!.GetValue<string>());
+    }
+
     // ------------------------------------------------------------------------- helpers
 
     private sealed record Answer(bool IsError, string Text);
 
-    private static Answer Call(string headPath, string? basePath, int limit = 0)
+    private Answer Call(string headPath, string? basePath, int limit = 0)
     {
         var arguments = new JsonObject { ["path"] = headPath };
         if (basePath is not null)
@@ -235,10 +285,14 @@ public sealed class DiffArchitectureToolTests : IDisposable
             ["arguments"] = arguments,
         };
 
+        var options = new CliOptions { Path = headPath, Mcp = true };
+        options.AllowedRoots.Add(_temp);
+        options.AllowedRoots.Add(_fixtureBase);
+
         var json = McpToolInvoker.Call(
             JsonValue.Create(1),
             parameters,
-            new CliOptions { Path = headPath, Mcp = true },
+            options,
             new McpScanCache());
 
         var result = JsonNode.Parse(json)!.AsObject()["result"]!.AsObject();

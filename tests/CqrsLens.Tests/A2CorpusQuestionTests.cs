@@ -18,11 +18,9 @@ public sealed class A2CorpusQuestionTests
 
     public A2CorpusQuestionTests(ITestOutputHelper output) => _output = output;
 
-    public static IEnumerable<object[]> CheckCases =>
-        FrozenQuestionSet.CheckQueries.Select(q => new object[] { q.Id });
+    public static TheoryData<string> CheckCases => new(FrozenQuestionSet.CheckQueries.Select(q => q.Id));
 
-    public static IEnumerable<object[]> SliceCases =>
-        FrozenQuestionSet.SliceQueries.Select(q => new object[] { q.Id });
+    public static TheoryData<string> SliceCases => new(FrozenQuestionSet.SliceQueries.Select(q => q.Id));
 
     [SkippableTheory]
     [MemberData(nameof(CheckCases))]

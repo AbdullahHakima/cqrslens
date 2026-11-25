@@ -138,7 +138,11 @@ public sealed class SliceStructuredTests
     private static JsonObject CallJson(JsonObject arguments)
     {
         arguments["format"] = "json";
-        return JsonNode.Parse(CallSlice(arguments))!.AsObject();
+        var result = CallSliceResult(arguments);
+        var textContent = JsonNode.Parse(result["content"]![0]!["text"]!.GetValue<string>());
+        var structuredContent = result["structuredContent"]!.AsObject();
+        Assert.True(JsonNode.DeepEquals(textContent, structuredContent));
+        return structuredContent;
     }
 
     private static string CallSlice(JsonObject arguments)

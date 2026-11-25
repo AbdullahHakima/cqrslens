@@ -18,14 +18,12 @@ public sealed class A3CorpusQuestionTests
 
     public A3CorpusQuestionTests(ITestOutputHelper output) => _output = output;
 
-    public static IEnumerable<object[]> RequestImpactCases =>
-        FrozenQuestionSet.RequestImpactQueries.Select(q => new object[] { q.Id });
+    public static TheoryData<string> RequestImpactCases => new(FrozenQuestionSet.RequestImpactQueries.Select(q => q.Id));
 
-    public static IEnumerable<object[]> GroupingCases =>
-        FrozenQuestionSet.GroupingQueries.Select(q => new object[] { q.Id });
+    public static TheoryData<string> GroupingCases => new(FrozenQuestionSet.GroupingQueries.Select(q => q.Id));
 
-    public static IEnumerable<object[]> ReconciliationCases =>
-        FrozenQuestionSet.GroupingReconciliation.Select(r => new object[] { r.Corpus.ToString() });
+    public static TheoryData<string> ReconciliationCases =>
+        new(FrozenQuestionSet.GroupingReconciliation.Select(r => r.Corpus.ToString()));
 
     [SkippableTheory]
     [MemberData(nameof(RequestImpactCases))]

@@ -90,7 +90,7 @@ public sealed class DataModelViewTests
         var result = Fixture();
         var view = DataModelView.Build(result);
 
-        var empty = Assert.Single(view.Contexts.Where(c => c.EntityCount == 0));
+        var empty = Assert.Single(view.Contexts, c => c.EntityCount == 0);
         Assert.Equal("ApplicationDbContext", empty.Name);
         Assert.Contains(view.Contexts, c => c.Name == "ApplicationDbContext");
     }

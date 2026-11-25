@@ -119,7 +119,7 @@ public sealed class DiagramExportAdditionsTests : IDisposable
 
         var expected = SvgExporter.BuildDiagrams(result).Single(d => d.Name == "project-graph.svg").Source;
         var actual = File.ReadAllText(Path.Combine(mmdDirectory, "project-graph.mmd"));
-        Assert.Equal(expected.EndsWith("\n", StringComparison.Ordinal) ? expected : expected + "\n", actual);
+        Assert.Equal(expected.EndsWith('\n') ? expected : expected + "\n", actual);
     }
 
     [Fact]
@@ -128,7 +128,7 @@ public sealed class DiagramExportAdditionsTests : IDisposable
         var result = ResultWithRequests(("CreateOrder", "Shop.Application.Orders", true));
 
         var first = MermaidExporter.Export(result, Path.Combine(_root, "one"));
-        var firstBytes = first.ToDictionary(Path.GetFileName, File.ReadAllBytes)!;
+        var firstBytes = first.ToDictionary(path => Path.GetFileName(path)!, File.ReadAllBytes);
 
         var second = MermaidExporter.Export(result, Path.Combine(_root, "two"));
         Assert.Equal(

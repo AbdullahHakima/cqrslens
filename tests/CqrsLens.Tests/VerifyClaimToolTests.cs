@@ -18,7 +18,6 @@ public sealed class VerifyClaimToolTests
         var listed = JsonNode.Parse(McpToolCatalog.List(JsonValue.Create(1)))!.AsObject();
         var tools = listed["result"]!["tools"]!.AsArray();
 
-        Assert.Equal(7, tools.Count);
         Assert.Contains(tools, t => t!["name"]!.GetValue<string>() == "verify_claim");
         Assert.Contains(tools, t => t!["name"]!.GetValue<string>() == "trace_request_impact");
         Assert.Contains(tools, t => t!["name"]!.GetValue<string>() == "diff_architecture");

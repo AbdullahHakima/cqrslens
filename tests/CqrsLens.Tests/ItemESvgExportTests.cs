@@ -187,7 +187,7 @@ public sealed class ItemESvgExportTests : IDisposable
         var result = RepresentativeResult();
         var one = Path.Combine(_root, "one");
         var first = SvgExporter.Export(result, one);
-        var firstBytes = first.ToDictionary(Path.GetFileName, File.ReadAllBytes)!;
+        var firstBytes = first.ToDictionary(path => Path.GetFileName(path)!, File.ReadAllBytes);
 
         var second = SvgExporter.Export(result, Path.Combine(_root, "two"));
         Assert.Equal(

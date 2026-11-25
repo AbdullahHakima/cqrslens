@@ -17,7 +17,7 @@ public sealed class VerifyClaimCorpusTests
 
     public VerifyClaimCorpusTests(ITestOutputHelper output) => _output = output;
 
-    public static IEnumerable<object[]> Cases => FrozenQuestionSet.All.Select(c => new object[] { c.Id });
+    public static TheoryData<string> Cases => new(FrozenQuestionSet.All.Select(c => c.Id));
 
     [SkippableTheory]
     [MemberData(nameof(Cases))]
