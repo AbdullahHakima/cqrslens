@@ -71,6 +71,30 @@ the CLI prints the per-phase timing and allocation breakdown to stderr. See
 - Update `ROADMAP.md` if your change ships or reshapes a roadmap item
 - Describe *why* in the PR body, not only *what*
 
+## Rehearse a release
+
+Run the **Verify release package and publish to NuGet** workflow manually on the
+candidate ref. A manual run builds and tests on Linux and Windows, installs the
+package from the build artifact, and exercises the CLI and MCP modeling workflow
+on isolated .NET 8, 9, and 10 runtimes. Use the resulting `package-ubuntu-latest`
+artifact for additional local checking.
+
+```bash
+gh workflow run release.yml --ref <candidate-ref>
+```
+
+To verify any installed candidate locally, pass the executable to the shared
+smoke test from the repository root.
+
+```bash
+python3 scripts/smoke-modeling.py /path/to/cqrslens
+```
+
+Publishing requires a published GitHub release whose tag matches `Version` in
+`Directory.Build.props`. The publish job reuses the verification gates and
+publishes their tested package artifact. Choose the release version and review
+the [changelog](CHANGELOG.md) before publishing.
+
 ## Looking for a first issue?
 
 The open items in [ROADMAP.md](ROADMAP.md) are the best starting points.

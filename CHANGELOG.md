@@ -2,6 +2,70 @@
 
 All notable changes to CqrsLens are documented here.
 
+## [Unreleased]
+
+### Added
+
+- **Architecture modeling & proposal upgrades**:
+  - Evaluate hypothetical .NET projects and references through `--proposal` or
+    `evaluate_architecture_proposal`, now detecting `SelfProjectReference`,
+    `UnknownLayerName`, `TransitiveLayerViolation` (with `dependencyPath`), and
+    `ConditionalProjectReference` warnings from conditioned MSBuild
+    `ProjectReference` / `<Choose>/<When>` blocks and `TargetFrameworks`, plus
+    per-project coupling `metrics` ($C_a$, $C_e$, $I$) and `blastRadius`.
+  - Draft schema-valid v1 slice designs from static scan facts with
+    `--draft-slice <request>` or the `draft_slice_design` MCP tool.
+  - Extend `cqrslens.slice-design.schema.json` and `--slice-design` /
+    `verify_slice_design` with optional `properties`, `publishes`, `dispatches`,
+    `persistence` (`dbContexts`, `entities`), `dependencies`, and
+    `forbiddenDependencies`, plus recursive `*.slice.json` directory batch
+    evaluation via `--slice-design <dir>`.
+- **Bidirectional change impact analysis**:
+  - Trace bounded upstream/downstream impact across projects, CQRS slices, DI
+    services, notifications, DbContexts, entities, and static test references
+    via `--impact <target> [--impact-kind <kind>]` or `analyze_change_impact`,
+    surfacing `affectedProjects`, `uncoveredHotspots`, and explicit `blindSpots`.
+- **Closed-loop TDD verification & enriched test plans**:
+  - Discover test projects (xUnit, NUnit, MSTest, TUnit; mocking and assertion
+    libraries) and static test references (`dispatch`, `instantiation`,
+    `type-reference`) across test attributes and helper/ctor SUTs.
+  - Enrich `plan_slice_tests` with `payload`, `collaborators` (including
+    recommended test doubles), `activeBehaviors`, `testProjects`,
+    `discoveredTests`, and `scenarioMappings`.
+  - Parse Visual Studio `.trx` results safely (`TrxTestResultsParser`) and
+    evaluate the fail-closed TDD phase (`spec_draft`, `red`, `green_incomplete`,
+    `verified`, `drifted`, `inconclusive`) via `--tdd-check <slice.json>
+    [--test-results <results.trx>] [--strict]` or `verify_tdd_cycle`.
+- **Expanded claim verification & MCP prompts**:
+  - Add `calls service`, `references project`, `touches entity`, and
+    `has test reference` (with absence forms) to `verify_claim`.
+  - Add `plan_refactor` and `review_architecture_change` MCP prompts alongside
+    an updated `model_feature` prompt.
+- **Security hardening & MCP path confinement**:
+  - Confine MCP `path`, `base`, and `testResultsPath` arguments to the startup
+    workspace root via `McpPathGuard` (blocking traversal, sibling-prefix
+    bypasses, control chars, and symlink escapes), with opt-in `--allow-root`
+    and `--allow-external-paths`.
+  - Prohibit DTDs/XXE in XML loading (`SafeXmlLoader`), bound file reads at
+    32 MB (`BoundedFileReader`), bound `McpMessageFraming` headers/bodies and
+    `McpScanCache` LRU size, add regex timeouts, isolate untrusted prompt text
+    in XML delimiters, and emit a strict CSP meta tag in `--render svg` HTML.
+
+### Changed
+
+- `LayerViolation` now also checks dependencies from Domain to Application.
+  Both scans and proposals honor the existing severity override.
+- JSON slice traces and the new modeling tools include native structured MCP
+  content alongside the text projection.
+
+### Fixed
+
+- MCP architecture diffs now show project reference changes and identify
+  findings-only changes correctly.
+- Malformed JSON-RPC requests no longer terminate the MCP server, and explicit
+  zero limits are rejected consistently with the tool schemas.
+- SampleShop now declares the logging dependency used by its pipeline behavior.
+
 ## [1.1.0] - 2026-11-13
 
 ### Added

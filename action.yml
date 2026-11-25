@@ -83,6 +83,18 @@ inputs:
     description: Emit file/line GitHub Actions annotations for new findings.
     required: false
     default: 'true'
+  slice-design:
+    description: Optional path to a .slice.json design contract or directory of *.slice.json specs to verify against the scanned architecture.
+    required: false
+    default: ''
+  tdd-check:
+    description: Optional path to a .slice.json design contract or directory of *.slice.json specs to evaluate closed-loop TDD phase.
+    required: false
+    default: ''
+  test-results:
+    description: Optional Visual Studio .trx runtime test results file passed to --tdd-check.
+    required: false
+    default: ''
   version:
     description: CqrsLens NuGet tool version to install.
     required: false
@@ -147,10 +159,28 @@ runs:
         trap cleanup_worktree EXIT
 
         if [ -z "$CQRSLENS_DIFF_BASE" ] && [ "$CQRSLENS_COMMENT_PR" = "true" ] && [ -n "${GITHUB_BASE_REF:-}" ]; then
+          case "$CQRSLENS_PATH" in
+            /*|\\\\*|[A-Za-z]:*|..|../*|*/..|*/../*|..\\*|*\\..|*\\..\\*)
+              echo "::error::Invalid inputs.path '$CQRSLENS_PATH': must stay within workspace without '..' traversal." >&2
+              exit 1
+              ;;
+          esac
+
           if git fetch --no-tags --depth=1 origin "$GITHUB_BASE_REF" 2>/dev/null &&
              git worktree add --detach "$CQRSLENS_BASE_WORKTREE" FETCH_HEAD 2>/dev/null; then
-            if [ -d "$CQRSLENS_BASE_WORKTREE/$CQRSLENS_PATH" ]; then
-              CQRSLENS_DIFF_BASE="$CQRSLENS_BASE_WORKTREE/$CQRSLENS_PATH"
+            base_root="$(cd -P "$CQRSLENS_BASE_WORKTREE" && pwd -P)"
+            candidate_base="$CQRSLENS_BASE_WORKTREE/$CQRSLENS_PATH"
+            if [ -d "$candidate_base" ]; then
+              resolved_base="$(cd -P "$candidate_base" && pwd -P)"
+              case "$resolved_base" in
+                "$base_root"|"$base_root"/*)
+                  CQRSLENS_DIFF_BASE="$resolved_base"
+                  ;;
+                *)
+                  echo "::error::Invalid inputs.path '$CQRSLENS_PATH': resolves outside base worktree." >&2
+                  exit 1
+                  ;;
+              esac
             fi
           fi
         fi
@@ -214,6 +244,88 @@ runs:
         fi
         exit "$status"
 
+    - name: Verify slice design
+      id: slice-design
+      if: (success() || steps.scan.outcome == 'failure') && inputs.slice-design != ''
+      shell: bash
+      env:
+        CQRSLENS_PATH: ${{ inputs.path }}
+        CQRSLENS_SLICE_DESIGN: ${{ inputs.slice-design }}
+        CQRSLENS_STRICT: ${{ inputs.strict }}
+        CQRSLENS_MARKERS: ${{ inputs.markers }}
+        CQRSLENS_HANDLER_MARKERS: ${{ inputs.handler-markers }}
+        CQRSLENS_ANALYSIS: ${{ inputs.analysis }}
+        CQRSLENS_CONFIG: ${{ inputs.config }}
+        CQRSLENS_SLICE_SUMMARY: ${{ runner.temp }}/cqrslens-slice-design.md
+      run: |
+        args=("$CQRSLENS_PATH" --slice-design "$CQRSLENS_SLICE_DESIGN" --format md -o "$CQRSLENS_SLICE_SUMMARY")
+        if [ "$CQRSLENS_STRICT" = "true" ]; then
+          args+=(--strict)
+        fi
+        if [ -n "$CQRSLENS_MARKERS" ]; then
+          args+=(--markers "$CQRSLENS_MARKERS")
+        fi
+        if [ -n "$CQRSLENS_HANDLER_MARKERS" ]; then
+          args+=(--handler-markers "$CQRSLENS_HANDLER_MARKERS")
+        fi
+        if [ -n "$CQRSLENS_ANALYSIS" ]; then
+          args+=(--analysis "$CQRSLENS_ANALYSIS")
+        fi
+        if [ -n "$CQRSLENS_CONFIG" ]; then
+          args+=(--config "$CQRSLENS_CONFIG")
+        fi
+        set +e
+        cqrslens "${args[@]}"
+        status=$?
+        set -e
+        if [ -f "$CQRSLENS_SLICE_SUMMARY" ]; then
+          cat "$CQRSLENS_SLICE_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$status"
+
+    - name: Verify TDD cycle
+      id: tdd-check
+      if: (success() || steps.scan.outcome == 'failure') && inputs.tdd-check != ''
+      shell: bash
+      env:
+        CQRSLENS_PATH: ${{ inputs.path }}
+        CQRSLENS_TDD_CHECK: ${{ inputs.tdd-check }}
+        CQRSLENS_TEST_RESULTS: ${{ inputs.test-results }}
+        CQRSLENS_STRICT: ${{ inputs.strict }}
+        CQRSLENS_MARKERS: ${{ inputs.markers }}
+        CQRSLENS_HANDLER_MARKERS: ${{ inputs.handler-markers }}
+        CQRSLENS_ANALYSIS: ${{ inputs.analysis }}
+        CQRSLENS_CONFIG: ${{ inputs.config }}
+        CQRSLENS_TDD_SUMMARY: ${{ runner.temp }}/cqrslens-tdd-cycle.md
+      run: |
+        args=("$CQRSLENS_PATH" --tdd-check "$CQRSLENS_TDD_CHECK" --format md -o "$CQRSLENS_TDD_SUMMARY")
+        if [ -n "$CQRSLENS_TEST_RESULTS" ]; then
+          args+=(--test-results "$CQRSLENS_TEST_RESULTS")
+        fi
+        if [ "$CQRSLENS_STRICT" = "true" ]; then
+          args+=(--strict)
+        fi
+        if [ -n "$CQRSLENS_MARKERS" ]; then
+          args+=(--markers "$CQRSLENS_MARKERS")
+        fi
+        if [ -n "$CQRSLENS_HANDLER_MARKERS" ]; then
+          args+=(--handler-markers "$CQRSLENS_HANDLER_MARKERS")
+        fi
+        if [ -n "$CQRSLENS_ANALYSIS" ]; then
+          args+=(--analysis "$CQRSLENS_ANALYSIS")
+        fi
+        if [ -n "$CQRSLENS_CONFIG" ]; then
+          args+=(--config "$CQRSLENS_CONFIG")
+        fi
+        set +e
+        cqrslens "${args[@]}"
+        status=$?
+        set -e
+        if [ -f "$CQRSLENS_TDD_SUMMARY" ]; then
+          cat "$CQRSLENS_TDD_SUMMARY" >> "$GITHUB_STEP_SUMMARY"
+        fi
+        exit "$status"
+
     - name: Comment architecture diff on pull request
       if: always() && inputs.comment-pr == 'true' && github.event.pull_request.number != ''
       shell: bash
@@ -237,7 +349,7 @@ runs:
           exit 0
         fi
 
-        EXISTING_ID=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
+        EXISTING_ID=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments?per_page=100" \
           --jq ".[] | select(.body | contains(\"$MARKER\")) | .id" | head -n 1 || true)
 
         if [ -n "$EXISTING_ID" ]; then

@@ -3,6 +3,94 @@
 What is planned, in the order I expect to work on it. Issues are linked
 where they exist; the dates are not promises.
 
+## Unreleased
+
+- **Universal .NET Architecture Support (Mediator-independent)**:
+  - `ArchitectureStyleDetector` (`architectureStyles` in JSON/Markdown/HTML/CLI/`get_architecture_dna`)
+    detects Layered / N-Tier, Minimal API, MVC / Controllers, gRPC Services,
+    Event-Driven, Background Workers, Blazor / Razor UI, Microservices /
+    Distributed, and CQRS / Mediator codebases without assuming MediatR.
+  - Adaptive zero-CQRS reporting (`ConsoleRenderer`, `MarkdownRenderer`,
+    `HtmlReportRenderer`, `InteractiveReportBuilder`): omits empty
+    `0 Requests / 0 Handlers / 0 Behaviors` clutter and adapts stat cards when
+    no CQRS contracts exist, while rendering `DirectFlowDiagramBuilder` direct
+    application flows and `DirectSequenceBuilder` `Operation Sequences` (`sequenceDiagram`
+    with zero `Mediator` participants) — verified on `nopCommerce` (`41`
+    projects, `962` system entrypoints, `116` integration flows, `48` SVGs, `12`
+    `Operation Sequences`, `4,999 ms` Text scan).
+  - `CircularServiceDependency` (`ServiceCycleChecks`) detects circular
+    constructor-injected service dependencies in non-test projects (configurable
+    in `cqrslens.json` / `KnownRules`, `0` false positives across the 10-repo
+    OSS gauntlet).
+  - Universal `SliceDesign` / `--draft-slice` / `--slice-design` / `plan_slice_tests` /
+    `--tdd-check` (`Command|Query|Request|Endpoint|Grpc|Worker|Consumer|Service`,
+    Handler-free blueprints via `SliceDesignDiagramBuilder`, non-`/` triggers
+    for `GRPC`/`WORKER`/`CONSUME`), universal `--impact-kind` (`entrypoint`,
+    `event`), and `verify_claim` (`communicates with` across `IntegrationFlows`
+    plus direct `SystemEntrypoint` evidence) — verified end-to-end on `dotnet/eShop`
+    non-MediatR `CatalogApi.CreateItem` (`Endpoint`), `BasketService.UpdateBasket`
+    (`Grpc`), and `CatalogItem` (`entity`), plus `12/12` `UniversalArchitectureTests`
+    (`799` passing xUnit tests total, `72/72` draft round-trips, `0` parity deltas).
+- **Big-picture system intelligence & full coverage**:
+  - System-wide entrypoint discovery (`SystemEntrypoints`) across HTTP Minimal
+    APIs, MVC controllers, FastEndpoints, gRPC `*Base` services, Blazor
+    `@page` / `[Route]` components, Razor Pages, `BackgroundService` /
+    `IHostedService` / `IJob` workers, and message consumers
+    (`IIntegrationEventHandler<T>`, `IConsumer<T>`, `IHandleMessages<T>`,
+    `IEventHandler<T>`, `[CapSubscribe]`) — covering both CQRS and direct
+    non-MediatR execution paths with bounded multi-hop DI tracing.
+  - Cross-service `IntegrationFlows` (integration-event pub/sub, `.NET Aspire`
+    `AddProject` / `AddDotnetProject` / `.WithReference`, typed/named HTTP and
+    gRPC clients, and shared `DbContext`s) plus `ServiceProfiles` with runtime
+    roles (`Api`, `Worker`, `Ui`, `Orchestrator`, `Library`, `Tests`),
+    technology stack detection, and `Start Here` entry files.
+  - DDD entity domain-event tracking (`AddDomainEvent` / `RaiseDomainEvent` /
+    `QueueDomainEvent`) eliminating false `UnpublishedNotification` warnings,
+    clean `ImpactDiagramBuilder` endpoint labels, and deduplicated
+    production-only `UnresolvedDispatch` blind spots.
+  - C4-style `SystemLandscape` diagram, `--view overview|full`, `--focus NAME`,
+    `--exclude-tests`, progressive-disclosure HTML portal (`<nav class="toc">`
+    sidebar + native `<details>` accordions, zero-JS SVG with strict CSP),
+    additive JSON (`systemEntrypoints`, `integrationFlows`, `serviceProfiles`),
+    and 14th MCP tool `get_system_overview`.
+- **Modeling, impact & TDD engine**:
+  - Rich versioned slice designs (`properties`, `publishes`, `dispatches`,
+    `persistence`, `dependencies`, `forbiddenDependencies`) verified via
+    `verify_slice_design` or `--slice-design` (supporting both single files and
+    recursive `*.slice.json` directory batches).
+  - `draft_slice_design` / `--draft-slice` drafts schema-valid v1 slice designs
+    from scanned facts and surfaces gaps and open questions.
+  - Upgraded `evaluate_architecture_proposal` / `--proposal` with conditional
+    MSBuild reference parsing, `TargetFrameworks`, `SelfProjectReference`,
+    `UnknownLayerName`, `TransitiveLayerViolation`, coupling `metrics`, and
+    `blastRadius`.
+  - Bidirectional `analyze_change_impact` / `--impact` tracing across projects,
+    slices, services, notifications, DbContexts, entities, and test references
+    with `uncoveredHotspots` and `blindSpots`.
+  - Closed-loop test intelligence (`TestProjectDiscovery`, enriched
+    `plan_slice_tests`, `TrxTestResultsParser`, `verify_tdd_cycle` /
+    `--tdd-check --test-results` including recursive directory `*.slice.json`
+    batch evaluation `TddBatchEvaluation`) plus expanded `verify_claim` relations
+    (`calls service`, `references project`, `touches entity`, `has test reference`,
+    and multi-hop DI-resolved `uses DbContext`).
+  - Multi-hop DI `Service → Repository → DbContext` / `IDbContextFactory<T>`
+    lineage (`ResolvedEdge.ViaChain`, open-generic repository fallback, transitive
+    `TouchedEntities`, fail-closed cycle/ambiguity handling) and modern .NET
+    entrypoint discovery: chained `MapGroup` + route-first Minimal API method
+    groups, Razor Pages (`PageModel` `OnGet*`/`OnPost*` + `.cshtml` `@page` +
+    `[BindProperty]`), and Blazor components (`.razor` `@page` / `@code` and
+    `.razor.cs` `[Route]`, `HttpMethod = "BLAZOR"`).
+  - Visual modeling & TDD reporting (`--format md|html`, `--render mermaid|svg`
+    offline zero-JS SVG with strict CSP, and `-o`) across `--proposal` (including
+    `--strict`), `--impact`, `--slice-design`, and `--tdd-check`, plus GitHub
+    Action (`action.yml`) Markdown step summaries for `slice-design`,
+    `tdd-check`, and `test-results`.
+  - Hardened MCP server (`McpPathGuard` workspace confinement with
+    `--allow-root` / `--allow-external-paths`, three delimiter-isolated MCP
+    prompts: `model_feature`, `plan_refactor`, `review_architecture_change`),
+    DTD/XXE-safe `SafeXmlLoader`, `BoundedFileReader`, framed stdio bounds, and
+    zero-JS SVG strict CSP.
+
 ## Done
 
 **1.1.0** (November 2026)

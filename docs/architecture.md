@@ -27,6 +27,19 @@ analysis models are renderer inputs, but not the reverse.
 Tests and benchmarks are outside the production graph. Production projects must not
 reference either.
 
+## Find the entry point
+
+| If you are changing… | Start with… | Verify with… |
+| --- | --- | --- |
+| A scanned fact | `CqrsLens.Analysis/Analyzer.cs` and the Core type for that fact | The matching scanner test and `GoldenCorpusTests`. |
+| A proposed project boundary | `CqrsLens.Analysis/Modeling/ArchitectureProposalEvaluator.cs` and `Checks/ProjectLayerChecks.cs` | `ArchitectureProposalTests` and the CLI proposal cases. |
+| A saved CQRS slice design | `CqrsLens.Analysis/Modeling/SliceDesignEvaluator.cs`, `CqrsLens.Cli/Execution/SliceDesignInput.cs`, and `cqrslens.slice-design.schema.json` | Slice design evaluator, CLI, and MCP tests. |
+| How CqrsLens turns a scenario into a test plan | `CqrsLens.Reporting/Agent/AgentSliceTestPlanGenerator.cs` | `SliceTestPlanTests` and the MCP modeling tool cases. |
+| What an LLM client sees | `CqrsLens.Cli/Mcp/McpToolCatalog.cs`, `McpToolInvoker.cs`, and `McpModelFeaturePrompt.cs` | `McpServerTests` and the tool-specific contract tests. |
+
+The [modeling walkthrough](modeling.md) shows how the scan, proposal evaluator,
+test planner, and diff work together from a developer's perspective.
+
 ## Scan pipeline
 
 `Analyzer` owns the orchestration and records an `AnalysisPhaseTiming` for every

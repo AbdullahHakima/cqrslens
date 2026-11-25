@@ -1,4 +1,4 @@
-name: Publish to NuGet
+name: Verify release package and publish to NuGet
 
 on:
   release:
@@ -7,10 +7,9 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  publish:
+  verify-version:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -30,41 +29,31 @@ jobs:
             echo "::error::Release tag '$GITHUB_REF_NAME' does not match package version '$version'."
             exit 1
           fi
-          echo "Publishing CqrsLens $version for tag $GITHUB_REF_NAME"
+          echo "Verifying CqrsLens $version for tag $GITHUB_REF_NAME"
 
+  verify:
+    needs: verify-version
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    # A manual dispatch verifies the package and uploads it for inspection.
+    if: github.event_name == 'release'
+    needs: verify
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    steps:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore (locked)
-        run: dotnet restore CqrsLens.sln --locked-mode
-
-      - name: Build
-        run: dotnet build CqrsLens.sln -c Release --no-restore --nologo
-
-      - name: Test
-        run: dotnet test CqrsLens.sln -c Release --no-build --nologo
-
-      - name: Pack
-        run: dotnet pack src/CqrsLens.Cli/CqrsLens.Cli.csproj -c Release --no-build -o artifacts
-
-      - name: Verify the packed tool installs and runs
-        shell: bash
-        run: |
-          set -euo pipefail
-          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n1)
-          test -n "$version"
-          dotnet tool install --global CqrsLens --version "$version" \
-            --add-source "$PWD/artifacts"
-          export PATH="$HOME/.dotnet/tools:$PATH"
-          cqrslens samples/SampleShop --analysis text --strict \
-            --generated-at 2026-01-02T03:04:05Z -o artifacts/release-smoke.md
-          grep -q "| Requests (commands + queries) | 4 |" artifacts/release-smoke.md
-          grep -q "| Handlers | 4 |" artifacts/release-smoke.md
-          grep -q "| Validators | 2 |" artifacts/release-smoke.md
-          grep -q "| Pipeline behaviors | 1 |" artifacts/release-smoke.md
-          grep -q "| DbContexts | 1 |" artifacts/release-smoke.md
+      - name: Download verified package
+        uses: actions/download-artifact@v8
+        with:
+          name: package-ubuntu-latest
+          path: artifacts
 
       - name: NuGet login (Trusted Publishing)
         uses: NuGet/login@v1
@@ -73,4 +62,6 @@ jobs:
           user: Abdullahhakimam
 
       - name: Push to NuGet
-        run: dotnet nuget push artifacts/*.nupkg --api-key ${{ steps.nuget-login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        env:
+          CQRSLENS_NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+        run: dotnet nuget push artifacts/*.nupkg --api-key "$CQRSLENS_NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -24,6 +25,12 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 8.0.x
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/cqrslens-dotnet
+
+      - name: Verify .NET 8 SDK selection
+        shell: bash
+        run: dotnet --version | grep -E '^8\.0\.'
 
       - name: Restore (locked)
         run: dotnet restore CqrsLens.sln --locked-mode
@@ -146,7 +153,7 @@ jobs:
           dotnet tool install --global CqrsLens --version "$version" \
             --configfile "$RUNNER_TEMP/nuget-local.config"
           export PATH="$HOME/.dotnet/tools:$PATH"
-          cqrslens --version
+          test "$(cqrslens --version)" = "CqrsLens $version"
           runtimeconfig=$(find "$HOME/.dotnet/tools/.store/cqrslens/$version" -name cqrslens.runtimeconfig.json | head -n1)
           test -n "$runtimeconfig"
           grep -q '"rollForward": "LatestMajor"' "$runtimeconfig"
@@ -162,6 +169,9 @@ jobs:
           grep -q "| DbContexts | 1 |" artifacts/installed-ARCHITECTURE.md
           grep -q "## CQRS Map" artifacts/installed-ARCHITECTURE.md
           test -s artifacts/installed-ARCHITECTURE.md
+
+      - name: Verify modeling from the installed tool
+        run: python3 scripts/smoke-modeling.py "$HOME/.dotnet/tools/cqrslens"
 
       - name: Verify CLI exit codes from the installed tool
         shell: bash
@@ -226,6 +236,8 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: ${{ matrix.runtime }}
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/cqrslens-dotnet
 
       - name: Download package
         uses: actions/download-artifact@v8
@@ -240,10 +252,16 @@ jobs:
           version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Directory.Build.props | head -n1)
           test -n "$version"
 
-          export DOTNET_ROOT="$(dirname "$(readlink -f "$(command -v dotnet)")")"
+          export DOTNET_ROOT="$RUNNER_TEMP/cqrslens-dotnet"
+          export DOTNET_ROOT_X64="$DOTNET_ROOT"
           export PATH="$DOTNET_ROOT:$RUNNER_TEMP/cqrslens-tools:$PATH"
-          echo "DOTNET_ROOT=$DOTNET_ROOT"
-          dotnet --list-runtimes
+          test "$(readlink -f "$(command -v dotnet)")" = "$DOTNET_ROOT/dotnet"
+          dotnet --list-runtimes | tee "$RUNNER_TEMP/cqrslens-runtimes.txt"
+          # LatestMajor otherwise picks a runner's newest preinstalled runtime.
+          awk -v prefix="${RUNTIME_VERSION%.*}." '
+            $1 == "Microsoft.NETCore.App" { seen = 1; if (index($2, prefix) != 1) wrong = 1 }
+            END { exit (!seen || wrong) }
+          ' "$RUNNER_TEMP/cqrslens-runtimes.txt"
 
           cat > "$RUNNER_TEMP/nuget-local.config" <<EOF
           <?xml version="1.0" encoding="utf-8"?>
@@ -259,7 +277,7 @@ jobs:
           runtimeconfig=$(find "$RUNNER_TEMP/cqrslens-tools/.store/cqrslens/$version" -name cqrslens.runtimeconfig.json | head -n1)
           test -n "$runtimeconfig"
           grep -q '"rollForward": "LatestMajor"' "$runtimeconfig"
-          cqrslens --version
+          test "$(cqrslens --version)" = "CqrsLens $version"
           cqrslens samples/SampleShop \
             --analysis text \
             --strict \
@@ -268,6 +286,7 @@ jobs:
           grep -q "| Requests (commands + queries) | 4 |" \
             "artifacts/runtime-${RUNTIME_VERSION}-ARCHITECTURE.md"
           grep -q "| Handlers | 4 |" "artifacts/runtime-${RUNTIME_VERSION}-ARCHITECTURE.md"
+          python3 scripts/smoke-modeling.py "$RUNNER_TEMP/cqrslens-tools/cqrslens"
         env:
           RUNTIME_VERSION: ${{ matrix.runtime }}
 
