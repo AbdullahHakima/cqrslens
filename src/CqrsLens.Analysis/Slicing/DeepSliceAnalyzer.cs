@@ -10,7 +10,10 @@ namespace CqrsLens;
 /// </summary>
 internal static class DeepSliceAnalyzer
 {
-    public static void Analyze(SourceWorkspace workspace, AnalysisResult result)
+    public static void Analyze(
+        SourceWorkspace workspace,
+        AnalysisResult result,
+        SourcePathFilter? pathFilter = null)
     {
         if (workspace.ParsedFiles.Count == 0 ||
             (result.Requests.Count == 0 && result.Notifications.Count == 0))
@@ -37,7 +40,7 @@ internal static class DeepSliceAnalyzer
         Phase("request properties");
         HandlerDeepSliceAnalysis.Run(parsedFiles, result);
         Phase("handler slices");
-        ApiEndpointDiscovery.Discover(parsedFiles, result);
+        ApiEndpointDiscovery.Discover(parsedFiles, result, pathFilter);
         Phase("api entrypoints");
     }
 }

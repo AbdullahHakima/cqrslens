@@ -54,63 +54,71 @@ internal static partial class WolverineHandlerDiscovery
                 if (knownHandlers.Contains(decl.FullName)) continue;
 
                 var body = BodyText(file.Code, decl, scan.Classes);
-                foreach (Match match in WolverineMethodRegex().Matches(body.Text))
+                try
                 {
-                    var rawType = match.Groups["type"].Value.TrimEnd('?');
-                    var simple = CSharpScanner.SimpleName(CSharpScanner.UnqualifiedTypeName(rawType));
-                    var writtenNs = CSharpScanner.NamespaceOfType(rawType);
-                    var message = ResolveMessage(simple, writtenNs, decl, declarations);
-                    if (message is null) continue;
-
-                    var (msgDecl, msgFile) = message.Value;
-                    if (IsHandlerName(msgDecl.Name)) continue;
-                    // Open-generic messages are wrapper shapes, not concrete requests.
-                    if (msgDecl.TypeParameters.Count > 0)
+                    foreach (Match match in WolverineMethodRegex().Matches(body.Text))
                     {
-                        result.NonConcreteRequestNames.Add(msgDecl.Name);
-                        continue;
-                    }
-                    if (!addedPairs.Add((decl.FullName, msgDecl.FullName))) continue;
+                        var rawType = match.Groups["type"].Value.TrimEnd('?');
+                        var simple = CSharpScanner.SimpleName(CSharpScanner.UnqualifiedTypeName(rawType));
+                        var writtenNs = CSharpScanner.NamespaceOfType(rawType);
+                        var message = ResolveMessage(simple, writtenNs, decl, declarations);
+                        if (message is null) continue;
 
-                    if (!requestsByFullName.TryGetValue(msgDecl.FullName, out var request))
-                    {
-                        request = new CqrsRequest
+                        var (msgDecl, msgFile) = message.Value;
+                        if (IsHandlerName(msgDecl.Name)) continue;
+                        // Open-generic messages are wrapper shapes, not concrete requests.
+                        if (msgDecl.TypeParameters.Count > 0)
                         {
-                            Name = msgDecl.Name,
-                            Namespace = msgDecl.Namespace,
-                            ProjectName = msgFile.ProjectName,
-                            ViaMarker = MediatorConventions.WolverineName,
-                            Location = SourceLocation.Create(
-                                msgFile.Path, result.RootPath, msgFile.Code, msgDecl.DeclarationIndex),
-                        };
-                        request.ContainingTypes.AddRange(msgDecl.ContainingTypes);
-                        result.Requests.Add(request);
-                        requestsByFullName[request.FullName] = request;
-                    }
+                            result.NonConcreteRequestNames.Add(msgDecl.Name);
+                            continue;
+                        }
+                        if (!addedPairs.Add((decl.FullName, msgDecl.FullName))) continue;
 
-                    var handler = new HandlerInfo
-                    {
-                        Name = decl.Name,
-                        Namespace = decl.Namespace,
-                        RequestName = msgDecl.Name,
-                        RequestNamespace = msgDecl.ContainingTypes.Count == 0
-                            ? msgDecl.Namespace
-                            : string.Join(".", new[] { msgDecl.Namespace }
-                                .Where(n => !string.IsNullOrEmpty(n))
-                                .Concat(msgDecl.ContainingTypes)),
-                        ProjectName = file.ProjectName,
-                        Location = SourceLocation.Create(
-                            file.Path, result.RootPath, file.Code, body.Start + match.Index),
-                    };
-                    handler.ContainingTypes.AddRange(decl.ContainingTypes);
-                    result.Handlers.Add(handler);
+                        if (!requestsByFullName.TryGetValue(msgDecl.FullName, out var request))
+                        {
+                            request = new CqrsRequest
+                            {
+                                Name = msgDecl.Name,
+                                Namespace = msgDecl.Namespace,
+                                ProjectName = msgFile.ProjectName,
+                                ViaMarker = MediatorConventions.WolverineName,
+                                Location = SourceLocation.Create(
+                                    msgFile.Path, result.RootPath, msgFile.Code, msgDecl.DeclarationIndex),
+                            };
+                            request.ContainingTypes.AddRange(msgDecl.ContainingTypes);
+                            result.Requests.Add(request);
+                            requestsByFullName[request.FullName] = request;
+                        }
+
+                        var handler = new HandlerInfo
+                        {
+                            Name = decl.Name,
+                            Namespace = decl.Namespace,
+                            RequestName = msgDecl.Name,
+                            RequestNamespace = msgDecl.ContainingTypes.Count == 0
+                                ? msgDecl.Namespace
+                                : string.Join(".", new[] { msgDecl.Namespace }
+                                    .Where(n => !string.IsNullOrEmpty(n))
+                                    .Concat(msgDecl.ContainingTypes)),
+                            ProjectName = file.ProjectName,
+                            Location = SourceLocation.Create(
+                                file.Path, result.RootPath, file.Code, body.Start + match.Index),
+                        };
+                        handler.ContainingTypes.AddRange(decl.ContainingTypes);
+                        result.Handlers.Add(handler);
+                    }
+                }
+                catch (RegexMatchTimeoutException)
+                {
                 }
             }
         }
     }
 
     [GeneratedRegex(
-        @"\b(?<method>Handle|HandleAsync|Handles|HandlesAsync|Consume|ConsumeAsync)\s*\(\s*(?:\[[^\]]*\]\s*)?(?:(?:this|in|ref|scoped)\s+)?(?<type>[A-Za-z_][\w.]*(?:<[^()]*?>)?\??)\s+[A-Za-z_]\w*\s*[,)=]")]
+        @"\b(?<method>Handle|HandleAsync|Handles|HandlesAsync|Consume|ConsumeAsync)\s*\(\s*(?:\[[^\]]*\]\s*)?(?:(?:this|in|ref|scoped)\s+)?(?<type>[A-Za-z_][\w.]*(?:<[^()]*?>)?\??)\s+[A-Za-z_]\w*\s*[,)=]",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex WolverineMethodRegex();
 
     internal static bool IsHandlerName(string name)

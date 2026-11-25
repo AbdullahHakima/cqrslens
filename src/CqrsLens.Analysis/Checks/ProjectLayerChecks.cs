@@ -5,11 +5,33 @@ namespace CqrsLens;
 /// </summary>
 internal static class ProjectLayerChecks
 {
-    /// <summary>Layers a Domain project must never depend on.</summary>
-    private static readonly string[] ForbiddenForDomain = { "Infrastructure", "Api", "Web", "UI" };
+    private static readonly string[] OuterLayers = { "Infrastructure", "Api", "Web", "UI" };
 
-    /// <summary>Layers an Application project must never depend on.</summary>
-    private static readonly string[] ForbiddenForApplication = { "Infrastructure", "Api", "Web", "UI" };
+    internal static string? GetLayerViolationCode(string fromLayer, string toLayer)
+    {
+        var toOuterLayer = OuterLayers.Contains(toLayer, StringComparer.OrdinalIgnoreCase);
+        if (string.Equals(fromLayer, "Domain", StringComparison.OrdinalIgnoreCase))
+            return toOuterLayer || string.Equals(toLayer, "Application", StringComparison.OrdinalIgnoreCase)
+                ? ArchitectureChecker.LayerViolationCode
+                : null;
+
+        return toOuterLayer && string.Equals(fromLayer, "Application", StringComparison.OrdinalIgnoreCase)
+            ? ArchitectureChecker.ApplicationLayerViolationCode
+            : null;
+    }
+
+    internal static IReadOnlyDictionary<string, CheckSeverity?> CaptureLayerRuleOverrides(
+        IReadOnlyDictionary<string, CheckSeverity?> overrides)
+    {
+        var snapshot = new Dictionary<string, CheckSeverity?>(StringComparer.Ordinal);
+        foreach (var code in new[] { ArchitectureChecker.LayerViolationCode, ArchitectureChecker.ApplicationLayerViolationCode })
+        {
+            if (overrides.TryGetValue(code, out var severity))
+                snapshot.Add(code, severity);
+        }
+
+        return snapshot;
+    }
 
     internal static void Run(
         AnalysisResult result,
@@ -40,16 +62,9 @@ internal static class ProjectLayerChecks
         // Tests are not production layers and may legitimately reference anything.
         foreach (var project in result.Projects)
         {
-            var isDomain = string.Equals(project.Layer, "Domain", StringComparison.OrdinalIgnoreCase);
-            var isApplication = string.Equals(project.Layer, "Application", StringComparison.OrdinalIgnoreCase);
-            if (!isDomain && !isApplication)
+            if (!string.Equals(project.Layer, "Domain", StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(project.Layer, "Application", StringComparison.OrdinalIgnoreCase))
                 continue;
-
-            var forbidden = isDomain ? ForbiddenForDomain : ForbiddenForApplication;
-            var code = isDomain
-                ? ArchitectureChecker.LayerViolationCode
-                : ArchitectureChecker.ApplicationLayerViolationCode;
-            var layerLabel = isDomain ? "Domain" : "Application";
 
             foreach (var reference in project.ReferenceNames)
             {
@@ -57,8 +72,9 @@ internal static class ProjectLayerChecks
                 // guess and report a false layer violation.
                 if (projectsByName.TryGetValue(reference, out var targets) &&
                     targets.Count == 1 &&
-                    forbidden.Contains(targets[0].Layer, StringComparer.OrdinalIgnoreCase))
+                    GetLayerViolationCode(project.Layer, targets[0].Layer) is { } code)
                 {
+                    var layerLabel = code == ArchitectureChecker.LayerViolationCode ? "Domain" : "Application";
                     findings.Add(new CheckFinding(
                         violationSeverity,
                         code,

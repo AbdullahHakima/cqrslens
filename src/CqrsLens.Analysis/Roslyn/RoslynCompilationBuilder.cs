@@ -90,10 +90,26 @@ internal static class RoslynCompilationBuilder
             mediatR.Add("public interface IRequest { }");
         if (probe.GetTypeByMetadataName("MediatR.IRequest`1") is null)
             mediatR.Add("public interface IRequest<out TResponse> { }");
+        if (probe.GetTypeByMetadataName("MediatR.IAsyncRequest") is null)
+            mediatR.Add("public interface IAsyncRequest { }");
+        if (probe.GetTypeByMetadataName("MediatR.IAsyncRequest`1") is null)
+            mediatR.Add("public interface IAsyncRequest<out TResponse> { }");
         if (probe.GetTypeByMetadataName("MediatR.IRequestHandler`1") is null)
             mediatR.Add("public interface IRequestHandler<in TRequest> where TRequest : IRequest { }");
         if (probe.GetTypeByMetadataName("MediatR.IRequestHandler`2") is null)
             mediatR.Add("public interface IRequestHandler<in TRequest, TResponse> where TRequest : IRequest<TResponse> { }");
+        if (probe.GetTypeByMetadataName("MediatR.IAsyncRequestHandler`1") is null)
+            mediatR.Add("public interface IAsyncRequestHandler<in TRequest> { }");
+        if (probe.GetTypeByMetadataName("MediatR.IAsyncRequestHandler`2") is null)
+            mediatR.Add("public interface IAsyncRequestHandler<in TRequest, TResponse> { }");
+        if (probe.GetTypeByMetadataName("MediatR.RequestHandler`1") is null)
+            mediatR.Add("public abstract class RequestHandler<TRequest> { }");
+        if (probe.GetTypeByMetadataName("MediatR.RequestHandler`2") is null)
+            mediatR.Add("public abstract class RequestHandler<TRequest, TResponse> { }");
+        if (probe.GetTypeByMetadataName("MediatR.AsyncRequestHandler`1") is null)
+            mediatR.Add("public abstract class AsyncRequestHandler<TRequest> { }");
+        if (probe.GetTypeByMetadataName("MediatR.AsyncRequestHandler`2") is null)
+            mediatR.Add("public abstract class AsyncRequestHandler<TRequest, TResponse> { }");
         if (probe.GetTypeByMetadataName("MediatR.IPipelineBehavior`2") is null)
             mediatR.Add("public interface IPipelineBehavior<in TRequest, TResponse> where TRequest : notnull { }");
         if (probe.GetTypeByMetadataName("MediatR.RequestHandlerDelegate`1") is null)
@@ -102,6 +118,10 @@ internal static class RoslynCompilationBuilder
             mediatR.Add("public interface INotification { }");
         if (probe.GetTypeByMetadataName("MediatR.INotificationHandler`1") is null)
             mediatR.Add("public interface INotificationHandler<in TNotification> where TNotification : INotification { }");
+        if (probe.GetTypeByMetadataName("MediatR.IAsyncNotification") is null)
+            mediatR.Add("public interface IAsyncNotification { }");
+        if (probe.GetTypeByMetadataName("MediatR.IAsyncNotificationHandler`1") is null)
+            mediatR.Add("public interface IAsyncNotificationHandler<in TNotification> { }");
 
         AppendNamespace(sb, "MediatR", mediatR);
 
@@ -198,7 +218,28 @@ internal static class RoslynCompilationBuilder
             identity.Add("public class IdentityDbContext : Microsoft.EntityFrameworkCore.DbContext { }");
         if (probe.GetTypeByMetadataName("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityDbContext`1") is null)
             identity.Add("public class IdentityDbContext<TUser> : Microsoft.EntityFrameworkCore.DbContext where TUser : class { }");
+        if (probe.GetTypeByMetadataName("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityDbContext`3") is null)
+            identity.Add("public class IdentityDbContext<TUser, TRole, TKey> : Microsoft.EntityFrameworkCore.DbContext { }");
+        if (probe.GetTypeByMetadataName("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityDbContext`8") is null)
+            identity.Add("public class IdentityDbContext<TUser, TRole, TKey, TUserClaim, TUserRole, TUserLogin, TRoleClaim, TUserToken> : Microsoft.EntityFrameworkCore.DbContext { }");
+        if (probe.GetTypeByMetadataName("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityUserContext`1") is null)
+            identity.Add("public class IdentityUserContext<TUser> : Microsoft.EntityFrameworkCore.DbContext { }");
+        if (probe.GetTypeByMetadataName("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityUserContext`2") is null)
+            identity.Add("public class IdentityUserContext<TUser, TKey> : Microsoft.EntityFrameworkCore.DbContext { }");
+        if (probe.GetTypeByMetadataName("Microsoft.AspNetCore.Identity.EntityFrameworkCore.IdentityUserContext`5") is null)
+            identity.Add("public class IdentityUserContext<TUser, TKey, TUserClaim, TUserLogin, TUserToken> : Microsoft.EntityFrameworkCore.DbContext { }");
         AppendNamespace(sb, "Microsoft.AspNetCore.Identity.EntityFrameworkCore", identity);
+
+        var ef6 = new List<string>();
+        if (probe.GetTypeByMetadataName("System.Data.Entity.DbContext") is null)
+            ef6.Add("public class DbContext { protected DbContext() { } protected DbContext(string nameOrConnectionString) { } }");
+        if (probe.GetTypeByMetadataName("System.Data.Entity.DbSet`1") is null)
+            ef6.Add("public class DbSet<TEntity> { }");
+        if (probe.GetTypeByMetadataName("System.Data.Entity.IDbSet`1") is null)
+            ef6.Add("public interface IDbSet<TEntity> { }");
+        if (probe.GetTypeByMetadataName("System.Data.Entity.DbModelBuilder") is null)
+            ef6.Add("public class DbModelBuilder { }");
+        AppendNamespace(sb, "System.Data.Entity", ef6);
 
         return sb.ToString();
     }

@@ -18,8 +18,10 @@ internal static class MarkerNotificationDiscoverer
         {
             if (declaration.IsAbstract) continue;
             if (declaration.BaseRawNames.Contains("INotification") ||
+                declaration.BaseRawNames.Contains("IAsyncNotification") ||
                 declaration.BaseRawNames.Contains("IDomainEvent") ||
                 declaration.BaseRawNames.Contains("INotificationHandler") ||
+                declaration.BaseRawNames.Contains("IAsyncNotificationHandler") ||
                 declaration.BaseRawNames.Contains("IDomainEventHandler"))
                 continue;
             if (declaration.BaseRawNames.Count == 0) continue;
@@ -27,7 +29,9 @@ internal static class MarkerNotificationDiscoverer
             if (declaration.BaseRawNames.Any(b => b is "DbContext" or "IdentityDbContext" or
                                                       "AbstractValidator" or "IValidator" or
                                                       "Validator" or "IPipelineBehavior" or
-                                                      "IRequest" or "IRequestHandler"))
+                                                      "IRequest" or "IAsyncRequest" or
+                                                      "IRequestHandler" or "IAsyncRequestHandler" or
+                                                      "RequestHandler" or "AsyncRequestHandler"))
                 continue;
 
             var directInterfaces = new List<string>();
@@ -64,8 +68,8 @@ internal static class MarkerNotificationDiscoverer
                     n.ContainingTypes.SequenceEqual(declaration.ContainingTypes)))
                 continue;
 
-            var via = declaration.BaseRawNames.FirstOrDefault(b => b is not "INotification")
-                      ?? reached.FirstOrDefault(m => m != "INotification");
+            var via = declaration.BaseRawNames.FirstOrDefault(b => b is not ("INotification" or "IAsyncNotification"))
+                      ?? reached.FirstOrDefault(m => m is not ("INotification" or "IAsyncNotification"));
             var notification = new CqrsNotification
             {
                 Name = declaration.Name,

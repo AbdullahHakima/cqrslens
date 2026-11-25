@@ -40,6 +40,9 @@ internal static class ProjectFileDiscovery
     internal static List<string> FindSourceFiles(string root)
         => FindFiles(root, "*.cs");
 
+    internal static List<string> FindRazorFiles(string root)
+        => FindFiles(root, "*.razor");
+
     private static List<string> FindFiles(string root, string pattern)
     {
         if (!Directory.Exists(root)) return new List<string>();

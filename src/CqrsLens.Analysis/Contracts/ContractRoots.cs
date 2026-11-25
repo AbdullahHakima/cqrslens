@@ -9,17 +9,22 @@ internal static class ContractRoots
     public static readonly HashSet<string> HandlerRoots = new(StringComparer.Ordinal)
     {
         "IRequestHandler",
+        "IAsyncRequestHandler",
+        "RequestHandler",
+        "AsyncRequestHandler",
     };
 
     public static readonly HashSet<string> NotificationMarkerRoots = new(StringComparer.Ordinal)
     {
         "INotification",
+        "IAsyncNotification",
         "IDomainEvent",
     };
 
     public static readonly HashSet<string> NotificationHandlerRoots = new(StringComparer.Ordinal)
     {
         "INotificationHandler",
+        "IAsyncNotificationHandler",
         "IDomainEventHandler",
     };
 
@@ -45,8 +50,10 @@ internal static class ContractRoots
     /// Indirect-shape discovery must still run for wrapper bases such as ICommandHandler&lt;T&gt;.
     /// </summary>
     public static bool IsDirectShapeRoot(string simpleName)
-        => simpleName is "IRequest" or "INotification" or "IDomainEvent" or
-            "IRequestHandler" or "INotificationHandler" or "IDomainEventHandler" or
+        => simpleName is "IRequest" or "IAsyncRequest" or
+            "INotification" or "IAsyncNotification" or "IDomainEvent" or
+            "IRequestHandler" or "IAsyncRequestHandler" or "RequestHandler" or "AsyncRequestHandler" or
+            "INotificationHandler" or "IAsyncNotificationHandler" or "IDomainEventHandler" or
             "AbstractValidator" or "IValidator" or "IPipelineBehavior" or
             "DbContext" or "IdentityDbContext";
 

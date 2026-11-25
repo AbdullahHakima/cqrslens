@@ -39,21 +39,52 @@ internal sealed class LinkIndex<T>
         string? writtenNamespace,
         string? fallbackNamespace,
         IReadOnlyList<string> importedNamespaces,
-        string? ownerProject)
+        string? ownerProject,
+        IReadOnlyList<string>? containingTypes = null,
+        string? targetFullNameHint = null)
     {
-        // A handler may write a type as `Outer.Inner`, `Ns.Outer.Inner`, or just
-        // `Inner`; try the nested-type path and the handler's own namespace.
+        if (!string.IsNullOrEmpty(targetFullNameHint) &&
+            _byFullName.TryGetValue(targetFullNameHint, out var hintHits))
+        {
+            return PickHit(hintHits, ownerProject);
+        }
+
+        // A handler may write a type as `Outer.Inner`, `Ns.Outer.Inner`, or an unqualified
+        // nested sibling `Inner` inside an outer feature class (`containingTypes`).
         var candidates = new List<string>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        void AddCandidate(string candidate)
+        {
+            if (seen.Add(candidate))
+                candidates.Add(candidate);
+        }
+
+        if (containingTypes is { Count: > 0 })
+        {
+            for (var depth = containingTypes.Count; depth >= 1; depth--)
+            {
+                var scope = string.Join(".", containingTypes.Take(depth));
+                var prefix = string.IsNullOrEmpty(fallbackNamespace)
+                    ? scope
+                    : $"{fallbackNamespace}.{scope}";
+                if (!string.IsNullOrEmpty(writtenNamespace))
+                    AddCandidate($"{prefix}.{writtenNamespace}.{simpleName}");
+                if (string.IsNullOrEmpty(writtenNamespace) ||
+                    string.Equals(writtenNamespace, fallbackNamespace, StringComparison.Ordinal))
+                    AddCandidate($"{prefix}.{simpleName}");
+            }
+        }
+
         if (!string.IsNullOrEmpty(writtenNamespace))
         {
-            candidates.Add($"{writtenNamespace}.{simpleName}");
+            AddCandidate($"{writtenNamespace}.{simpleName}");
             if (!string.IsNullOrEmpty(fallbackNamespace))
-                candidates.Add($"{fallbackNamespace}.{writtenNamespace}.{simpleName}");
+                AddCandidate($"{fallbackNamespace}.{writtenNamespace}.{simpleName}");
         }
         if (!string.IsNullOrEmpty(fallbackNamespace))
-            candidates.Add($"{fallbackNamespace}.{simpleName}");
+            AddCandidate($"{fallbackNamespace}.{simpleName}");
         else
-            candidates.Add(simpleName);
+            AddCandidate(simpleName);
 
         foreach (var candidate in candidates)
         {
@@ -61,13 +92,16 @@ internal sealed class LinkIndex<T>
                 return PickHit(hits, ownerProject);
         }
 
-        // An unqualified target name is often imported by a using in the handler or
-        // validator file. Two imported matches mean the source is ambiguous; do not
-        // pick one and create a false link.
+        // An unqualified (or outer-qualified, e.g. Create.Command) target name is often
+        // imported by a using in the handler or validator file. Two imported matches mean
+        // the source is ambiguous; do not pick one and create a false link.
         var importedMatches = new List<T>();
         foreach (var ns in importedNamespaces.Distinct(StringComparer.Ordinal))
         {
-            if (_byFullName.TryGetValue($"{ns}.{simpleName}", out var hits))
+            var importedKey = !string.IsNullOrEmpty(writtenNamespace)
+                ? $"{ns}.{writtenNamespace}.{simpleName}"
+                : $"{ns}.{simpleName}";
+            if (_byFullName.TryGetValue(importedKey, out var hits))
             {
                 var picked = PickHit(hits, ownerProject);
                 if (picked is not null && !importedMatches.Contains(picked))

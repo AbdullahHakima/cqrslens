@@ -19,6 +19,7 @@ public static class ArchitectureChecker
     public const string AmbiguousProjectNameCode = "AmbiguousProjectName";
     public const string UnreachableRequestCode = "UnreachableRequest";
     public const string UnpublishedNotificationCode = "UnpublishedNotification";
+    public const string CircularServiceDependencyCode = "CircularServiceDependency";
 
     public static List<CheckFinding> RunChecks(AnalysisResult result)
     {
@@ -32,6 +33,7 @@ public static class ArchitectureChecker
         RequestValidatorChecks.Run(result, findings);
         NotificationChecks.Run(result, findings);
         FlowReachabilityChecks.Run(result, findings);
+        ServiceCycleChecks.Run(result, findings);
 
         CheckFindingOrdering.Sort(findings);
         return findings;

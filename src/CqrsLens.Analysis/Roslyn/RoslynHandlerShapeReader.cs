@@ -21,9 +21,14 @@ internal static class RoslynHandlerShapeReader
         if (symbol.IsAbstract) return;
 
         var candidateInterfaces = RoslynSymbolFacts.ImplementedInterfaces(symbol, declaration, model)
-            .Where(i => (i.Name == "IRequestHandler" || handlerMarkers.Contains(i.Name)) &&
+            .Where(i => (i.Name is "IRequestHandler" or "IAsyncRequestHandler" || handlerMarkers.Contains(i.Name)) &&
                         i.TypeArguments.Length >= 1)
             .ToList();
+
+        candidateInterfaces.AddRange(
+            RoslynSymbolFacts.BaseTypes(symbol)
+                .Where(b => b.Name is "RequestHandler" or "AsyncRequestHandler" &&
+                            b.TypeArguments.Length >= 1));
 
         foreach (var errorBase in RoslynSymbolFacts.ErrorBaseTypes(declaration, model))
         {
@@ -44,13 +49,21 @@ internal static class RoslynHandlerShapeReader
             var targetName = RoslynSymbolFacts.TypeName(target);
             var targetNamespace = RoslynSymbolFacts.NamespaceOf(target);
             var normalizedNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace;
+            var targetFullNameHint = target is INamedTypeSymbol
+                {
+                    TypeKind: not TypeKind.Error,
+                    ContainingType: not null,
+                } namedTarget
+                ? RoslynSymbolFacts.FullName(namedTarget)
+                : null;
             var fullName = RoslynSymbolFacts.FullName(symbol);
 
             if (result.Handlers.Any(h =>
                     h.FullName == fullName &&
                     h.ProjectName == projectName &&
                     h.RequestName == targetName &&
-                    h.RequestNamespace == normalizedNamespace))
+                    h.RequestNamespace == normalizedNamespace &&
+                    h.RequestFullNameHint == targetFullNameHint))
                 continue;
 
             var handler = new HandlerInfo
@@ -59,6 +72,7 @@ internal static class RoslynHandlerShapeReader
                 Namespace = RoslynSymbolFacts.NamespaceOf(symbol),
                 RequestName = targetName,
                 RequestNamespace = normalizedNamespace,
+                RequestFullNameHint = targetFullNameHint,
                 ProjectName = projectName,
                 Location = RoslynSymbolFacts.LocationOf(declaration.Identifier.GetLocation(), result.RootPath),
             };

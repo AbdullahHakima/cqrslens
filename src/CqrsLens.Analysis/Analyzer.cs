@@ -64,6 +64,8 @@ public static class Analyzer
             },
             GeneratedAt = options.GeneratedAt ?? DateTimeOffset.UtcNow,
             Watermark = string.IsNullOrWhiteSpace(options.Watermark) ? null : options.Watermark.Trim(),
+            LayerRuleOverrides = ProjectLayerChecks.CaptureLayerRuleOverrides(options.RuleSeverities),
+            HasSourceFilters = options.Include.Count > 0 || options.Exclude.Count > 0,
         };
         var phases = new AnalysisPhaseRecorder(result);
 
@@ -89,7 +91,7 @@ public static class Analyzer
         ShapeLinker.Link(result);
         phases.Record("Link shapes");
 
-        DeepSliceAnalyzer.Analyze(workspace, result);
+        DeepSliceAnalyzer.Analyze(workspace, result, pathFilter);
         phases.Record("Deep slice");
 
         // Build the interface → implementation index once, over the shared workspace,
@@ -115,6 +117,9 @@ public static class Analyzer
         HandlerDbContextResolver.Build(parsedFiles, result, serviceHierarchy);
         phases.Record("Resolve handler contexts");
 
+        TransitiveEntityLineageResolver.Resolve(parsedFiles, result, serviceHierarchy);
+        phases.Record("Resolve entity lineage");
+
         // Stage 2 consumer: method-body call edges between scanned classes, through injected
         // members. Additive model data; no existing count or surface reads it yet.
         ServiceCallEdgeResolver.Build(parsedFiles, result, serviceHierarchy);
@@ -122,6 +127,22 @@ public static class Analyzer
 
         FlowAnalyzer.Analyze(parsedFiles, result);
         phases.Record("Flow graph");
+
+        var systemContext = SystemAnalysisContext.Create(parsedFiles, result, serviceHierarchy, pathFilter);
+        SystemEntrypointDiscovery.Discover(systemContext);
+        phases.Record("System entrypoints");
+
+        SystemDependencyTracer.PopulateServiceClassEffects(systemContext);
+        phases.Record("Service effects");
+
+        IntegrationFlowDiscovery.Discover(systemContext);
+        phases.Record("Integration flows");
+
+        ServiceProfileBuilder.Build(systemContext);
+        phases.Record("Service profiles");
+
+        ArchitectureStyleDetector.Detect(systemContext);
+        phases.Record("Architecture styles");
 
         result.Checks.AddRange(ArchitectureChecker.ApplyRuleSeverities(
             ArchitectureChecker.RunChecks(result),

@@ -61,7 +61,10 @@ internal static class FlowAnalyzer
     private static bool ContainsDispatchName(string code)
         => code.Contains(".Send", StringComparison.Ordinal) ||
            code.Contains(".Publish", StringComparison.Ordinal) ||
-           code.Contains(".InvokeAsync", StringComparison.Ordinal);
+           code.Contains(".InvokeAsync", StringComparison.Ordinal) ||
+           code.Contains("AddDomainEvent", StringComparison.Ordinal) ||
+           code.Contains("RaiseDomainEvent", StringComparison.Ordinal) ||
+           code.Contains("QueueDomainEvent", StringComparison.Ordinal);
 
     private static void AddEndpointToRequestEdges(AnalysisResult result)
     {

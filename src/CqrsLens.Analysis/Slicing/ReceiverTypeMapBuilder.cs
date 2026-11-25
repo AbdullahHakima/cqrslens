@@ -11,19 +11,31 @@ namespace CqrsLens;
 /// </summary>
 internal static partial class ReceiverTypeMapBuilder
 {
-    [GeneratedRegex(@"(?<![\w@.])(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*(?:\s*<[^;{}()=]*?>)?(?:\s*\[\s*\])*\??)\s+(?<name>@?[A-Za-z_]\w*)\s*(?=[;=,)])")]
+    [GeneratedRegex(
+        @"(?<![\w@.])(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*(?:\s*<[^;{}()=]*?>)?(?:\s*\[\s*\])*\??)\s+(?<name>@?[A-Za-z_]\w*)\s*(?=[;=,)])",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex TypedDeclarationRegex();
 
-    [GeneratedRegex(@"\bvar\s+(?<name>@?[A-Za-z_]\w*)\s*=\s*(?<init>[^;]*)")]
+    [GeneratedRegex(
+        @"\bvar\s+(?<name>@?[A-Za-z_]\w*)\s*=\s*(?<init>[^;]*)",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex VarDeclarationRegex();
 
-    [GeneratedRegex(@"^new\s+(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*[\(\{<]")]
+    [GeneratedRegex(
+        @"^new\s+(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*[\(\{<]",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex LeadingObjectCreationRegex();
 
-    [GeneratedRegex(@"^(?<receiver>@?[A-Za-z_]\w*)\s*[!?]?\s*\.\s*[A-Za-z_]\w*")]
+    [GeneratedRegex(
+        @"^(?<receiver>@?[A-Za-z_]\w*)\s*[!?]?\s*\.\s*[A-Za-z_]\w*",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex LeadingMemberCallRegex();
 
-    [GeneratedRegex(@"^T(?:[A-Z]\w*)?$")]
+    [GeneratedRegex(@"^T(?:[A-Z]\w*)?$", RegexOptions.None, matchTimeoutMilliseconds: 2000)]
     private static partial Regex TypeParameterNameRegex();
 
     /// <summary>Words the typed-declaration regex can capture in the "type" slot that are not types.</summary>
@@ -52,7 +64,14 @@ internal static partial class ReceiverTypeMapBuilder
 
         void AddDeclared(string type, string name)
         {
-            type = Regex.Replace(type.Trim(), @"\s+", "");
+            try
+            {
+                type = Regex.Replace(type.Trim(), @"\s+", "", RegexOptions.None, TimeSpan.FromSeconds(2));
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                return;
+            }
             name = name.TrimStart('@');
             if (type.Length == 0 || name.Length == 0 || NonTypeWords.Contains(type))
                 return;
@@ -91,24 +110,36 @@ internal static partial class ReceiverTypeMapBuilder
         var bodyStart = decl.BodySpan.Start;
         var bodyEnd = Math.Min(code.Length, decl.BodySpan.End);
 
-        foreach (Match m in TypedDeclarationRegex().Matches(code, bodyStart))
+        try
         {
-            if (m.Index >= bodyEnd) break;
-            if (NonTypeWords.Contains(m.Groups["type"].Value.Trim())) continue;
-            if (!mask.IsCode(m.Index)) continue;
-            if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
-            AddDeclared(m.Groups["type"].Value, m.Groups["name"].Value);
+            foreach (Match m in TypedDeclarationRegex().Matches(code, bodyStart))
+            {
+                if (m.Index >= bodyEnd) break;
+                if (NonTypeWords.Contains(m.Groups["type"].Value.Trim())) continue;
+                if (!mask.IsCode(m.Index)) continue;
+                if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
+                AddDeclared(m.Groups["type"].Value, m.Groups["name"].Value);
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
         }
 
-        foreach (Match m in VarDeclarationRegex().Matches(code, bodyStart))
+        try
         {
-            if (m.Index >= bodyEnd) break;
-            if (!mask.IsCode(m.Index)) continue;
-            if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
+            foreach (Match m in VarDeclarationRegex().Matches(code, bodyStart))
+            {
+                if (m.Index >= bodyEnd) break;
+                if (!mask.IsCode(m.Index)) continue;
+                if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
 
-            var inferred = InferInitializerType(m.Groups["init"].Value, map, dbSetsByProperty, dbContextTypeNames, repoEntitiesByType);
-            if (inferred is not null)
-                AddDeclared(inferred, m.Groups["name"].Value);
+                var inferred = InferInitializerType(m.Groups["init"].Value, map, dbSetsByProperty, dbContextTypeNames, repoEntitiesByType);
+                if (inferred is not null)
+                    AddDeclared(inferred, m.Groups["name"].Value);
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
         }
 
         return map;
@@ -134,22 +165,28 @@ internal static partial class ReceiverTypeMapBuilder
         if (bodyOpen < 0 || bodyOpen >= decl.BodySpan.End) return;
         var bodyEnd = Math.Min(code.Length, decl.BodySpan.End);
 
-        foreach (Match m in TypedDeclarationRegex().Matches(code, bodyOpen + 1))
+        try
         {
-            if (m.Index >= bodyEnd) break;
-            if (!mask.IsCode(m.Index)) continue;
-            if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
+            foreach (Match m in TypedDeclarationRegex().Matches(code, bodyOpen + 1))
+            {
+                if (m.Index >= bodyEnd) break;
+                if (!mask.IsCode(m.Index)) continue;
+                if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(classes, m.Index), decl)) continue;
 
-            var type = m.Groups["type"].Value.Trim();
-            if (NonTypeWords.Contains(type)) continue;
-            if (DepthAt(code, mask, bodyOpen, m.Index, '{', '}') != 1) continue;
-            if (DepthAt(code, mask, bodyOpen, m.Index, '(', ')') != 0) continue;
+                var type = m.Groups["type"].Value.Trim();
+                if (NonTypeWords.Contains(type)) continue;
+                if (DepthAt(code, mask, bodyOpen, m.Index, '{', '}') != 1) continue;
+                if (DepthAt(code, mask, bodyOpen, m.Index, '(', ')') != 0) continue;
 
-            var name = m.Groups["name"].Value.TrimStart('@');
-            var normalized = Regex.Replace(type, @"\s+", "");
-            if (normalized.Length == 0 || name.Length == 0) continue;
-            if (target.Contains((normalized, name))) continue;
-            target.Add((normalized, name));
+                var name = m.Groups["name"].Value.TrimStart('@');
+                var normalized = Regex.Replace(type, @"\s+", "", RegexOptions.None, TimeSpan.FromSeconds(2));
+                if (normalized.Length == 0 || name.Length == 0) continue;
+                if (target.Contains((normalized, name))) continue;
+                target.Add((normalized, name));
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
         }
     }
 
@@ -172,43 +209,50 @@ internal static partial class ReceiverTypeMapBuilder
         HashSet<string> dbContextTypeNames,
         Dictionary<string, List<string>> repoEntitiesByType)
     {
-        var s = initializer.Trim();
-        if (s.StartsWith("await ", StringComparison.Ordinal))
-            s = s[6..].TrimStart();
-
-        var created = LeadingObjectCreationRegex().Match(s);
-        if (created.Success)
-            return CSharpScanner.UnqualifiedTypeName(created.Groups["type"].Value);
-
-        var set = DbContextSetMethodRegex().Match(s);
-        if (set.Success)
+        try
         {
-            if (!IsDbContextReceiver(GetReceiverIdentifier(s, set.Index), receiverTypes, dbContextTypeNames))
+            var s = initializer.Trim();
+            if (s.StartsWith("await ", StringComparison.Ordinal))
+                s = s[6..].TrimStart();
+
+            var created = LeadingObjectCreationRegex().Match(s);
+            if (created.Success)
+                return CSharpScanner.UnqualifiedTypeName(created.Groups["type"].Value);
+
+            var set = DbContextSetMethodRegex().Match(s);
+            if (set.Success)
+            {
+                if (!IsDbContextReceiver(GetReceiverIdentifier(s, set.Index), receiverTypes, dbContextTypeNames))
+                    return null;
+
+                var setEntity = CSharpScanner.SimpleName(set.Groups["entity"].Value.Trim());
+                return TypeParameterNameRegex().IsMatch(setEntity) ? null : setEntity;
+            }
+
+            foreach (Match m in MemberAccessRegex().Matches(s))
+            {
+                if (dbSetsByProperty.TryGetValue(m.Groups["prop"].Value, out var label) &&
+                    IsDbContextReceiver(GetReceiverIdentifier(s, m.Index), receiverTypes, dbContextTypeNames))
+                {
+                    return EntityFromLabel(label);
+                }
+            }
+
+            var call = LeadingMemberCallRegex().Match(s);
+            if (!call.Success)
                 return null;
 
-            var setEntity = CSharpScanner.SimpleName(set.Groups["entity"].Value.Trim());
-            return TypeParameterNameRegex().IsMatch(setEntity) ? null : setEntity;
-        }
+            var receiver = call.Groups["receiver"].Value.TrimStart('@');
+            if (receiverTypes.TryGetValue(receiver, out var receiverType))
+                return RepositoryEntity(receiverType, repoEntitiesByType);
 
-        foreach (Match m in MemberAccessRegex().Matches(s))
+            // Static factory on a type (`Order.Create(..)`) conventionally returns that type.
+            return char.IsUpper(receiver[0]) ? receiver : null;
+        }
+        catch (RegexMatchTimeoutException)
         {
-            if (dbSetsByProperty.TryGetValue(m.Groups["prop"].Value, out var label) &&
-                IsDbContextReceiver(GetReceiverIdentifier(s, m.Index), receiverTypes, dbContextTypeNames))
-            {
-                return EntityFromLabel(label);
-            }
-        }
-
-        var call = LeadingMemberCallRegex().Match(s);
-        if (!call.Success)
             return null;
-
-        var receiver = call.Groups["receiver"].Value.TrimStart('@');
-        if (receiverTypes.TryGetValue(receiver, out var receiverType))
-            return RepositoryEntity(receiverType, repoEntitiesByType);
-
-        // Static factory on a type (`Order.Create(..)`) conventionally returns that type.
-        return char.IsUpper(receiver[0]) ? receiver : null;
+        }
     }
 
     /// <summary>Entity returned by a repository-typed receiver, or null when it is not a repository.</summary>
@@ -303,7 +347,14 @@ internal static partial class ReceiverTypeMapBuilder
             return false;
         if (decl.TypeParameters.Contains(entitySimple, StringComparer.Ordinal))
             return false;
-        return dbSetsByEntity.ContainsKey(entitySimple) || !TypeParameterNameRegex().IsMatch(entitySimple);
+        try
+        {
+            return dbSetsByEntity.ContainsKey(entitySimple) || !TypeParameterNameRegex().IsMatch(entitySimple);
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return false;
+        }
     }
 
     /// <summary>Interface-style (<c>IName</c>) base types of a class that take no type arguments.</summary>

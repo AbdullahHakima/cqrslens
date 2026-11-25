@@ -1,5 +1,3 @@
-using System.Xml.Linq;
-
 namespace CqrsLens;
 
 /// <summary>
@@ -13,25 +11,38 @@ internal static class ProjectReferenceResolver
         {
             foreach (var include in info.ReferenceIncludes)
             {
-                string targetPath;
-                try
-                {
-                    var normalized = include.Replace('\\', Path.DirectorySeparatorChar)
-                                             .Replace('/', Path.DirectorySeparatorChar);
-                    targetPath = Path.GetFullPath(Path.Combine(info.DirectoryPath, normalized));
-                }
-                catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
-                {
-                    continue;
-                }
-
-                if (projectsByFullPath.TryGetValue(targetPath, out var target))
+                if (ResolvePath(info.DirectoryPath, include) is { } targetPath &&
+                    projectsByFullPath.TryGetValue(targetPath, out var target))
                 {
                     if (!info.ReferenceNames.Contains(target.Name))
                         info.ReferenceNames.Add(target.Name);
                 }
             }
             info.ReferenceNames.Sort(StringComparer.OrdinalIgnoreCase);
+
+            for (var i = 0; i < info.ConditionalReferences.Count; i++)
+            {
+                var conditional = info.ConditionalReferences[i];
+                if (ResolvePath(info.DirectoryPath, conditional.Include) is { } targetPath &&
+                    projectsByFullPath.TryGetValue(targetPath, out var target))
+                {
+                    info.ConditionalReferences[i] = conditional with { ResolvedProjectName = target.Name };
+                }
+            }
+        }
+    }
+
+    internal static string? ResolvePath(string projectDirectory, string include)
+    {
+        try
+        {
+            var normalized = include.Replace('\\', Path.DirectorySeparatorChar)
+                                    .Replace('/', Path.DirectorySeparatorChar);
+            return Path.GetFullPath(Path.Combine(projectDirectory, normalized));
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException or PathTooLongException)
+        {
+            return null;
         }
     }
 
@@ -41,7 +52,7 @@ internal static class ProjectReferenceResolver
         var includes = new List<string>();
         try
         {
-            var doc = XDocument.Load(csprojPath);
+            var doc = SafeXmlLoader.LoadDocument(csprojPath);
             foreach (var el in doc.Descendants().Where(e => e.Name.LocalName == "ProjectReference"))
             {
                 var value = el.Attribute("Include")?.Value ?? el.Attribute("Update")?.Value;

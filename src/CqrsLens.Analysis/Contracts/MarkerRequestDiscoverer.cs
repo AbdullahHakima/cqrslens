@@ -18,15 +18,21 @@ internal static class MarkerRequestDiscoverer
         foreach (var declaration in scan.Classes)
         {
             if (declaration.IsAbstract) continue;
-            if (declaration.BaseRawNames.Contains("IRequest")) continue;
-            if (declaration.BaseRawNames.Contains("IRequestHandler")) continue;
+            if (declaration.BaseRawNames.Contains("IRequest") ||
+                declaration.BaseRawNames.Contains("IAsyncRequest"))
+                continue;
+            if (declaration.BaseRawNames.Contains("IRequestHandler") ||
+                declaration.BaseRawNames.Contains("IAsyncRequestHandler") ||
+                declaration.BaseRawNames.Contains("RequestHandler") ||
+                declaration.BaseRawNames.Contains("AsyncRequestHandler"))
+                continue;
             if (declaration.BaseRawNames.Count == 0) continue;
 
             if (declaration.BaseRawNames.Any(b => b is "DbContext" or "IdentityDbContext" or
                                                       "AbstractValidator" or "IValidator" or
                                                       "Validator" or "IPipelineBehavior" or
-                                                      "INotification" or "IDomainEvent" or
-                                                      "INotificationHandler" or "IDomainEventHandler"))
+                                                      "INotification" or "IAsyncNotification" or "IDomainEvent" or
+                                                      "INotificationHandler" or "IAsyncNotificationHandler" or "IDomainEventHandler"))
                 continue;
 
             var location = SourceLocation.Create(
@@ -46,7 +52,7 @@ internal static class MarkerRequestDiscoverer
                 if (resolved is null)
                 {
                     var simple = CSharpScanner.SimpleName(name);
-                    if (markers.Contains(simple) || simple is "IRequest")
+                    if (markers.Contains(simple) || simple is "IRequest" or "IAsyncRequest")
                     {
                         directAmbiguity = true;
                         ContractDiagnostics.RecordAmbiguous(
@@ -82,7 +88,9 @@ internal static class MarkerRequestDiscoverer
                 shapeResponseType = shape.ResponseType;
             }
 
-            if (!reached.Contains("IRequest") && !reached.Any(markers.Contains))
+            if (!reached.Contains("IRequest") &&
+                !reached.Contains("IAsyncRequest") &&
+                !reached.Any(markers.Contains))
                 continue;
 
             // Open-generic marker requests are wrappers too: never dispatched as-is,
@@ -93,8 +101,8 @@ internal static class MarkerRequestDiscoverer
                 continue;
             }
 
-            var via = reached.FirstOrDefault(m => m != "IRequest")
-                      ?? declaration.BaseRawNames.FirstOrDefault(b => b != "IRequest");
+            var via = reached.FirstOrDefault(m => m is not ("IRequest" or "IAsyncRequest"))
+                      ?? declaration.BaseRawNames.FirstOrDefault(b => b is not ("IRequest" or "IAsyncRequest"));
 
             if (result.Requests.Any(r =>
                     r.Name == declaration.Name &&

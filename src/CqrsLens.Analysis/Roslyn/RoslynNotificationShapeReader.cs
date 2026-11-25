@@ -21,7 +21,7 @@ internal static class RoslynNotificationShapeReader
 
         var interfaces = RoslynSymbolFacts.ImplementedInterfaces(symbol, declaration, model).ToList();
         var notificationInterface = interfaces.FirstOrDefault(i =>
-            i.Name == "INotification" && i.TypeArguments.Length == 0);
+            i.Name is "INotification" or "IAsyncNotification" && i.TypeArguments.Length == 0);
         var domainEventInterface = interfaces.FirstOrDefault(i =>
             i.Name == "IDomainEvent" && i.TypeArguments.Length == 0);
 
@@ -30,7 +30,7 @@ internal static class RoslynNotificationShapeReader
         {
             foreach (var errorBase in RoslynSymbolFacts.ErrorBaseTypes(declaration, model))
             {
-                if (errorBase.Name is not ("INotification" or "IDomainEvent"))
+                if (errorBase.Name is not ("INotification" or "IAsyncNotification" or "IDomainEvent"))
                     continue;
                 if (hierarchy.HasInterface(errorBase.Name))
                     continue;
@@ -70,12 +70,13 @@ internal static class RoslynNotificationShapeReader
         {
             viaMarker = interfaces
                 .FirstOrDefault(i =>
-                    i.Name != "INotification" &&
+                    i.Name is not ("INotification" or "IAsyncNotification") &&
                     (i.Name == "IDomainEvent" ||
-                     RoslynSymbolFacts.ImplementedInterfaces(i).Any(x => x.Name is "INotification" or "IDomainEvent")))
+                     RoslynSymbolFacts.ImplementedInterfaces(i).Any(x => x.Name is "INotification" or "IAsyncNotification" or "IDomainEvent")))
                 ?.Name ?? "IDomainEvent";
         }
-        else if (externalNotification is not null && externalNotification.Name != "INotification")
+        else if (externalNotification is not null &&
+                 externalNotification.Name is not ("INotification" or "IAsyncNotification"))
         {
             viaMarker = externalNotification.Name;
         }
@@ -83,13 +84,13 @@ internal static class RoslynNotificationShapeReader
         {
             viaMarker = interfaces
                 .FirstOrDefault(i =>
-                    i.Name != "INotification" &&
-                    RoslynSymbolFacts.ImplementedInterfaces(i).Any(x => x.Name == "INotification"))
+                    i.Name is not ("INotification" or "IAsyncNotification") &&
+                    RoslynSymbolFacts.ImplementedInterfaces(i).Any(x => x.Name is "INotification" or "IAsyncNotification"))
                 ?.Name
                 ?? RoslynSymbolFacts.BaseTypes(symbol)
                     .FirstOrDefault(b =>
                         b.Name != "Object" &&
-                        RoslynSymbolFacts.ImplementedInterfaces(b).Any(x => x.Name == "INotification"))
+                        RoslynSymbolFacts.ImplementedInterfaces(b).Any(x => x.Name is "INotification" or "IAsyncNotification"))
                     ?.Name;
         }
 

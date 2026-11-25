@@ -8,7 +8,8 @@ internal static class ApiEndpointDiscovery
 {
     internal static void Discover(
         List<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
-        AnalysisResult result)
+        AnalysisResult result,
+        SourcePathFilter? pathFilter = null)
     {
         var requestsBySimple = result.Requests
             .GroupBy(r => r.Name, StringComparer.Ordinal)
@@ -23,7 +24,10 @@ internal static class ApiEndpointDiscovery
             ControllerEndpointDiscovery.Discover(file, scan, mask, requestsBySimple, result);
             MinimalApiEndpointDiscovery.Discover(file, scan, mask, requestsBySimple, result);
             FastEndpointDiscovery.Discover(file, scan, mask, requestsBySimple, constStrings, result);
+            RazorPageEndpointDiscovery.Discover(file, scan, mask, requestsBySimple, result);
         }
+
+        BlazorComponentEndpointDiscovery.Discover(parsedFiles, requestsBySimple, result, pathFilter);
 
         result.Endpoints.Sort((a, b) =>
         {

@@ -27,32 +27,37 @@ internal static partial class BehaviorRegistrationResolver
     // Microsoft DI: AddTransient(typeof(IPipelineBehavior<,>), typeof(X<,>))
     [GeneratedRegex(
         @"\bAdd(?:Transient|Scoped|Singleton)\s*\(\s*typeof\s*\(\s*IPipelineBehavior\s*<[^>]*>\s*\)\s*,\s*typeof\s*\(\s*(?<name>[A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\)",
-        RegexOptions.Singleline)]
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex DirectDiRegex();
 
     // Microsoft DI generic-method form: AddTransient<IPipelineBehavior<,>, X<,>>()
     [GeneratedRegex(
         @"\bAdd(?:Transient|Scoped|Singleton)\s*<\s*IPipelineBehavior\s*<[^>]*>\s*,\s*(?<name>[A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*>",
-        RegexOptions.Singleline)]
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex DirectDiGenericRegex();
 
     // MediatR two-type form: AddBehavior(typeof(service), typeof(X<,>)) /
     // AddOpenBehavior(typeof(service), typeof(X<,>)).
     [GeneratedRegex(
         @"\bAdd(?:Open)?Behavior\s*\(\s*typeof\s*\(\s*[A-Za-z_][\w.]*\s*(?:<[^>]*>)?\s*\)\s*,\s*typeof\s*\(\s*(?<name>[A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\)",
-        RegexOptions.Singleline)]
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex MediatRTwoArgRegex();
 
     // MediatR open form: AddOpenBehavior(typeof(X<,>)).
     [GeneratedRegex(
         @"\bAddOpenBehavior\s*\(\s*typeof\s*\(\s*(?<name>[A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*\)",
-        RegexOptions.Singleline)]
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex MediatROpenRegex();
 
     // MediatR generic-method form: AddOpenBehavior<X>() / AddBehavior<X>().
     [GeneratedRegex(
         @"\bAdd(?:Open)?Behavior\s*<\s*(?<name>[A-Za-z_]\w*)\s*(?:<[^>]*>)?\s*>",
-        RegexOptions.Singleline)]
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex MediatRGenericRegex();
 
     internal static void Resolve(SourceWorkspace workspace, AnalysisResult result)
@@ -98,14 +103,20 @@ internal static partial class BehaviorRegistrationResolver
 
     private static void Collect(Regex regex, string code, SourceMask mask, List<(int, string)> found)
     {
-        foreach (Match match in regex.Matches(code))
+        try
         {
-            if (!mask.IsCode(match.Index))
-                continue;
-            var name = match.Groups["name"].Value;
-            if (name.Length == 0)
-                continue;
-            found.Add((match.Index, name));
+            foreach (Match match in regex.Matches(code))
+            {
+                if (!mask.IsCode(match.Index))
+                    continue;
+                var name = match.Groups["name"].Value;
+                if (name.Length == 0)
+                    continue;
+                found.Add((match.Index, name));
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
         }
     }
 

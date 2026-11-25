@@ -62,7 +62,9 @@ internal static class RequestLinker
                 handler.RequestNamespace,
                 handler.Namespace,
                 handler.ImportedNamespaces,
-                handler.ProjectName);
+                handler.ProjectName,
+                handler.ContainingTypes,
+                handler.RequestFullNameHint);
             if (request is null)
             {
                 LinkDiagnostics.RecordAmbiguous(
@@ -94,7 +96,9 @@ internal static class RequestLinker
                 validator.TargetNamespace,
                 validator.Namespace,
                 validator.ImportedNamespaces,
-                validator.ProjectName);
+                validator.ProjectName,
+                validator.ContainingTypes,
+                validator.TargetFullNameHint);
             if (request is null)
             {
                 LinkDiagnostics.RecordAmbiguous(

@@ -39,6 +39,9 @@ internal static class MsBuildProjectLoader
                     EvaluateMsBuildFile(targetsPath, info, isCsproj: false);
             }
 
+            if (FindBuildFile(projectDir, "packages.config") is { } packagesConfigPath)
+                EvaluatePackagesConfig(packagesConfigPath, info);
+
             info.PackageReferences.Sort(StringComparer.OrdinalIgnoreCase);
             byFullPath[Path.GetFullPath(file)] = info;
         }
@@ -105,13 +108,62 @@ internal static class MsBuildProjectLoader
     {
         try
         {
-            var doc = XDocument.Load(xmlPath);
+            var doc = SafeXmlLoader.LoadDocument(xmlPath);
             var xmlDir = Path.GetDirectoryName(xmlPath) ?? info.DirectoryPath;
+
+            if (isCsproj && doc.Root is { } rootEl)
+                AppendSdk(info, rootEl.Attribute("Sdk")?.Value?.Trim());
 
             foreach (var el in doc.Descendants())
             {
                 switch (el.Name.LocalName)
                 {
+                    case "Sdk":
+                    {
+                        if (isCsproj)
+                            AppendSdk(info, el.Attribute("Name")?.Value?.Trim());
+                        break;
+                    }
+
+                    case "Import":
+                    {
+                        if (isCsproj)
+                            AppendSdk(info, el.Attribute("Sdk")?.Value?.Trim());
+                        break;
+                    }
+
+                    case "OutputType":
+                    {
+                        var val = el.Value.Trim();
+                        if (!string.IsNullOrWhiteSpace(val) && !val.Contains('$', StringComparison.Ordinal))
+                            info.OutputType = val;
+                        break;
+                    }
+
+                    case "TargetFramework":
+                    case "TargetFrameworks":
+                    {
+                        foreach (var tfm in el.Value.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                        {
+                            if (!string.IsNullOrWhiteSpace(tfm) &&
+                                !info.TargetFrameworks.Contains(tfm, StringComparer.OrdinalIgnoreCase))
+                            {
+                                info.TargetFrameworks.Add(tfm);
+                            }
+                        }
+                        break;
+                    }
+
+                    case "TargetFrameworkVersion":
+                    {
+                        if (NormalizeTargetFrameworkVersion(el.Value) is { } tfm &&
+                            !info.TargetFrameworks.Contains(tfm, StringComparer.OrdinalIgnoreCase))
+                        {
+                            info.TargetFrameworks.Add(tfm);
+                        }
+                        break;
+                    }
+
                     case "ImplicitUsings":
                     {
                         var val = el.Value.Trim();
@@ -134,24 +186,19 @@ internal static class MsBuildProjectLoader
                         if (string.IsNullOrWhiteSpace(raw))
                             break;
 
-                        if (isCsproj)
+                        var effectiveInclude = isCsproj
+                            ? raw
+                            : ResolveRelativeInclude(xmlDir, raw, info.DirectoryPath);
+
+                        if (CombineConditions(el) is { } condition)
                         {
-                            info.ReferenceIncludes.Add(raw);
+                            var conditional = new ConditionalProjectReference(effectiveInclude, condition);
+                            if (!info.ConditionalReferences.Contains(conditional))
+                                info.ConditionalReferences.Add(conditional);
                         }
                         else
                         {
-                            try
-                            {
-                                var normalized = raw.Replace('\\', Path.DirectorySeparatorChar)
-                                                    .Replace('/', Path.DirectorySeparatorChar);
-                                var fullTarget = Path.GetFullPath(Path.Combine(xmlDir, normalized));
-                                var relativeToProject = Path.GetRelativePath(info.DirectoryPath, fullTarget);
-                                info.ReferenceIncludes.Add(relativeToProject);
-                            }
-                            catch
-                            {
-                                info.ReferenceIncludes.Add(raw);
-                            }
+                            info.ReferenceIncludes.Add(effectiveInclude);
                         }
                         break;
                     }
@@ -227,8 +274,116 @@ internal static class MsBuildProjectLoader
         }
     }
 
+    private static void EvaluatePackagesConfig(string xmlPath, ProjectInfo info)
+    {
+        try
+        {
+            var doc = SafeXmlLoader.LoadDocument(xmlPath);
+            foreach (var el in doc.Descendants())
+            {
+                if (!string.Equals(el.Name.LocalName, "package", StringComparison.Ordinal))
+                    continue;
+
+                var pkg = el.Attribute("id")?.Value?.Trim();
+                if (!string.IsNullOrWhiteSpace(pkg) &&
+                    !info.PackageReferences.Contains(pkg, StringComparer.OrdinalIgnoreCase))
+                {
+                    info.PackageReferences.Add(pkg);
+                }
+            }
+        }
+        catch
+        {
+            // A malformed packages.config should not abort the scan.
+        }
+    }
+
+    private static string? NormalizeTargetFrameworkVersion(string raw)
+    {
+        var trimmed = raw.Trim();
+        if (trimmed.Length == 0 || trimmed.Contains('$', StringComparison.Ordinal))
+            return null;
+
+        if (trimmed.Length >= 2 &&
+            (trimmed[0] is 'v' or 'V') &&
+            char.IsDigit(trimmed[1]))
+        {
+            var numeric = trimmed[1..];
+            var valid = true;
+            foreach (var ch in numeric)
+            {
+                if (!char.IsDigit(ch) && ch != '.')
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (valid)
+                return "net" + numeric.Replace(".", string.Empty, StringComparison.Ordinal);
+        }
+
+        return trimmed;
+    }
+
     private static string StripGlobalPrefix(string value)
         => value.StartsWith("global::", StringComparison.Ordinal)
             ? value[8..].Trim()
             : value;
+
+    private static string ResolveRelativeInclude(string xmlDir, string rawInclude, string projectDir)
+    {
+        try
+        {
+            var normalized = rawInclude.Replace('\\', Path.DirectorySeparatorChar)
+                                       .Replace('/', Path.DirectorySeparatorChar);
+            var fullTarget = Path.GetFullPath(Path.Combine(xmlDir, normalized));
+            return Path.GetRelativePath(projectDir, fullTarget);
+        }
+        catch
+        {
+            return rawInclude;
+        }
+    }
+
+    private static string? CombineConditions(XElement el)
+    {
+        var parts = new List<string>();
+        foreach (var ancestor in el.Ancestors()
+            .Where(a => a.Name.LocalName is "ItemGroup" or "When")
+            .Reverse())
+        {
+            var condition = ancestor.Attribute("Condition")?.Value?.Trim();
+            if (!string.IsNullOrWhiteSpace(condition))
+                parts.Add(condition);
+        }
+
+        var selfCondition = el.Attribute("Condition")?.Value?.Trim();
+        if (!string.IsNullOrWhiteSpace(selfCondition))
+            parts.Add(selfCondition);
+
+        return parts.Count == 0 ? null : string.Join(" && ", parts);
+    }
+
+    private static void AppendSdk(ProjectInfo info, string? rawSdk)
+    {
+        if (string.IsNullOrWhiteSpace(rawSdk))
+            return;
+
+        foreach (var part in rawSdk.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (part.Contains('$', StringComparison.Ordinal))
+                continue;
+
+            if (string.IsNullOrEmpty(info.Sdk))
+            {
+                info.Sdk = part;
+                continue;
+            }
+
+            var existing = info.Sdk.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (!existing.Contains(part, StringComparer.OrdinalIgnoreCase))
+                info.Sdk = $"{info.Sdk};{part}";
+        }
+    }
 }

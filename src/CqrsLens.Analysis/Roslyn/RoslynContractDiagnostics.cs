@@ -13,7 +13,11 @@ internal static class RoslynContractDiagnostics
     private static readonly HashSet<string> ContractNames = new(StringComparer.Ordinal)
     {
         "IRequest",
+        "IAsyncRequest",
         "IRequestHandler",
+        "IAsyncRequestHandler",
+        "RequestHandler",
+        "AsyncRequestHandler",
         "IPipelineBehavior",
         "AbstractValidator",
         "IValidator",
@@ -117,10 +121,12 @@ internal static class RoslynContractDiagnostics
             var (name, args) = CSharpScanner.ParseTypeReference(part);
             var simple = CSharpScanner.SimpleName(name);
             if (simple is "DbContext" or "IdentityDbContext" or "IPipelineBehavior" or
-                          "INotification" or "IDomainEvent" or "INotificationHandler" or "IDomainEventHandler")
+                          "INotification" or "IAsyncNotification" or "IDomainEvent" or
+                          "INotificationHandler" or "IAsyncNotificationHandler" or "IDomainEventHandler")
                 continue;
 
-            if (!isHandler && simple != "IRequestHandler")
+            if (!isHandler &&
+                simple is not ("IRequestHandler" or "IAsyncRequestHandler" or "RequestHandler" or "AsyncRequestHandler"))
             {
                 var resolvedHandler = hierarchy.TryResolveShapeTarget(
                     decl.Namespace,
@@ -166,7 +172,7 @@ internal static class RoslynContractDiagnostics
                     decl.ContainingTypes,
                     args.Count,
                     out var ambiguous);
-                if (resolved is null && (markers.Contains(simple) || simple is "IRequest"))
+                if (resolved is null && (markers.Contains(simple) || simple is "IRequest" or "IAsyncRequest"))
                 {
                     directAmbiguity = true;
                     ContractDiagnostics.RecordAmbiguous(

@@ -70,7 +70,8 @@ internal static class IndirectShapeDiscoverer
         IReadOnlySet<string> handlerRoots,
         AnalysisResult result)
     {
-        if (simple == "IRequestHandler") return;
+        if (simple is "IRequestHandler" or "IAsyncRequestHandler" or "RequestHandler" or "AsyncRequestHandler")
+            return;
 
         var resolved = hierarchy.TryResolveShapeTarget(
             declaration.Namespace,
@@ -180,7 +181,8 @@ internal static class IndirectShapeDiscoverer
         TypeHierarchy hierarchy,
         AnalysisResult result)
     {
-        if (simple is "INotificationHandler" or "IDomainEventHandler") return;
+        if (simple is "INotificationHandler" or "IAsyncNotificationHandler" or "IDomainEventHandler")
+            return;
 
         var resolved = hierarchy.TryResolveShapeTarget(
             declaration.Namespace,

@@ -29,7 +29,7 @@ internal static class ServiceResolutionIndexBuilder
         // discard the resolver cache it has already warmed.
         hierarchy ??= new TypeHierarchy(classes, interfaces);
         var classFiles = new Dictionary<CSharpScanner.ClassDecl, SourceFile>();
-        var interfaceLocations = new Dictionary<string, SourceLocation>(StringComparer.Ordinal);
+        var interfaceLocations = new Dictionary<string, SourceLocation?>(StringComparer.Ordinal);
         foreach (var (file, scan, _) in parsedFiles)
         {
             foreach (var declaration in scan.Classes)
@@ -59,7 +59,7 @@ internal static class ServiceResolutionIndexBuilder
         List<CSharpScanner.ClassDecl> classes,
         TypeHierarchy hierarchy,
         IReadOnlyDictionary<CSharpScanner.ClassDecl, SourceFile> classFiles,
-        IReadOnlyDictionary<string, SourceLocation> interfaceLocations,
+        IReadOnlyDictionary<string, SourceLocation?> interfaceLocations,
         AnalysisResult result,
         Dictionary<string, Entry> entries)
     {
@@ -93,7 +93,7 @@ internal static class ServiceResolutionIndexBuilder
     private static void AddRegistrationCandidates(
         IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
         TypeHierarchy hierarchy,
-        IReadOnlyDictionary<string, SourceLocation> interfaceLocations,
+        IReadOnlyDictionary<string, SourceLocation?> interfaceLocations,
         AnalysisResult result,
         Dictionary<string, Entry> entries)
     {
@@ -196,7 +196,7 @@ internal static class ServiceResolutionIndexBuilder
         int arity,
         bool isOpen,
         IReadOnlyList<string> arguments,
-        IReadOnlyDictionary<string, SourceLocation> interfaceLocations)
+        IReadOnlyDictionary<string, SourceLocation?> interfaceLocations)
     {
         if (entries.TryGetValue(signature, out var existing))
             return existing;

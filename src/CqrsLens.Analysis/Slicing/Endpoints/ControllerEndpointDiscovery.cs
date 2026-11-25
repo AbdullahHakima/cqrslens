@@ -27,7 +27,7 @@ internal static class ControllerEndpointDiscovery
                                HasControllerAttribute(file.Code, declaration.DeclarationIndex);
             if (!isController) continue;
 
-            var classRoute = ExtractClassRoutePrefix(file.Code, declaration);
+            var classRoute = ExtractClassRoutePrefix(file.Code, mask, declaration);
             var controllerStem = ControllerStem(declaration.Name);
             var bodyEnd = Math.Min(file.Code.Length, declaration.BodySpan.End);
 
@@ -46,19 +46,23 @@ internal static class ControllerEndpointDiscovery
                     continue;
 
                 var methodName = match.Groups["method"].Value;
-                var parameters = match.Groups["params"].Value;
-                var actionEnd = DeepSliceSyntax.FindMethodEnd(
-                    file.Code, mask, match.Index + match.Length, bodyEnd);
-                var actionBody = actionEnd > match.Index + match.Length
-                    ? file.Code[(match.Index + match.Length)..actionEnd]
-                    : "";
+                var openParen = match.Index + match.Length - 1;
+                var closeParen = DeepSliceSyntax.FindMatchingParen(file.Code, mask, openParen);
+                if (closeParen < 0 || closeParen >= bodyEnd)
+                    continue;
+                var actionParams = mask.CodeOnly(openParen + 1, Math.Max(0, closeParen - openParen - 1));
+                var actionStart = closeParen + 1;
+                var actionEnd = DeepSliceSyntax.FindMethodEnd(file.Code, mask, actionStart, bodyEnd);
+                var actionBody = mask.CodeOnly(actionStart, Math.Max(0, actionEnd - actionStart));
 
                 var matchedRequests = EndpointRequestMatcher.FindReferencedRequests(
-                    parameters,
+                    actionParams,
                     actionBody,
                     requestsBySimple,
                     file.ProjectName,
-                    scan.Usings);
+                    scan.Usings,
+                    declaration.Namespace,
+                    declaration.ContainingTypes);
 
                 if (matchedRequests.Count == 0) continue;
 
@@ -109,16 +113,26 @@ internal static class ControllerEndpointDiscovery
                prefix.Contains("[Controller", StringComparison.Ordinal);
     }
 
-    private static string ExtractClassRoutePrefix(string code, CSharpScanner.ClassDecl declaration)
+    private static string ExtractClassRoutePrefix(string code, SourceMask mask, CSharpScanner.ClassDecl declaration)
     {
         var start = Math.Max(0, declaration.DeclarationIndex - 500);
-        var prefix = code[start..declaration.DeclarationIndex];
-        var lastBoundary = prefix.LastIndexOfAny(new[] { ';', '}' });
-        if (lastBoundary >= 0)
-            prefix = prefix[(lastBoundary + 1)..];
+        for (var index = declaration.DeclarationIndex - 1; index >= start; index--)
+        {
+            if (mask.IsCode(index) && code[index] is ';' or '}')
+            {
+                start = index + 1;
+                break;
+            }
+        }
 
-        var match = ApiEndpointPatterns.RouteAttribute().Match(prefix);
-        return match.Success ? match.Groups["route"].Value : "";
+        var prefix = code[start..declaration.DeclarationIndex];
+        foreach (Match match in ApiEndpointPatterns.RouteAttribute().Matches(prefix))
+        {
+            if (mask.IsCode(start + match.Index))
+                return match.Groups["route"].Value;
+        }
+
+        return "";
     }
 
     private static string ControllerStem(string className)

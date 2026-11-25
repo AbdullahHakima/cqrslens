@@ -34,21 +34,18 @@ internal static class FastEndpointDiscovery
             var matchedRequests = new List<CqrsRequest>();
             if (endpointArguments is { Count: >= 1 })
             {
-                var requestSimple = CSharpScanner.UnqualifiedTypeName(endpointArguments[0]);
-                if (requestsBySimple.TryGetValue(requestSimple, out var hits))
-                {
-                    var picked = DeepSliceCandidateResolver.PickRequest(
-                        hits, file.ProjectName, scan.Usings);
-                    if (picked is not null)
-                        matchedRequests.Add(picked);
-                }
+                var picked = EndpointRequestMatcher.ResolveRequest(
+                    endpointArguments[0], requestsBySimple, file.ProjectName, scan.Usings, declaration.Namespace);
+                if (picked is not null)
+                    matchedRequests.Add(picked);
             }
 
             if (matchedRequests.Count == 0 &&
                 declaration.BaseRawNames.Any(b => b.StartsWith("Endpoint", StringComparison.Ordinal)))
             {
                 matchedRequests.AddRange(EndpointRequestMatcher.FindReferencedRequests(
-                    "", body, requestsBySimple, file.ProjectName, scan.Usings));
+                    "", mask.CodeOnly(declaration.BodySpan.Start, body.Length), requestsBySimple,
+                    file.ProjectName, scan.Usings, declaration.Namespace));
             }
 
             if (matchedRequests.Count == 0) continue;

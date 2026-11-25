@@ -20,7 +20,9 @@ internal static class NotificationLinker
                 handler.NotificationNamespace,
                 handler.Namespace,
                 handler.ImportedNamespaces,
-                handler.ProjectName);
+                handler.ProjectName,
+                handler.ContainingTypes,
+                handler.NotificationFullNameHint);
             if (notification is null)
             {
                 LinkDiagnostics.RecordAmbiguous(

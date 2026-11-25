@@ -20,13 +20,13 @@ internal static class RoslynNotificationHandlerShapeReader
         if (symbol.IsAbstract) return;
 
         var candidateInterfaces = RoslynSymbolFacts.ImplementedInterfaces(symbol, declaration, model)
-            .Where(i => i.Name is "INotificationHandler" or "IDomainEventHandler" &&
+            .Where(i => i.Name is "INotificationHandler" or "IAsyncNotificationHandler" or "IDomainEventHandler" &&
                         i.TypeArguments.Length >= 1)
             .ToList();
 
         foreach (var errorBase in RoslynSymbolFacts.ErrorBaseTypes(declaration, model))
         {
-            if (errorBase.Name is "INotificationHandler" or "IDomainEventHandler" &&
+            if (errorBase.Name is "INotificationHandler" or "IAsyncNotificationHandler" or "IDomainEventHandler" &&
                 errorBase.TypeArguments.Length >= 1 &&
                 !hierarchy.HasInterface(errorBase.Name))
             {
@@ -43,13 +43,21 @@ internal static class RoslynNotificationHandlerShapeReader
             var targetName = RoslynSymbolFacts.TypeName(target);
             var targetNamespace = RoslynSymbolFacts.NamespaceOf(target);
             var normalizedNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace;
+            var targetFullNameHint = target is INamedTypeSymbol
+                {
+                    TypeKind: not TypeKind.Error,
+                    ContainingType: not null,
+                } namedTarget
+                ? RoslynSymbolFacts.FullName(namedTarget)
+                : null;
             var fullName = RoslynSymbolFacts.FullName(symbol);
 
             if (result.NotificationHandlers.Any(h =>
                     h.FullName == fullName &&
                     h.ProjectName == projectName &&
                     h.NotificationName == targetName &&
-                    h.NotificationNamespace == normalizedNamespace))
+                    h.NotificationNamespace == normalizedNamespace &&
+                    h.NotificationFullNameHint == targetFullNameHint))
                 continue;
 
             var handler = new NotificationHandlerInfo
@@ -58,6 +66,7 @@ internal static class RoslynNotificationHandlerShapeReader
                 Namespace = RoslynSymbolFacts.NamespaceOf(symbol),
                 NotificationName = targetName,
                 NotificationNamespace = normalizedNamespace,
+                NotificationFullNameHint = targetFullNameHint,
                 ProjectName = projectName,
                 Location = RoslynSymbolFacts.LocationOf(declaration.Identifier.GetLocation(), result.RootPath),
             };

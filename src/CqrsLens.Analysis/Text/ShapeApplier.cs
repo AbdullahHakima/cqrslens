@@ -9,7 +9,10 @@ namespace CqrsLens;
 /// </summary>
 internal static partial class ShapeApplier
 {
-    [GeneratedRegex(@"\bDbSet\s*<\s*([^<>]*(?:<[^<>]*>[^<>]*)*)\s*>\s+(\w+)", RegexOptions.Singleline)]
+    [GeneratedRegex(
+        @"\bDbSet\s*<\s*([^<>]*(?:<[^<>]*>[^<>]*)*)\s*>\s+(\w+)",
+        RegexOptions.Singleline,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex DbSetRegex();
 
     /// <summary>
@@ -52,10 +55,12 @@ internal static partial class ShapeApplier
                 !decl.IsAbstract && target is not null &&
                 !decl.TypeParameters.Contains(target, StringComparer.Ordinal);
 
-            // IRequest<...> / IRequest  -> a CQRS request
-            if (!decl.IsAbstract && decl.BaseRawNames.Contains("IRequest"))
+            // IRequest<...> / IRequest / IAsyncRequest<...> / IAsyncRequest -> a CQRS request
+            if (!decl.IsAbstract &&
+                (decl.BaseRawNames.Contains("IRequest") || decl.BaseRawNames.Contains("IAsyncRequest")))
             {
-                var response = CSharpSyntax.ExtractGenericArguments(decl.BaseList, "IRequest")?.FirstOrDefault();
+                var response = CSharpSyntax.ExtractGenericArguments(decl.BaseList, "IRequest")?.FirstOrDefault()
+                               ?? CSharpSyntax.ExtractGenericArguments(decl.BaseList, "IAsyncRequest")?.FirstOrDefault();
                 // An open-generic wrapper is never dispatched as-is; MediatR closes
                 // it per inner request. It is not a concrete request, but record the
                 // name so validators that target it are not called orphans.
@@ -79,18 +84,24 @@ internal static partial class ShapeApplier
                 }
             }
 
-            // INotification / IDomainEvent -> a CQRS notification / domain event
+            // INotification / IAsyncNotification / IDomainEvent -> a CQRS notification / domain event
             if (!decl.IsAbstract &&
-                (decl.BaseRawNames.Contains("INotification") || decl.BaseRawNames.Contains("IDomainEvent")))
+                (decl.BaseRawNames.Contains("INotification") ||
+                 decl.BaseRawNames.Contains("IAsyncNotification") ||
+                 decl.BaseRawNames.Contains("IDomainEvent")))
             {
                 if (identities.TryAddNotification(decl, projectName))
                 {
+                    var viaMarker = decl.BaseRawNames.Contains("INotification") ||
+                                    decl.BaseRawNames.Contains("IAsyncNotification")
+                        ? null
+                        : "IDomainEvent";
                     var notification = new CqrsNotification
                     {
                         Name = decl.Name,
                         Namespace = decl.Namespace,
                         ProjectName = projectName,
-                        ViaMarker = decl.BaseRawNames.Contains("INotification") ? null : "IDomainEvent",
+                        ViaMarker = viaMarker,
                         Location = location ??= SourceLocation.Create(
                             filePath, result.RootPath, code, decl.NameIndex),
                     };
@@ -99,13 +110,21 @@ internal static partial class ShapeApplier
                 }
             }
 
-            // IRequestHandler<TRequest, TResponse> -> a handler for every interface.
-            if (decl.BaseRawNames.Contains("IRequestHandler"))
+            // IRequestHandler<TRequest, TResponse> / IAsyncRequestHandler<...> / RequestHandler<...> / AsyncRequestHandler<...>
+            if (decl.BaseRawNames.Contains("IRequestHandler") ||
+                decl.BaseRawNames.Contains("IAsyncRequestHandler") ||
+                decl.BaseRawNames.Contains("RequestHandler") ||
+                decl.BaseRawNames.Contains("AsyncRequestHandler"))
             {
-                foreach (var handlerArgs in CSharpSyntax.ExtractAllGenericArguments(decl.BaseList, "IRequestHandler"))
+                var handlerTargets = new List<string>();
+                foreach (var root in new[] { "IRequestHandler", "IAsyncRequestHandler", "RequestHandler", "AsyncRequestHandler" })
                 {
-                    if (handlerArgs.Count < 1) continue;
-                    var requestType = handlerArgs[0];
+                    handlerTargets.AddRange(CSharpSyntax.ExtractAllGenericArguments(decl.BaseList, root)
+                        .Where(a => a.Count >= 1)
+                        .Select(a => a[0]));
+                }
+                foreach (var requestType in handlerTargets.Distinct(StringComparer.Ordinal))
+                {
                     if (!IsConcreteTarget(CSharpSyntax.UnqualifiedTypeName(requestType))) continue;
                     if (!identities.TryAddHandler(decl, projectName, CSharpSyntax.UnqualifiedTypeName(requestType)))
                         continue;
@@ -126,12 +145,13 @@ internal static partial class ShapeApplier
                 }
             }
 
-            // INotificationHandler<TNotification> / IDomainEventHandler<TNotification> -> a notification handler
+            // INotificationHandler<TNotification> / IAsyncNotificationHandler<TNotification> / IDomainEventHandler<TNotification>
             if (decl.BaseRawNames.Contains("INotificationHandler") ||
+                decl.BaseRawNames.Contains("IAsyncNotificationHandler") ||
                 decl.BaseRawNames.Contains("IDomainEventHandler"))
             {
                 var notificationTargets = new List<string>();
-                foreach (var root in new[] { "INotificationHandler", "IDomainEventHandler" })
+                foreach (var root in new[] { "INotificationHandler", "IAsyncNotificationHandler", "IDomainEventHandler" })
                     notificationTargets.AddRange(CSharpSyntax.ExtractAllGenericArguments(decl.BaseList, root)
                         .Where(a => a.Count >= 1)
                         .Select(a => a[0]));
@@ -218,8 +238,20 @@ internal static partial class ShapeApplier
         }
 
         if (contextClasses.Count > 0)
+            PopulateDbSets(code, mask, contextClasses);
+    }
+
+    internal static void PopulateDbSets(
+        string code,
+        SourceMask? mask,
+        IReadOnlyList<(CSharpScanner.ClassDecl Decl, DbContextInfo Info)> contextClasses)
+    {
+        if (contextClasses.Count == 0)
+            return;
+
+        mask ??= SourceMask.Build(code);
+        try
         {
-            mask ??= SourceMask.Build(code);
             foreach (Match m in DbSetRegex().Matches(code))
             {
                 if (!mask.IsCode(m.Index)) continue;
@@ -232,6 +264,10 @@ internal static partial class ShapeApplier
                 if (!owner.Info.DbSets.Contains(set))
                     owner.Info.DbSets.Add(set);
             }
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // Ignore malformed files that cause excessive backtracking.
         }
     }
 }

@@ -22,8 +22,8 @@ internal static class RoslynRequestShapeReader
 
         var interfaces = RoslynSymbolFacts.ImplementedInterfaces(symbol, declaration, model).ToList();
         var requestInterface = interfaces.FirstOrDefault(i =>
-            i.Name == "IRequest" && i.TypeArguments.Length > 0);
-        requestInterface ??= interfaces.FirstOrDefault(i => i.Name == "IRequest");
+            i.Name is "IRequest" or "IAsyncRequest" && i.TypeArguments.Length > 0);
+        requestInterface ??= interfaces.FirstOrDefault(i => i.Name is "IRequest" or "IAsyncRequest");
         var markerInterface = interfaces.FirstOrDefault(i => markers.Contains(i.Name));
 
         INamedTypeSymbol? externalMarker = null;
@@ -80,13 +80,13 @@ internal static class RoslynRequestShapeReader
         {
             viaMarker = interfaces
                 .FirstOrDefault(i =>
-                    i.Name != "IRequest" &&
-                    RoslynSymbolFacts.ImplementedInterfaces(i).Any(x => x.Name == "IRequest"))
+                    i.Name is not ("IRequest" or "IAsyncRequest") &&
+                    RoslynSymbolFacts.ImplementedInterfaces(i).Any(x => x.Name is "IRequest" or "IAsyncRequest"))
                 ?.Name
                 ?? RoslynSymbolFacts.BaseTypes(symbol)
                     .FirstOrDefault(b =>
                         b.Name != "Object" &&
-                        RoslynSymbolFacts.ImplementedInterfaces(b).Any(x => x.Name == "IRequest"))
+                        RoslynSymbolFacts.ImplementedInterfaces(b).Any(x => x.Name is "IRequest" or "IAsyncRequest"))
                     ?.Name;
         }
 

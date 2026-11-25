@@ -36,13 +36,21 @@ internal static class RoslynValidatorShapeReader
             var targetName = RoslynSymbolFacts.TypeName(target);
             var targetNamespace = RoslynSymbolFacts.NamespaceOf(target);
             var normalizedNamespace = string.IsNullOrEmpty(targetNamespace) ? null : targetNamespace;
+            var targetFullNameHint = target is INamedTypeSymbol
+                {
+                    TypeKind: not TypeKind.Error,
+                    ContainingType: not null,
+                } namedTarget
+                ? RoslynSymbolFacts.FullName(namedTarget)
+                : null;
             var fullName = RoslynSymbolFacts.FullName(symbol);
 
             if (result.Validators.Any(v =>
                     v.FullName == fullName &&
                     v.ProjectName == projectName &&
                     v.TargetType == targetName &&
-                    v.TargetNamespace == normalizedNamespace))
+                    v.TargetNamespace == normalizedNamespace &&
+                    v.TargetFullNameHint == targetFullNameHint))
                 continue;
 
             var validator = new ValidatorInfo
@@ -51,6 +59,7 @@ internal static class RoslynValidatorShapeReader
                 Namespace = RoslynSymbolFacts.NamespaceOf(symbol),
                 TargetType = targetName,
                 TargetNamespace = normalizedNamespace,
+                TargetFullNameHint = targetFullNameHint,
                 ProjectName = projectName,
                 Location = RoslynSymbolFacts.LocationOf(declaration.Identifier.GetLocation(), result.RootPath),
             };

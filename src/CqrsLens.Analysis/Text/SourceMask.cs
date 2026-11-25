@@ -18,6 +18,21 @@ internal sealed class SourceMask
 
     public bool IsCode(int index) => index >= 0 && index < _isCode.Length && _isCode[index];
 
+    public string CodeOnly(int start, int length)
+    {
+        if (Array.IndexOf(_isCode, false, start, length) < 0)
+            return _code.Substring(start, length);
+
+        return string.Create(length, (Mask: this, Start: start), static (text, state) =>
+        {
+            for (var index = 0; index < text.Length; index++)
+            {
+                var sourceIndex = state.Start + index;
+                text[index] = state.Mask._isCode[sourceIndex] ? state.Mask._code[sourceIndex] : ' ';
+            }
+        });
+    }
+
     public int FindMatchingBrace(int openBraceIndex)
     {
         if (!IsCode(openBraceIndex) || _code[openBraceIndex] != '{') return -1;

@@ -49,6 +49,9 @@ internal sealed class TextArchitectureScanner : IArchitectureScanner
         }
         phases.Record("Scan: ApplyScan");
 
+        TransitiveDbContextDiscoverer.Discover(ordered, hierarchy, result, masks);
+        phases.Record("Scan: transitive DbContexts");
+
         foreach (var (file, scan) in ordered)
             MarkerRequestDiscoverer.Discover(scan, file, hierarchy, interfaceMap, markers, result);
         phases.Record("Scan: marker requests");

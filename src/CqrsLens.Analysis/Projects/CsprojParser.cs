@@ -21,6 +21,9 @@ public static class CsprojParser
     public static List<string> FindSourceFiles(string root)
         => ProjectFileDiscovery.FindSourceFiles(root);
 
+    internal static List<string> FindRazorFiles(string root)
+        => ProjectFileDiscovery.FindRazorFiles(root);
+
     /// <summary>Reads the raw ProjectReference Include/Update values from a .csproj file.</summary>
     public static List<string> GetProjectReferenceIncludes(string csprojPath)
         => ProjectReferenceResolver.ReadIncludes(csprojPath);

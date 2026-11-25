@@ -99,7 +99,7 @@ internal sealed class RequestShapeResolver
         RequestShapeResolution shape)
     {
         var simple = CSharpScanner.SimpleName(name);
-        var isRoot = simple is "IRequest" || markerRoots.Contains(simple);
+        var isRoot = simple is "IRequest" or "IAsyncRequest" || markerRoots.Contains(simple);
 
         var interfaceDecl = _names.ResolveInterfaceDecl(
             name, currentNamespace, usings, containingTypes, args.Count,

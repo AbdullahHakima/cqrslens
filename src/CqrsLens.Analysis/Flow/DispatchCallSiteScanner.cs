@@ -10,13 +10,28 @@ namespace CqrsLens;
 /// </summary>
 internal sealed partial class DispatchCallSiteScanner
 {
-    [GeneratedRegex(@"\.\s*(?<method>Send|SendAsync|Publish|PublishAsync|InvokeAsync)\s*(?:<\s*(?<generic>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*(?:,|>))?\s*\(")]
+    [GeneratedRegex(
+        @"\.\s*(?<method>Send|SendAsync|Publish|PublishAsync|InvokeAsync)\s*(?:<\s*(?<generic>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*(?:,|>))?\s*\(",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex DispatchCallRegex();
 
-    [GeneratedRegex(@"^new\s+(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*[\(\{<]")]
+    [GeneratedRegex(
+        @"(?:(?<dot>\.)\s*|(?<![\w@.]))(?<method>AddDomainEvent|RaiseDomainEvent|QueueDomainEvent)\s*(?:<\s*(?<generic>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*(?:,|>))?\s*\(",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
+    private static partial Regex DomainEventCallRegex();
+
+    [GeneratedRegex(
+        @"^new\s+(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*)\s*[\(\{<]",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex LeadingObjectCreationRegex();
 
-    [GeneratedRegex(@"^@?[A-Za-z_]\w*(?:\s*\.\s*@?[A-Za-z_]\w*)*$")]
+    [GeneratedRegex(
+        @"^@?[A-Za-z_]\w*(?:\s*\.\s*@?[A-Za-z_]\w*)*$",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex SimpleIdentifierRegex();
 
     private static readonly Dictionary<string, string> EmptyStrings = new(StringComparer.Ordinal);
@@ -60,21 +75,58 @@ internal sealed partial class DispatchCallSiteScanner
             Dictionary<string, string>? receiverTypes = null;
             List<string>? imports = null;
 
-            foreach (Match match in DispatchCallRegex().Matches(file.Code, decl.BodySpan.Start))
+            ScanRegexMatches(
+                DispatchCallRegex(), file, scan, mask, decl, bodyEnd,
+                isDomainEventCall: false, ref receiverTypes, ref imports);
+
+            if (file.Code.AsSpan(decl.BodySpan.Start, bodyEnd - decl.BodySpan.Start)
+                .Contains("DomainEvent", StringComparison.Ordinal))
+            {
+                ScanRegexMatches(
+                    DomainEventCallRegex(), file, scan, mask, decl, bodyEnd,
+                    isDomainEventCall: true, ref receiverTypes, ref imports);
+            }
+        }
+    }
+
+    private void ScanRegexMatches(
+        Regex regex,
+        SourceFile file,
+        CSharpScanner.FileScan scan,
+        SourceMask mask,
+        CSharpScanner.ClassDecl decl,
+        int bodyEnd,
+        bool isDomainEventCall,
+        ref Dictionary<string, string>? receiverTypes,
+        ref List<string>? imports)
+    {
+        try
+        {
+            foreach (Match match in regex.Matches(file.Code, decl.BodySpan.Start))
             {
                 if (match.Index >= bodyEnd)
                     break;
-                if (!mask.IsCode(match.Index))
+
+                var codeIndex = isDomainEventCall ? match.Groups["method"].Index : match.Index;
+                if (!mask.IsCode(codeIndex))
                     continue;
-                if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(scan.Classes, match.Index), decl))
+                if (isDomainEventCall && match.Groups["dot"].Success && !mask.IsCode(match.Groups["dot"].Index))
+                    continue;
+                if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(scan.Classes, codeIndex), decl))
+                    continue;
+                if (isDomainEventCall && IsMethodDeclaration(file.Code, mask, match, decl.BodySpan.Start, bodyEnd))
                     continue;
 
                 receiverTypes ??= ReceiverTypeMapBuilder.Build(
                     decl, file.Code, mask, scan.Classes, EmptyStrings, EmptySet, EmptyLists);
                 imports ??= BuildImports(decl);
 
-                Process(match, decl, file, mask, receiverTypes, imports);
+                Process(match, decl, file, mask, receiverTypes, imports, isDomainEventCall);
             }
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            // Keep dispatch scanning bounded on pathological inputs.
         }
     }
 
@@ -84,13 +136,19 @@ internal sealed partial class DispatchCallSiteScanner
         SourceFile file,
         SourceMask mask,
         Dictionary<string, string> receiverTypes,
-        List<string> imports)
+        List<string> imports,
+        bool isDomainEventCall)
     {
         var method = match.Groups["method"].Value;
-        var publishLike = method is "Publish" or "PublishAsync";
-        var receiver = ReceiverTypeMapBuilder.GetReceiverIdentifier(file.Code, match.Index);
+        var publishLike = isDomainEventCall || method is "Publish" or "PublishAsync";
+        var receiver = !isDomainEventCall
+            ? ReceiverTypeMapBuilder.GetReceiverIdentifier(file.Code, match.Index)
+            : match.Groups["dot"].Success
+                ? ReceiverTypeMapBuilder.GetReceiverIdentifier(file.Code, match.Groups["dot"].Index)
+                : null;
         var isTest = file.ProjectName is not null && _testProjects.Contains(file.ProjectName);
-        var location = SourceLocation.Create(file.Path, _result.RootPath, file.Code, match.Index);
+        var locationIndex = isDomainEventCall ? match.Groups["method"].Index : match.Index;
+        var location = SourceLocation.Create(file.Path, _result.RootPath, file.Code, locationIndex);
 
         string? typeName;
         if (match.Groups["generic"].Success && match.Groups["generic"].Value.Length > 0)
@@ -103,15 +161,18 @@ internal sealed partial class DispatchCallSiteScanner
             typeName = TypeFromArgument(argument, receiverTypes);
         }
 
-        // Publish targets a notification; Send/SendAsync/InvokeAsync target a request
-        // but a few frameworks dispatch an event through the same method, so a
-        // non-publish call falls back to a notification target.
+        // Publish and domain-event calls target a notification; Send/SendAsync/InvokeAsync
+        // target a request but a few frameworks dispatch an event through the same method,
+        // so a non-publish call falls back to a notification target.
         if (TryResolve(typeName, decl, imports, file.ProjectName, publishLike, out var target, out var kind)
             && target is not null)
         {
             Record(decl, file, isTest, location, target, kind);
             return;
         }
+
+        if (isDomainEventCall)
+            return;
 
         if (typeName is not null &&
             _declaredClasses.Contains(CSharpScanner.UnqualifiedTypeName(typeName)))
@@ -170,7 +231,7 @@ internal sealed partial class DispatchCallSiteScanner
         CSharpScanner.ClassDecl decl,
         SourceFile file,
         bool isTest,
-        SourceLocation location,
+        SourceLocation? location,
         string targetFullName,
         DispatchTargetKind kind)
     {
@@ -204,7 +265,7 @@ internal sealed partial class DispatchCallSiteScanner
         string method,
         SourceFile file,
         bool isTest,
-        SourceLocation location,
+        SourceLocation? location,
         string? receiver)
     {
         _result.UnresolvedDispatches.Add(new UnresolvedDispatch
@@ -223,20 +284,88 @@ internal sealed partial class DispatchCallSiteScanner
         if (arg.Length == 0)
             return null;
 
-        var created = LeadingObjectCreationRegex().Match(arg);
-        if (created.Success)
-            return created.Groups["type"].Value;
-
-        if (SimpleIdentifierRegex().IsMatch(arg))
+        try
         {
-            var name = arg.TrimStart('@');
-            return receiverTypes.TryGetValue(name, out var declared) && declared.Length > 0
-                ? declared
-                : null;
+            var created = LeadingObjectCreationRegex().Match(arg);
+            if (created.Success)
+                return created.Groups["type"].Value;
+
+            if (SimpleIdentifierRegex().IsMatch(arg))
+            {
+                var name = arg.TrimStart('@');
+                return receiverTypes.TryGetValue(name, out var declared) && declared.Length > 0
+                    ? declared
+                    : null;
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return null;
         }
 
         return null;
     }
+
+    private static bool IsMethodDeclaration(
+        string code,
+        SourceMask mask,
+        Match match,
+        int bodyStart,
+        int bodyEnd)
+    {
+        var openParen = match.Index + match.Length - 1;
+        if (openParen < 0 || openParen >= code.Length || code[openParen] != '(')
+            return false;
+
+        var closeParen = DeepSliceSyntax.FindMatchingParen(code, mask, openParen);
+        if (closeParen > openParen)
+        {
+            var after = closeParen + 1;
+            while (after < bodyEnd && (!mask.IsCode(after) || char.IsWhiteSpace(code[after])))
+                after++;
+
+            if (after < bodyEnd)
+            {
+                if (code[after] == '{')
+                    return true;
+                if (code[after] == '=' && after + 1 < bodyEnd && code[after + 1] == '>')
+                    return true;
+                if (after + 5 <= bodyEnd &&
+                    string.CompareOrdinal(code, after, "where", 0, 5) == 0 &&
+                    (after + 5 == bodyEnd || !IsIdentifierChar(code[after + 5])))
+                {
+                    return true;
+                }
+            }
+        }
+
+        if (match.Groups["dot"].Success)
+            return false;
+
+        var prev = match.Index - 1;
+        while (prev >= bodyStart && (!mask.IsCode(prev) || char.IsWhiteSpace(code[prev])))
+            prev--;
+
+        if (prev < bodyStart)
+            return false;
+
+        if (code[prev] == '>')
+            return !(prev > bodyStart && code[prev - 1] == '=');
+
+        if (IsIdentifierChar(code[prev]))
+        {
+            var identEnd = prev + 1;
+            while (prev >= bodyStart && (IsIdentifierChar(code[prev]) || code[prev] == '@'))
+                prev--;
+
+            var token = code[(prev + 1)..identEnd].TrimStart('@');
+            return token is not ("await" or "return" or "else" or "do");
+        }
+
+        return false;
+    }
+
+    private static bool IsIdentifierChar(char c) => char.IsLetterOrDigit(c) || c == '_';
 
     private static string ExtractFirstArgument(string code, SourceMask mask, int start)
     {

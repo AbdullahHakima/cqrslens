@@ -8,7 +8,10 @@ namespace CqrsLens;
 /// </summary>
 internal static partial class RequestPropertyPopulator
 {
-    [GeneratedRegex(@"(?:public|internal)\s+(?:required\s+)?(?!class\b|record\b|struct\b|interface\b)(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*(?:\s*<[^;{}()=]*>)?(?:\s*\[\s*\]\s*)*\??)\s+(?<name>[A-Za-z_]\w*)\s*\{\s*get\s*;\s*\}")]
+    [GeneratedRegex(
+        @"(?:public|internal)\s+(?:required\s+)?(?!class\b|record\b|struct\b|interface\b)(?<type>(?:global::)?[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*(?:\s*<[^;{}()=]*>)?(?:\s*\[\s*\])*\??)\s+(?<name>[A-Za-z_]\w*)\s*\{\s*get\s*;\s*\}",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex GetterOnlyPropertyRegex();
 
     internal static void Populate(
@@ -41,17 +44,29 @@ internal static partial class RequestPropertyPopulator
                 if (decl.BodySpan.End > decl.BodySpan.Start)
                 {
                     var bodyEnd = Math.Min(file.Code.Length, decl.BodySpan.End);
-                    foreach (Match m in GetterOnlyPropertyRegex().Matches(file.Code, decl.BodySpan.Start))
+                    try
                     {
-                        if (m.Index >= bodyEnd) break;
-                        if (!mask.IsCode(m.Index)) continue;
-                        if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(scan.Classes, m.Index), decl)) continue;
+                        foreach (Match m in GetterOnlyPropertyRegex().Matches(file.Code, decl.BodySpan.Start))
+                        {
+                            if (m.Index >= bodyEnd) break;
+                            if (!mask.IsCode(m.Index)) continue;
+                            if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(scan.Classes, m.Index), decl)) continue;
 
-                        var propName = m.Groups["name"].Value;
-                        var propType = Regex.Replace(m.Groups["type"].Value.Trim(), @"\s+", "");
-                        if (request.Properties.Any(p => string.Equals(p.Name, propName, StringComparison.Ordinal)))
-                            continue;
-                        request.Properties.Add(new RequestPropertyInfo(propName, propType));
+                            var propName = m.Groups["name"].Value;
+                            var propType = Regex.Replace(
+                                m.Groups["type"].Value.Trim(),
+                                @"\s+",
+                                "",
+                                RegexOptions.None,
+                                TimeSpan.FromSeconds(2));
+                            if (request.Properties.Any(p => string.Equals(p.Name, propName, StringComparison.Ordinal)))
+                                continue;
+                            request.Properties.Add(new RequestPropertyInfo(propName, propType));
+                        }
+                    }
+                    catch (RegexMatchTimeoutException)
+                    {
+                        // Guard against pathological source bodies timing out regex evaluation.
                     }
                 }
             }

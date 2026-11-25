@@ -43,16 +43,16 @@ internal static class EndpointRequestMatcher
         string bodySection,
         Dictionary<string, List<CqrsRequest>> requestsBySimple,
         string? projectName,
-        IReadOnlyList<UsingDirective>? usings)
+        IReadOnlyList<UsingDirective>? usings,
+        string? callerNamespace = null,
+        IReadOnlyList<string>? containingTypes = null)
     {
         var results = new List<CqrsRequest>();
 
         void TryAdd(string typeRef)
         {
-            var simple = CSharpScanner.UnqualifiedTypeName(typeRef);
-            if (!requestsBySimple.TryGetValue(simple, out var hits))
-                return;
-            var picked = DeepSliceCandidateResolver.PickRequest(hits, projectName, usings);
+            var picked = ResolveRequest(
+                typeRef, requestsBySimple, projectName, usings, callerNamespace, containingTypes);
             if (picked is not null && !results.Contains(picked))
                 results.Add(picked);
         }
@@ -80,4 +80,95 @@ internal static class EndpointRequestMatcher
 
         return results;
     }
+
+    internal static CqrsRequest? ResolveRequest(
+        string typeRef,
+        Dictionary<string, List<CqrsRequest>> requestsBySimple,
+        string? projectName,
+        IReadOnlyList<UsingDirective>? usings,
+        string? callerNamespace,
+        IReadOnlyList<string>? containingTypes = null)
+    {
+        var type = typeRef.Any(char.IsWhiteSpace) ? string.Concat(typeRef.Where(c => !char.IsWhiteSpace(c))) : typeRef;
+        var simple = CSharpScanner.UnqualifiedTypeName(type);
+        var qualifier = CSharpSyntax.NamespaceOfType(type);
+        var fullName = qualifier.Length == 0 ? simple : $"{qualifier}.{simple}";
+        if (type.StartsWith("global::", StringComparison.Ordinal))
+            return UniqueMatch(requestsBySimple.GetValueOrDefault(simple), fullName);
+
+        var separator = fullName.IndexOf('.');
+        var firstSegment = separator < 0 ? fullName : fullName[..separator];
+        var aliases = usings?.Where(directive => directive.Alias == firstSegment &&
+            IsInScope(callerNamespace, directive.ContainerNamespace)).ToArray();
+        if (aliases is { Length: > 0 })
+        {
+            var suffix = separator < 0 ? "" : fullName[separator..];
+            var matches = aliases.Select(directive => CSharpSyntax.SimpleName(directive.Target + suffix))
+                .SelectMany(name => requestsBySimple.GetValueOrDefault(name) ?? [])
+                .Where(candidate => aliases.Any(directive => candidate.FullName == directive.Target + suffix));
+            return UniqueMatch(matches.Distinct(), null);
+        }
+
+        if (!requestsBySimple.TryGetValue(simple, out var candidates))
+            return null;
+
+        if (containingTypes is { Count: > 0 })
+        {
+            for (var depth = containingTypes.Count; depth >= 1; depth--)
+            {
+                var scopePrefix = string.Join(".", containingTypes.Take(depth));
+                var prefix = string.IsNullOrEmpty(callerNamespace)
+                    ? scopePrefix
+                    : $"{callerNamespace}.{scopePrefix}";
+                var candidateFull = $"{prefix}.{fullName}";
+                if (candidates.Any(candidate => candidate.FullName == candidateFull))
+                    return UniqueMatch(candidates, candidateFull);
+            }
+        }
+
+        if (qualifier.Length == 0)
+        {
+            if (!string.IsNullOrEmpty(callerNamespace))
+            {
+                for (var scope = callerNamespace; !string.IsNullOrEmpty(scope); scope = CSharpSyntax.NamespaceOf(scope))
+                {
+                    var scopedSimple = $"{scope}.{simple}";
+                    if (candidates.Any(candidate => candidate.FullName == scopedSimple))
+                        return UniqueMatch(candidates, scopedSimple);
+                }
+            }
+
+            return DeepSliceCandidateResolver.PickRequest(candidates, projectName, usings);
+        }
+
+        // A qualified reference can be relative to an enclosing or imported
+        // namespace. If it cannot be resolved, its final segment is insufficient
+        // evidence to link it to a different request from another namespace.
+        for (var scope = callerNamespace; !string.IsNullOrEmpty(scope); scope = CSharpSyntax.NamespaceOf(scope))
+        {
+            var scopedName = $"{scope}.{fullName}";
+            if (candidates.Any(candidate => candidate.FullName == scopedName))
+                return UniqueMatch(candidates, scopedName);
+        }
+
+        if (candidates.Any(candidate => candidate.FullName == fullName))
+            return UniqueMatch(candidates, fullName);
+
+        var importedNames = usings?.Where(directive => IsInScope(callerNamespace, directive.ContainerNamespace))
+            .SelectMany(directive => directive.NamespaceCandidates())
+            .Select(import => $"{import}.{fullName}").ToHashSet(StringComparer.Ordinal);
+        return importedNames is null
+            ? null
+            : UniqueMatch(candidates.Where(candidate => importedNames.Contains(candidate.FullName)), null);
+    }
+
+    private static CqrsRequest? UniqueMatch(IEnumerable<CqrsRequest>? candidates, string? fullName)
+    {
+        var matching = candidates?.Where(candidate => fullName is null || candidate.FullName == fullName).Take(2).ToArray();
+        return matching is { Length: 1 } ? matching[0] : null;
+    }
+
+    private static bool IsInScope(string? callerNamespace, string? directiveNamespace)
+        => string.IsNullOrEmpty(directiveNamespace) || callerNamespace == directiveNamespace ||
+           callerNamespace?.StartsWith(directiveNamespace + ".", StringComparison.Ordinal) == true;
 }

@@ -90,6 +90,7 @@ public static partial class CSharpScanner
         ApplyScan(scan, code, projectName, result, filePath);
         var file = new SourceFile(filePath ?? "", code, projectName);
         var hierarchy = new TypeHierarchy(scan.Classes, scan.InterfaceDecls);
+        TransitiveDbContextDiscoverer.Discover(new[] { (file, scan) }, hierarchy, result);
         EfCoreTextModelBuilder.Build(new[] { (file, scan) }, hierarchy, result);
     }
 

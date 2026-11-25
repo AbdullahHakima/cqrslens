@@ -24,7 +24,9 @@ internal static partial class ServiceCallEdgeResolver
     // the invoked method name. The target expression is the receiver; the method name is
     // captured without arguments or signature.
     [GeneratedRegex(
-        @"(?<![\w.@])(?<receiver>@?[A-Za-z_]\w*)\s*[!?]?\s*\.\s*(?<method>[A-Za-z_]\w*)\s*(?:<[^;{}()]*>)?\s*\(")]
+        @"(?<![\w.@])(?<receiver>@?[A-Za-z_]\w*)\s*[!?]?\s*\.\s*(?<method>[A-Za-z_]\w*)\s*(?:<[^;{}()]*>)?\s*\(",
+        RegexOptions.None,
+        matchTimeoutMilliseconds: 2000)]
     private static partial Regex InvocationRegex();
 
     public static void Build(
@@ -173,36 +175,42 @@ internal static partial class ServiceCallEdgeResolver
 
         var code = parsed.File.Code;
         var bodyEnd = Math.Min(code.Length, declaration.BodySpan.End);
-        foreach (Match match in InvocationRegex().Matches(code, declaration.BodySpan.Start))
+        try
         {
-            if (match.Index >= bodyEnd) break;
-            if (!parsed.Mask.IsCode(match.Index)) continue;
-            if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(parsed.Scan.Classes, match.Index), declaration))
-                continue;
-
-            var receiver = match.Groups["receiver"].Value.TrimStart('@');
-            if (!typeByMember.TryGetValue(receiver, out var memberType)) continue;
-
-            var method = match.Groups["method"].Value;
-            if (method.Length == 0) continue;
-
-            if (!TryResolveTarget(memberType, declaration, hierarchy, resolutionBySignature, contexts,
-                    out var via, out var to))
-                continue;
-            if (to == declaration.FullName) continue;
-
-            var key = (declaration.FullName, via, method, to);
-            if (edges.ContainsKey(key)) continue;
-
-            edges[key] = new ServiceCallEdge
+            foreach (Match match in InvocationRegex().Matches(code, declaration.BodySpan.Start))
             {
-                From = declaration.FullName,
-                Via = via,
-                Method = method,
-                To = to,
-                ProjectName = parsed.File.ProjectName,
-                Location = SourceLocation.Create(parsed.File.Path, result.RootPath, code, match.Index),
-            };
+                if (match.Index >= bodyEnd) break;
+                if (!parsed.Mask.IsCode(match.Index)) continue;
+                if (!ReferenceEquals(DeepSliceSyntax.InnermostClass(parsed.Scan.Classes, match.Index), declaration))
+                    continue;
+
+                var receiver = match.Groups["receiver"].Value.TrimStart('@');
+                if (!typeByMember.TryGetValue(receiver, out var memberType)) continue;
+
+                var method = match.Groups["method"].Value;
+                if (method.Length == 0) continue;
+
+                if (!TryResolveTarget(memberType, declaration, hierarchy, resolutionBySignature, contexts,
+                        out var via, out var to))
+                    continue;
+                if (to == declaration.FullName) continue;
+
+                var key = (declaration.FullName, via, method, to);
+                if (edges.ContainsKey(key)) continue;
+
+                edges[key] = new ServiceCallEdge
+                {
+                    From = declaration.FullName,
+                    Via = via,
+                    Method = method,
+                    To = to,
+                    ProjectName = parsed.File.ProjectName,
+                    Location = SourceLocation.Create(parsed.File.Path, result.RootPath, code, match.Index),
+                };
+            }
+        }
+        catch (RegexMatchTimeoutException)
+        {
         }
     }
 
@@ -286,5 +294,15 @@ internal static partial class ServiceCallEdgeResolver
             : identity + "<" + string.Join(", ", arguments) + ">";
     }
 
-    private static string Normalize(string type) => Regex.Replace(type, @"\s+", "");
+    private static string Normalize(string type)
+    {
+        try
+        {
+            return Regex.Replace(type, @"\s+", "", RegexOptions.None, TimeSpan.FromSeconds(2));
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return type;
+        }
+    }
 }
