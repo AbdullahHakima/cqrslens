@@ -18,6 +18,9 @@ public sealed class HandlerInfo
     // Set when the request name in IRequestHandler<...> could be resolved to a namespace.
     public string? RequestNamespace { get; set; }
 
+    /// <summary>Resolved full name when obtained semantically (handles nested slice types).</summary>
+    internal string? RequestFullNameHint { get; set; }
+
     /// <summary>Namespaces imported by the declaring file, used by the linker.</summary>
     internal List<string> ImportedNamespaces { get; } = new();
 

@@ -32,6 +32,24 @@ public sealed class AnalysisResult
     public List<EndpointInfo> Endpoints { get; } = new();
 
     /// <summary>
+    /// System-wide entrypoints discovered across HTTP, gRPC, Blazor, Razor Pages,
+    /// background workers, and message consumers. Additive model data kept separate from
+    /// <see cref="Endpoints"/>.
+    /// </summary>
+    public List<SystemEntrypointInfo> SystemEntrypoints { get; } = new();
+
+    /// <summary>
+    /// Cross-project integration flows (integration events, Aspire references, typed
+    /// HTTP/gRPC clients, and shared DbContexts).
+    /// </summary>
+    public List<IntegrationFlowEdge> IntegrationFlows { get; } = new();
+
+    /// <summary>
+    /// Runtime role, technology stack, and capability counts for every scanned project.
+    /// </summary>
+    public List<ServiceProfileInfo> ServiceProfiles { get; } = new();
+
+    /// <summary>
     /// Resolved solution-wide flow edges (endpoint → request, request → handler,
     /// handler → request, handler → notification, handler → DbContext). Populated by
     /// the flow pass; the JSON report is the contract that exposes them.
@@ -94,12 +112,28 @@ public sealed class AnalysisResult
     /// <summary>Built-in mediator conventions detected in the source (e.g. Mediator, Wolverine).</summary>
     public List<string> Conventions { get; } = new();
 
+    /// <summary>Architecture styles inferred across the scanned system.</summary>
+    public List<string> ArchitectureStyles { get; } = new();
+
+    /// <summary>
+    /// Internal per-service dependency and persistence summary populated during system
+    /// scanning for universal change-impact traversal. Kept internal so JSON contracts stay unchanged.
+    /// </summary>
+    internal Dictionary<string, ServiceClassEffect> ServiceClassEffects { get; } = new(StringComparer.Ordinal);
+
     /// <summary>
     /// True when the caller supplied explicit project layer overrides, so the layer
     /// model is configured rather than name-guessed and must not be second-guessed
     /// by the confidence heuristic.
     /// </summary>
     internal bool HasConfiguredLayers { get; set; }
+
+    /// <summary>True when the scan was restricted by include or exclude patterns.</summary>
+    internal bool HasSourceFilters { get; init; }
+
+    /// <summary>Resolved overrides for layer checks, reused when evaluating project proposals.</summary>
+    internal IReadOnlyDictionary<string, CheckSeverity?> LayerRuleOverrides { get; set; } =
+        new Dictionary<string, CheckSeverity?>(StringComparer.Ordinal);
 
     /// <summary>
     /// The resolved configuration this scan ran under, for the reports' declared-vs-actual

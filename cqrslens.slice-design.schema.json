@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CqrsLens slice design",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "project", "request", "kind", "responseType", "scenarios"],
+  "properties": {
+    "$schema": { "$ref": "#/$defs/nonBlank" },
+    "schemaVersion": { "const": 1 },
+    "project": { "$ref": "#/$defs/nonBlank", "description": "Owning .NET project name or root-relative .csproj path." },
+    "request": { "$ref": "#/$defs/nonBlank", "description": "Exact request type name (including namespace when present), or canonical entrypoint/service target identifier." },
+    "kind": { "enum": ["Command", "Query", "Request", "Endpoint", "Grpc", "Worker", "Consumer", "Service"] },
+    "responseType": {
+      "description": "Response type as displayed by the scan, or null for a request or operation without a response.",
+      "anyOf": [{ "$ref": "#/$defs/nonBlank", "not": { "const": "void" } }, { "type": "null" }]
+    },
+    "handler": { "$ref": "#/$defs/nonBlank", "description": "Exact linked handler type name when specified." },
+    "validator": { "$ref": "#/$defs/nonBlank", "description": "Exact linked validator type name when specified." },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "route"],
+      "properties": {
+        "method": { "type": "string", "pattern": "^\\S+$" },
+        "route": { "$ref": "#/$defs/nonBlank", "description": "Route starting with '/' for HTTP/Blazor/Razor, or trigger/RPC name allowed for GRPC/WORKER/CONSUME." }
+      }
+    },
+    "scenarios": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 20,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "given", "when", "then"],
+        "properties": {
+          "name": { "$ref": "#/$defs/nonBlank" },
+          "given": { "$ref": "#/$defs/nonBlank" },
+          "when": { "$ref": "#/$defs/nonBlank" },
+          "then": { "$ref": "#/$defs/nonBlank" }
+        }
+      }
+    },
+    "properties": {
+      "type": "array",
+      "description": "Expected request input properties.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "$ref": "#/$defs/nonBlank" },
+          "type": { "$ref": "#/$defs/nonBlank" }
+        }
+      }
+    },
+    "publishes": {
+      "type": "array",
+      "description": "Notifications or domain events expected to be published by the slice.",
+      "items": { "$ref": "#/$defs/nonBlank" }
+    },
+    "dispatches": {
+      "type": "array",
+      "description": "Nested CQRS requests expected to be dispatched by the slice.",
+      "items": { "$ref": "#/$defs/nonBlank" }
+    },
+    "persistence": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Expected DbContexts and entities touched by the slice.",
+      "properties": {
+        "dbContexts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonBlank" }
+        },
+        "entities": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/nonBlank" }
+        }
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "Expected services or abstractions injected into the linked handler.",
+      "items": { "$ref": "#/$defs/nonBlank" }
+    },
+    "forbiddenDependencies": {
+      "type": "array",
+      "description": "Type names or namespace prefixes (ending with '.') forbidden on the linked handler.",
+      "items": { "$ref": "#/$defs/nonBlank" }
+    }
+  },
+  "$defs": { "nonBlank": { "type": "string", "pattern": "\\S" } }
+}

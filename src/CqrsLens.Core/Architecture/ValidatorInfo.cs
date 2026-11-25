@@ -14,6 +14,9 @@ public sealed class ValidatorInfo
     // Set when the validated type name could be resolved to a namespace.
     public string? TargetNamespace { get; set; }
 
+    /// <summary>Resolved full name when obtained semantically (handles nested slice types).</summary>
+    internal string? TargetFullNameHint { get; set; }
+
     /// <summary>Namespaces imported by the declaring file, used by the linker.</summary>
     internal List<string> ImportedNamespaces { get; } = new();
 

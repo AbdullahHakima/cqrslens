@@ -21,4 +21,16 @@ public sealed class ProjectInfo
 
     // True when <ImplicitUsings> is enable/true in Directory.Build.props/targets or .csproj.
     public bool ImplicitUsings { get; set; }
+
+    // Evaluated <TargetFramework> and <TargetFrameworks> values, deduplicated case-insensitively.
+    public List<string> TargetFrameworks { get; } = new();
+
+    // <ProjectReference> items gated by a Condition on the item or an ancestor ItemGroup/When.
+    public List<ConditionalProjectReference> ConditionalReferences { get; } = new();
+
+    // Evaluated MSBuild SDK attribute or <Sdk Name="..." /> from the project file.
+    public string? Sdk { get; set; }
+
+    // Evaluated <OutputType> property (for example Exe, WinExe, Library).
+    public string? OutputType { get; set; }
 }

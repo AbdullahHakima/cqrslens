@@ -33,7 +33,7 @@ public static class BaselineStore
         BaselineDocument? document;
         try
         {
-            var json = File.ReadAllText(path);
+            var json = BoundedFileReader.ReadAllText(path);
             if (string.IsNullOrWhiteSpace(json))
                 throw new BaselineException($"baseline file is empty: {path}");
             document = JsonSerializer.Deserialize<BaselineDocument>(json, ReadOptions);
@@ -46,7 +46,7 @@ public static class BaselineStore
         {
             throw new BaselineException($"invalid baseline '{path}': {ex.Message}");
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {
             throw new BaselineException($"could not read baseline '{path}': {ex.Message}");
         }

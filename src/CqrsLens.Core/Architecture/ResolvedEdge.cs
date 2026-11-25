@@ -14,8 +14,16 @@ public sealed class ResolvedEdge
     /// <summary>Full name of the source shape (the handler).</summary>
     public required string From { get; init; }
 
-    /// <summary>Full name of the interface the hop goes through.</summary>
+    /// <summary>Full name of the interface or initial service the hop goes through.</summary>
     public required string Via { get; init; }
+
+    /// <summary>
+    /// Full ordered chain of interface and concrete service/repository hops for multi-hop
+    /// resolution (e.g. <c>[IOrderRepository, OrderRepository]</c>). Null for 1-hop edges.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? ViaChain { get; init; }
 
     /// <summary>Full name of the resolved target (the DbContext).</summary>
     public required string To { get; init; }
