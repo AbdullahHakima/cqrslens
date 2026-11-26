@@ -107,9 +107,10 @@ internal static class SystemOverviewHtmlRenderer
 
             if (profile.EntryFiles.Count > 0)
             {
-                html.Append("<div class=\"start-here\"><strong>Start Here:</strong> ");
-                html.Append(string.Join(" ", profile.EntryFiles.Select(f => $"<code>{Encode(f)}</code>")));
-                html.AppendLine("</div>");
+                html.AppendLine("<div class=\"start-here\"><span class=\"start-here-title\">Start Here</span><ul class=\"start-here-list\">");
+                foreach (var entryFile in profile.EntryFiles)
+                    html.AppendLine($"<li><code title=\"{Encode(entryFile)}\">{Encode(CompactPath(entryFile))}</code></li>");
+                html.AppendLine("</ul></div>");
             }
 
             html.AppendLine("</article>");
@@ -195,6 +196,12 @@ internal static class SystemOverviewHtmlRenderer
         html.AppendLine("</tbody></table>");
         html.AppendLine("</div>");
         html.AppendLine("</details>");
+    }
+
+    private static string CompactPath(string path)
+    {
+        var parts = path.Replace('\\', '/').Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length <= 2 ? string.Join("/", parts) : string.Join("/", parts[^2..]);
     }
 
     private static string FormatLimited(IEnumerable<string> values, int limit)

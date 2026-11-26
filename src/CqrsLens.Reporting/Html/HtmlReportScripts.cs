@@ -99,12 +99,52 @@ internal static class HtmlReportScripts
                     if (reqName && !byName.has(reqName)) byName.set(reqName, item.id);
                     if (reqFull) byName.set(reqFull, item.id);
                   });
+
+                  const attachZoomControls = (container, svgEl) => {
+                    if (!svgEl) return;
+                    const vb = svgEl.viewBox && svgEl.viewBox.baseVal;
+                    const natW = (vb && vb.width > 0) ? vb.width : svgEl.getBoundingClientRect().width || 800;
+                    svgEl.style.display = 'block';
+                    svgEl.style.maxWidth = 'none';
+                    svgEl.style.height = 'auto';
+                    svgEl.style.margin = '0 auto';
+                    let zoom = 1.0;
+                    const applyZoom = (mode) => {
+                      if (mode === 'fit') {
+                        svgEl.style.width = '100%';
+                        svgEl.style.maxWidth = '100%';
+                      } else {
+                        svgEl.style.maxWidth = 'none';
+                        svgEl.style.width = Math.round(natW * zoom) + 'px';
+                      }
+                    };
+                    applyZoom('fixed');
+                    const bar = document.createElement('div');
+                    bar.className = 'mermaid-toolbar';
+                    const mkBtn = (label, onClick) => {
+                      const b = document.createElement('button');
+                      b.type = 'button';
+                      b.className = 'mermaid-zoom-btn';
+                      b.textContent = label;
+                      b.addEventListener('click', onClick);
+                      return b;
+                    };
+                    bar.append(
+                      mkBtn('−', () => { zoom = Math.max(0.4, zoom - 0.15); applyZoom('fixed'); }),
+                      mkBtn('100%', () => { zoom = 1.0; applyZoom('fixed'); }),
+                      mkBtn('Fit', () => applyZoom('fit')),
+                      mkBtn('+', () => { zoom = Math.min(2.5, zoom + 0.15); applyZoom('fixed'); })
+                    );
+                    container.parentNode.insertBefore(bar, container);
+                  };
+
                   for (let i = 0; i < nodes.length; i++) {
                     const node = nodes[i];
                     const source = node.textContent ?? '';
                     try {
                       const { svg } = await mermaid.render('cqrslens-diagram-' + i, source);
                       node.innerHTML = svg;
+                      attachZoomControls(node, node.querySelector('svg'));
                       node.querySelectorAll('g.node').forEach((g) => {
                         const label = (g.textContent || '').trim();
                         const anchorId = byName.get(label);

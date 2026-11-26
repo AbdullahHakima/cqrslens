@@ -170,7 +170,7 @@ internal static class DirectFlowDiagramBuilder
                 plannedEdges.Add((
                     epKey, epPrefix, epLabel, epClass, true,
                     "svc|" + svc, "svc", svcLabel, "clsDirectService", false,
-                    "calls", false));
+                    string.Empty, false));
             }
 
             if (services.Count > 0)
@@ -188,7 +188,7 @@ internal static class DirectFlowDiagramBuilder
                     plannedEdges.Add((
                         "svc|" + dbOwner, "svc", ownerLabel, "clsDirectService", false,
                         "dbc|" + ctx, "dbc", ctxLabel, "clsDirectDbContext", false,
-                        "uses", false));
+                        string.Empty, false));
                 }
 
                 foreach (var ds in dataStores)
@@ -201,7 +201,7 @@ internal static class DirectFlowDiagramBuilder
                     plannedEdges.Add((
                         "svc|" + dsOwner, "svc", ownerLabel, "clsDirectService", false,
                         "ds|" + ds, "ds", dsLabel, "clsDirectDbContext", false,
-                        "uses", false));
+                        string.Empty, false));
                 }
 
                 foreach (var evt in events)
@@ -222,7 +222,7 @@ internal static class DirectFlowDiagramBuilder
                     plannedEdges.Add((
                         epKey, epPrefix, epLabel, epClass, true,
                         "dbc|" + ctx, "dbc", ctxLabel, "clsDirectDbContext", false,
-                        "uses", false));
+                        string.Empty, false));
                 }
 
                 foreach (var ds in dataStores)
@@ -231,7 +231,7 @@ internal static class DirectFlowDiagramBuilder
                     plannedEdges.Add((
                         epKey, epPrefix, epLabel, epClass, true,
                         "ds|" + ds, "ds", dsLabel, "clsDirectDbContext", false,
-                        "uses", false));
+                        string.Empty, false));
                 }
 
                 foreach (var evt in events)
@@ -290,7 +290,8 @@ internal static class DirectFlowDiagramBuilder
         {
             var (from, to, label, dotted) = edges[i];
             var arrow = dotted ? "-.->" : "-->";
-            sb.AppendLine($"    {from} {arrow}|{MermaidLabel(label)}| {to}");
+            var edgeText = string.IsNullOrWhiteSpace(label) ? "" : $"|{MermaidLabel(label)}|";
+            sb.AppendLine($"    {from} {arrow}{edgeText} {to}");
             if (dotted)
                 dottedIndices.Add(i);
         }

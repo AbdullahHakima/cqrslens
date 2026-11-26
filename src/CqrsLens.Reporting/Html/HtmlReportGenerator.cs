@@ -389,7 +389,7 @@ public static class HtmlReportGenerator
 
     private static void AppendCard(StringBuilder html, string label, string value)
     {
-        html.AppendLine($"<div class=\"card\"><div class=\"card-value\">{Encode(value)}</div><div class=\"card-label\">{Encode(label)}</div></div>");
+        html.AppendLine($"<div class=\"card\"><div class=\"card-value card-value-text\">{Encode(value)}</div><div class=\"card-label\">{Encode(label)}</div></div>");
     }
 
     /// <summary>

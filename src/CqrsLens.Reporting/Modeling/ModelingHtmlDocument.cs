@@ -40,6 +40,19 @@ internal static class ModelingHtmlDocument
         .delta-neg { color: #b91c1c; font-weight: 600; }
         ul.checklist { padding-left: 1.25rem; }
         ul.checklist li { margin: 0.3rem 0; }
+        @media (prefers-color-scheme: dark) {
+          .callout { background: #172554; border-left-color: #38bdf8; color: #e2e8f0; }
+          .callout-warn { background: #383016; border-left-color: #fbbf24; }
+          .callout-err { background: #3a1a22; border-left-color: #f87171; }
+          .callout-ok { background: #052e16; border-left-color: #34d399; }
+          .badge-ok { background: #064e3b; color: #d1fae5; border-color: #34d399; }
+          .badge-warn { background: #422006; color: #fef3c7; border-color: #fbbf24; }
+          .badge-err { background: #450a0a; color: #fecaca; border-color: #f87171; }
+          .badge-info { background: #172554; color: #dbeafe; border-color: #60a5fa; }
+          .badge-muted { background: #1e293b; color: #cbd5e1; border-color: #475569; }
+          .delta-pos { color: #4ade80; }
+          .delta-neg { color: #f87171; }
+        }
         """;
 
     internal static string Render(

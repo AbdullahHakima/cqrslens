@@ -7,8 +7,8 @@ internal static class ErDiagramLayout
     internal const double RowHeight = 24.0;
 
     private const double OuterMargin = 24.0;
-    private const double ColumnGap = 90.0;
-    private const double RowGap = 64.0;
+    private const double ColumnGap = 112.0;
+    private const double RowGap = 76.0;
 
     /// <summary>
     /// Extra top space reserved when the diagram has a self-referential relationship.
@@ -57,13 +57,20 @@ internal static class ErDiagramLayout
                 rowHeights[row] = model.Entities[i].Height;
         }
 
+        var maxNonSelfLabelW = model.Relationships
+            .Where(r => !string.Equals(r.PrincipalId, r.DependentId, StringComparison.Ordinal))
+            .Select(r => Math.Ceiling((r.Label.Length + 12) * 6.8 + 16.0))
+            .DefaultIfEmpty(0.0)
+            .Max();
+        var colGap = Math.Clamp(Math.Max(ColumnGap, maxNonSelfLabelW + 40.0), ColumnGap, 260.0);
+
         for (var i = 0; i < model.Entities.Count; i++)
         {
             var col = i % columns;
             var row = i / columns;
             var x = OuterMargin;
             for (var c = 0; c < col; c++)
-                x += colWidths[c] + ColumnGap;
+                x += colWidths[c] + colGap;
             var y = OuterMargin + topPadding;
             for (var r = 0; r < row; r++)
                 y += rowHeights[r] + RowGap;
@@ -74,7 +81,7 @@ internal static class ErDiagramLayout
 
         var canvasWidth = Math.Max(
             240.0,
-            OuterMargin * 2 + colWidths.Sum() + Math.Max(0, columns - 1) * ColumnGap);
+            OuterMargin * 2 + colWidths.Sum() + Math.Max(0, columns - 1) * colGap);
         var canvasHeight = Math.Max(
             100.0,
             OuterMargin * 2 + topPadding + rowHeights.Sum() + Math.Max(0, rowCount - 1) * RowGap);
