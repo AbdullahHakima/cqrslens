@@ -9,5 +9,6 @@ internal sealed record ServiceClassEffect(
     SourceLocation? Location,
     IReadOnlyList<string> CalledServices,
     IReadOnlyList<string> TouchedDbContexts,
+    IReadOnlyList<string> TouchedDataStores,
     IReadOnlyList<string> TouchedEntities,
     IReadOnlyList<string> PublishedMessages);

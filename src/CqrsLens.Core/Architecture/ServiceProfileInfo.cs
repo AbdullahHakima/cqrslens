@@ -16,6 +16,7 @@ public sealed class ServiceProfileInfo
     public int MessageConsumerCount { get; set; }
     public int RequestCount { get; set; }
     public int DbContextCount { get; set; }
+    public int DataStoreCount { get; set; }
     public int PublishedEventCount { get; set; }
     public int ConsumedEventCount { get; set; }
 }

@@ -20,6 +20,12 @@ public sealed class AnalysisResult
     public List<DbContextInfo> DbContexts { get; } = new();
 
     /// <summary>
+    /// Universal persistence stores discovered across EF Core, EF6, Dapper, Linq2Db,
+    /// MongoDB, NHibernate, ADO.NET, Redis, Cosmos DB, and Document DBs.
+    /// </summary>
+    public List<DataStoreInfo> DataStores { get; } = new();
+
+    /// <summary>
     /// Service-resolution index: interface → implementation, built from concrete class
     /// declarations and explicit MS-DI/Autofac registrations. Additive model data used
     /// by consumers to resolve constructor-injected interfaces through DI; it never

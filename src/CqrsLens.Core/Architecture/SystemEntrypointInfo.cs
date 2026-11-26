@@ -18,6 +18,7 @@ public sealed class SystemEntrypointInfo
     public List<string> TargetRequests { get; } = new();
     public List<string> CalledServices { get; } = new();
     public List<string> TouchedDbContexts { get; } = new();
+    public List<string> TouchedDataStores { get; } = new();
     public List<string> TouchedEntities { get; } = new();
     public List<string> PublishedMessages { get; } = new();
 
