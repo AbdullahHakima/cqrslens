@@ -18,6 +18,7 @@ public static class CliParser
         "project",
         "entity",
         "dbcontext",
+        "datastore",
         "service",
         "notification",
         "handler",
@@ -80,7 +81,7 @@ public static class CliParser
                     break;
                 case "--impact-kind":
                     options.ImpactKind = ParseImpactKind(
-                        reader.ReadValue("--impact-kind", "a value: project, entity, dbcontext, service, notification, handler, request, entrypoint, or event"));
+                        reader.ReadValue("--impact-kind", "a value: project, entity, dbcontext, datastore, service, notification, handler, request, entrypoint, or event"));
                     break;
                 case "--tdd-check":
                     options.TddCheckPath = ReadNonEmptyValue(reader, "--tdd-check", "a value, e.g. --tdd-check feature.slice.json");
@@ -251,7 +252,7 @@ public static class CliParser
         if (!SupportedImpactKinds.Contains(normalized))
         {
             throw new CliParseException(
-                $"error: unknown --impact-kind value '{value}' - use project, entity, dbcontext, service, notification, handler, request, entrypoint, or event.");
+                $"error: unknown --impact-kind value '{value}' - use project, entity, dbcontext, datastore, service, notification, handler, request, entrypoint, or event.");
         }
 
         return normalized;

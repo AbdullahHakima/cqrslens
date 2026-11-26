@@ -106,6 +106,9 @@ public static class HtmlReportGenerator
         var checkErrors = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Error);
         var checkWarnings = result.Checks.Count(c => !c.IsKnown && c.Severity == CheckSeverity.Warning);
 
+        var hasNonEfStores = result.DataStores.Count > result.DbContexts.Count ||
+            result.DataStores.Any(d => d.Kind is not DataStoreKind.EfCore and not DataStoreKind.Ef6);
+
         html.AppendLine("<section id=\"overview\" class=\"cards\">");
         AppendCard(html, "Projects", result.Projects.Count);
         if (isZeroCqrsSystem)
@@ -114,7 +117,16 @@ public static class HtmlReportGenerator
             AppendCard(html, "Integration flows", result.IntegrationFlows.Count);
             if (result.Validators.Count > 0)
                 AppendCard(html, "Validators", result.Validators.Count);
-            AppendCard(html, "DbContexts", result.DbContexts.Count);
+            if (result.DbContexts.Count == 0 && result.DataStores.Count > 0)
+            {
+                AppendCard(html, "Data stores", result.DataStores.Count);
+            }
+            else
+            {
+                AppendCard(html, "DbContexts", result.DbContexts.Count);
+                if (hasNonEfStores)
+                    AppendCard(html, "Data stores", result.DataStores.Count);
+            }
             if (hasNotifications)
             {
                 AppendCard(html, "Notifications (domain events)", result.Notifications.Count);
@@ -128,6 +140,8 @@ public static class HtmlReportGenerator
             AppendCard(html, "Validators", result.Validators.Count);
             AppendCard(html, "Pipeline behaviors", result.Behaviors.Count);
             AppendCard(html, "DbContexts", result.DbContexts.Count);
+            if (hasNonEfStores)
+                AppendCard(html, "Data stores", result.DataStores.Count);
             if (hasNotifications)
             {
                 AppendCard(html, "Notifications (domain events)", result.Notifications.Count);

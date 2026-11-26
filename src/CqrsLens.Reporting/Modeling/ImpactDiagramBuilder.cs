@@ -24,7 +24,7 @@ public static class ImpactDiagramBuilder
 
         var ids = new MermaidIdAllocator();
         var centerKey = $"{report.Target.Kind}|{report.Target.FullName ?? report.Target.Name}";
-        var centerName = report.Target.Kind is "endpoint" or "entrypoint"
+        var centerName = report.Target.Kind is "endpoint" or "entrypoint" or "datastore"
             ? (!string.IsNullOrWhiteSpace(report.Target.Name) ? report.Target.Name : report.Target.FullName ?? report.Target.Name)
             : ShortTypeName(report.Target.FullName ?? report.Target.Name);
         var centerLabel = $"{report.Target.Kind}: {centerName}";
@@ -47,7 +47,7 @@ public static class ImpactDiagramBuilder
                         : item.Direction == "upstream"
                             ? "clsImpUpstream"
                             : "clsImpDownstream";
-                var shortName = item.Kind is "endpoint" or "entrypoint"
+                var shortName = item.Kind is "endpoint" or "entrypoint" or "datastore"
                     ? (!string.IsNullOrWhiteSpace(item.Name) ? item.Name : item.FullName)
                     : ShortTypeName(item.FullName);
                 var prefix = item.Kind switch
@@ -56,6 +56,7 @@ public static class ImpactDiagramBuilder
                     "handler" => "hdl",
                     "project" => "prj",
                     "endpoint" or "entrypoint" => "ep",
+                    "datastore" => "ds",
                     "event" => "evt",
                     _ => "imp",
                 };

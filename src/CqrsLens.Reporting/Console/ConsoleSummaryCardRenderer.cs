@@ -37,13 +37,25 @@ internal static class ConsoleSummaryCardRenderer
         if (result.ArchitectureStyles.Count > 0)
             rows.Add(("Architecture Styles", string.Join(", ", result.ArchitectureStyles)));
 
+        var hasNonEfStores = result.DataStores.Count > result.DbContexts.Count ||
+            result.DataStores.Any(d => d.Kind is not DataStoreKind.EfCore and not DataStoreKind.Ef6);
+
         if (isZeroCqrsSystem)
         {
             rows.Add(("System Entrypoints", Count(result.SystemEntrypoints.Count)));
             rows.Add(("Integration Flows", Count(result.IntegrationFlows.Count)));
             if (result.Validators.Count > 0)
                 rows.Add(("Validators", Count(result.Validators.Count)));
-            rows.Add(("EF Core DbContexts", Count(result.DbContexts.Count)));
+            if (result.DbContexts.Count == 0 && result.DataStores.Count > 0)
+            {
+                rows.Add(("Data Stores", Count(result.DataStores.Count)));
+            }
+            else
+            {
+                rows.Add(("EF Core DbContexts", Count(result.DbContexts.Count)));
+                if (hasNonEfStores)
+                    rows.Add(("Data Stores", Count(result.DataStores.Count)));
+            }
         }
         else
         {
@@ -52,6 +64,8 @@ internal static class ConsoleSummaryCardRenderer
             rows.Add(("Validators", Count(result.Validators.Count)));
             rows.Add(("Pipeline Behaviors", Count(result.Behaviors.Count)));
             rows.Add(("EF Core DbContexts", Count(result.DbContexts.Count)));
+            if (hasNonEfStores)
+                rows.Add(("Data Stores", Count(result.DataStores.Count)));
         }
 
         rows.Add(($"Scanner {dot} Timing", $"{result.ScannerName} {dot} {result.ElapsedMilliseconds} ms"));

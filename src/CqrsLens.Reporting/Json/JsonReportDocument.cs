@@ -60,4 +60,7 @@ internal sealed class JsonReportDocument
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<JsonServiceProfile>? ServiceProfiles { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<JsonDataStore>? DataStores { get; set; }
 }

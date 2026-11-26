@@ -82,6 +82,57 @@ internal static class AgentDataModelWriter
             sb.AppendLine();
             sb.Append(sectionSb);
         }
+
+        AppendNonEfStoresSummary(sb, result, filter, Matches);
+    }
+
+    private static void AppendNonEfStoresSummary(
+        StringBuilder sb,
+        AnalysisResult result,
+        string? filter,
+        Func<string, string?, bool> matches)
+    {
+        var nonEfStores = result.DataStores
+            .Where(d => d.Kind is not DataStoreKind.EfCore and not DataStoreKind.Ef6)
+            .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (nonEfStores.Count == 0)
+            return;
+
+        var matchedStores = new List<(DataStoreInfo Store, List<string> Entities)>();
+        foreach (var store in nonEfStores)
+        {
+            var relevantEntities = filter is null
+                ? store.Entities.ToList()
+                : store.Entities.Where(e => matches(CSharpScanner.SimpleName(e), null)).ToList();
+
+            if (filter is not null && relevantEntities.Count == 0 && !matches(store.Name, store.Technology))
+                continue;
+
+            matchedStores.Add((store, relevantEntities));
+        }
+
+        if (matchedStores.Count == 0)
+            return;
+
+        sb.AppendLine("## Data Model (Non-EF Data Stores)");
+        sb.AppendLine();
+        foreach (var (store, entities) in matchedStores)
+        {
+            var prov = string.IsNullOrWhiteSpace(store.Provider) ? "" : $" ({store.Provider})";
+            sb.AppendLine($"### Data Store: `{store.Name}` — `{store.Technology}`{prov}{FormatLoc(store.Location)}");
+            if (entities.Count > 0)
+            {
+                var list = JoinLimited(entities, 25, e => $"`{e}`");
+                sb.AppendLine($"- **Entities / Tables**: {list}");
+            }
+            if (store.AccessedBy.Count > 0)
+            {
+                var acc = JoinLimited(store.AccessedBy, 15, a => $"`{CSharpScanner.SimpleName(a)}`");
+                sb.AppendLine($"- **Accessed By**: {acc}");
+            }
+            sb.AppendLine();
+        }
     }
 
     private static void AppendEntities(

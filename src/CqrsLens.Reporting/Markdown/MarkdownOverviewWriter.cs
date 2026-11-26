@@ -40,13 +40,25 @@ internal static class MarkdownOverviewWriter
         {
             md.AppendLine($"| Architecture styles | {MarkdownEscaping.TableCell(string.Join(", ", result.ArchitectureStyles))} |");
         }
+        var hasNonEfStores = result.DataStores.Count > result.DbContexts.Count ||
+            result.DataStores.Any(d => d.Kind is not DataStoreKind.EfCore and not DataStoreKind.Ef6);
+
         if (isZeroCqrsSystem)
         {
             md.AppendLine($"| System entrypoints | {result.SystemEntrypoints.Count} |");
             md.AppendLine($"| Integration flows | {result.IntegrationFlows.Count} |");
             if (result.Validators.Count > 0)
                 md.AppendLine($"| Validators | {result.Validators.Count} |");
-            md.AppendLine($"| DbContexts | {result.DbContexts.Count} |");
+            if (result.DbContexts.Count == 0 && result.DataStores.Count > 0)
+            {
+                md.AppendLine($"| Data stores | {result.DataStores.Count} |");
+            }
+            else
+            {
+                md.AppendLine($"| DbContexts | {result.DbContexts.Count} |");
+                if (hasNonEfStores)
+                    md.AppendLine($"| Data stores | {result.DataStores.Count} |");
+            }
         }
         else
         {
@@ -55,6 +67,8 @@ internal static class MarkdownOverviewWriter
             md.AppendLine($"| Validators | {result.Validators.Count} |");
             md.AppendLine($"| Pipeline behaviors | {result.Behaviors.Count} |");
             md.AppendLine($"| DbContexts | {result.DbContexts.Count} |");
+            if (hasNonEfStores)
+                md.AppendLine($"| Data stores | {result.DataStores.Count} |");
         }
         if (result.Notifications.Count > 0 || result.NotificationHandlers.Count > 0)
         {

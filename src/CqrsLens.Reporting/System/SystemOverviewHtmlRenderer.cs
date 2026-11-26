@@ -54,6 +54,10 @@ internal static class SystemOverviewHtmlRenderer
         if (flows.Count > 0)
             AppendIntegrationFlows(html, flows);
 
+        var dataStores = SystemViewFilter.VisibleNonEfDataStores(result, focusService, excludeTests);
+        if (dataStores.Count > 0)
+            AppendDataStores(html, dataStores);
+
         var entrypoints = SystemViewFilter.VisibleEntrypoints(result, focusService, excludeTests);
         if (entrypoints.Count > 0)
             AppendEntrypoints(html, entrypoints, entrypointsAnchorId);
@@ -133,6 +137,9 @@ internal static class SystemOverviewHtmlRenderer
             list.Add($"Requests: {profile.RequestCount}");
         if (profile.DbContextCount > 0)
             list.Add($"DbContexts: {profile.DbContextCount}");
+        var nonEfStoreCount = Math.Max(0, profile.DataStoreCount - profile.DbContextCount);
+        if (nonEfStoreCount > 0)
+            list.Add($"Data stores: {nonEfStoreCount}");
         if (profile.PublishedEventCount > 0 || profile.ConsumedEventCount > 0)
             list.Add($"Events: {profile.PublishedEventCount} pub / {profile.ConsumedEventCount} sub");
         return list;
@@ -162,6 +169,40 @@ internal static class SystemOverviewHtmlRenderer
         html.AppendLine("</tbody></table>");
         html.AppendLine("</div>");
         html.AppendLine("</details>");
+    }
+
+    private static void AppendDataStores(StringBuilder html, IReadOnlyList<DataStoreInfo> stores)
+    {
+        html.AppendLine("<details class=\"portal-section\" open>");
+        html.AppendLine($"<summary class=\"portal-summary\">Data Stores &amp; Persistence ({stores.Count})</summary>");
+        html.AppendLine("<div class=\"portal-body\">");
+        html.AppendLine("<table><thead><tr><th>Store</th><th>Technology</th><th>Provider</th><th>Project</th><th>Entities / Tables</th><th>Accessed By</th></tr></thead><tbody>");
+        foreach (var store in stores)
+        {
+            var provider = string.IsNullOrWhiteSpace(store.Provider) ? "—" : Encode(store.Provider);
+            var project = string.IsNullOrWhiteSpace(store.ProjectName) ? "—" : $"<code>{Encode(store.ProjectName)}</code>";
+            var entities = store.Entities.Count > 0 ? Encode(FormatLimited(store.Entities, 10)) : "—";
+            var accessed = store.AccessedBy.Count > 0
+                ? Encode(FormatLimited(store.AccessedBy.Select(CSharpScanner.SimpleName), 5))
+                : "—";
+            html.AppendLine($"<tr><td><code>{Encode(store.Name)}</code></td>" +
+                            $"<td>{Encode(store.Technology)}</td>" +
+                            $"<td>{provider}</td>" +
+                            $"<td>{project}</td>" +
+                            $"<td>{entities}</td>" +
+                            $"<td>{accessed}</td></tr>");
+        }
+        html.AppendLine("</tbody></table>");
+        html.AppendLine("</div>");
+        html.AppendLine("</details>");
+    }
+
+    private static string FormatLimited(IEnumerable<string> values, int limit)
+    {
+        var items = values.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.Ordinal).ToList();
+        if (items.Count <= limit)
+            return string.Join(", ", items);
+        return string.Join(", ", items.Take(limit)) + $" +{items.Count - limit} more";
     }
 
     private static void AppendEntrypoints(

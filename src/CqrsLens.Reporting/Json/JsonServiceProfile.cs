@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace CqrsLens;
 
 /// <summary>Additive JSON representation of one project's runtime role and capabilities.</summary>
@@ -14,6 +16,10 @@ internal sealed class JsonServiceProfile
     public int MessageConsumerCount { get; set; }
     public int RequestCount { get; set; }
     public int DbContextCount { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int DataStoreCount { get; set; }
+
     public int PublishedEventCount { get; set; }
     public int ConsumedEventCount { get; set; }
 }

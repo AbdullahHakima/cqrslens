@@ -16,6 +16,7 @@ internal static class McpModelingTools
         "project",
         "entity",
         "dbcontext",
+        "datastore",
         "service",
         "notification",
         "handler",
@@ -103,7 +104,7 @@ internal static class McpModelingTools
             ["targetKind"] = new JsonObject
             {
                 ["type"] = "string",
-                ["enum"] = new JsonArray("project", "entity", "dbcontext", "service", "notification", "handler", "request", "entrypoint", "event"),
+                ["enum"] = new JsonArray("project", "entity", "dbcontext", "datastore", "service", "notification", "handler", "request", "entrypoint", "event"),
                 ["description"] = "Optional target kind used to disambiguate targets with the same name.",
             },
             ["maxDepth"] = new JsonObject
@@ -174,7 +175,7 @@ internal static class McpModelingTools
             if (!ValidImpactKinds.Contains(trimmed))
             {
                 throw new ArgumentException(
-                    $"Unsupported targetKind '{rawKind}'. Expected one of: project, entity, dbcontext, service, notification, handler, request, entrypoint, event.");
+                    $"Unsupported targetKind '{rawKind}'. Expected one of: project, entity, dbcontext, datastore, service, notification, handler, request, entrypoint, event.");
             }
 
             targetKind = trimmed;

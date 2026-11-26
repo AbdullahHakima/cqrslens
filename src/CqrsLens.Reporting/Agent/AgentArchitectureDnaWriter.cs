@@ -98,6 +98,26 @@ internal static class AgentArchitectureDnaWriter
                 .Select(c => $"`{c.Name}` ({c.DbSets.Count} DbSet(s){FormatLoc(c.Location)})"));
             sb.AppendLine($"- **Data Contexts**: {contexts}");
         }
+
+        var nonEfStores = result.DataStores
+            .Where(d => d.Kind is not DataStoreKind.EfCore and not DataStoreKind.Ef6)
+            .ToList();
+        if (nonEfStores.Count > 0)
+        {
+            var stores = string.Join(", ", nonEfStores
+                .OrderBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
+                .Take(10)
+                .Select(s =>
+                {
+                    var prov = string.IsNullOrWhiteSpace(s.Provider) ||
+                               s.Name.Contains(s.Provider, StringComparison.OrdinalIgnoreCase)
+                        ? ""
+                        : $" [{s.Provider}]";
+                    return $"`{s.Name}`{prov} ({s.Entities.Count} entities/tables{FormatLoc(s.Location)})";
+                }));
+            var more = nonEfStores.Count > 10 ? $" +{nonEfStores.Count - 10} more" : "";
+            sb.AppendLine($"- **Data Stores**: {stores}{more}");
+        }
     }
 
     private static void AppendSliceLayout(

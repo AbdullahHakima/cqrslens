@@ -10,7 +10,8 @@ internal static class SystemViewFilter
     internal static bool HasSystemData(AnalysisResult result)
         => result.ServiceProfiles.Count > 0 ||
            result.SystemEntrypoints.Count > 0 ||
-           result.IntegrationFlows.Count > 0;
+           result.IntegrationFlows.Count > 0 ||
+           result.DataStores.Count > 0;
 
     /// <summary>Whether a project is a test project (runtime role or layer).</summary>
     internal static bool IsTestProject(AnalysisResult result, string? projectName)
@@ -179,7 +180,34 @@ internal static class SystemViewFilter
         => profile.HttpEndpointCount > 0 || profile.GrpcEndpointCount > 0 ||
            profile.WorkerCount > 0 || profile.MessageConsumerCount > 0 ||
            profile.RequestCount > 0 || profile.DbContextCount > 0 ||
+           profile.DataStoreCount > 0 ||
            profile.PublishedEventCount > 0 || profile.ConsumedEventCount > 0;
+
+    internal static List<DataStoreInfo> VisibleNonEfDataStores(
+        AnalysisResult result,
+        string? focusService,
+        bool excludeTests)
+    {
+        var nonEf = result.DataStores
+            .Where(d => d.Kind is not DataStoreKind.EfCore and not DataStoreKind.Ef6)
+            .Where(d => !excludeTests || !IsTestProject(result, d.ProjectName))
+            .ToList();
+        if (nonEf.Count == 0)
+            return nonEf;
+
+        var focused = ResolveFocus(result, focusService);
+        if (focused.Count == 0)
+            return nonEf;
+
+        var neighborhood = FocusNeighborhood(result, focused);
+        var referencedStores = VisibleEntrypoints(result, focusService, excludeTests)
+            .SelectMany(e => e.TouchedDataStores)
+            .ToHashSet(StringComparer.Ordinal);
+        return nonEf
+            .Where(d => referencedStores.Contains(d.Name) ||
+                        (d.ProjectName is not null && neighborhood.Contains(d.ProjectName)))
+            .ToList();
+    }
 
     /// <summary>
     /// The service profiles shown in capability tables/cards: never test projects; pure
@@ -307,6 +335,7 @@ internal static class SystemViewFilter
         var parts = new List<string>();
         AddPart(parts, "services", entrypoint.CalledServices, maxPerKind);
         AddPart(parts, "db", entrypoint.TouchedDbContexts, maxPerKind);
+        AddVerbatimPart(parts, "stores", entrypoint.TouchedDataStores, maxPerKind);
         AddPart(parts, "entities", entrypoint.TouchedEntities, maxPerKind);
         AddPart(parts, "publishes", entrypoint.PublishedMessages, maxPerKind);
         return parts;
@@ -329,5 +358,19 @@ internal static class SystemViewFilter
         if (values.Count == 0)
             return;
         parts.Add($"{label}: {JoinShort(values, max)}");
+    }
+
+    private static void AddVerbatimPart(List<string> parts, string label, IReadOnlyCollection<string> values, int max)
+    {
+        if (values.Count == 0)
+            return;
+        var list = values
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var text = list.Count <= max
+            ? string.Join(", ", list)
+            : string.Join(", ", list.Take(max)) + $" +{list.Count - max} more";
+        parts.Add($"{label}: {text}");
     }
 }

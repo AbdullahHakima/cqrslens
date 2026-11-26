@@ -13,6 +13,7 @@ internal sealed class JsonSystemEntrypoint
     public List<string>? TargetRequests { get; set; }
     public List<string>? CalledServices { get; set; }
     public List<string>? TouchedDbContexts { get; set; }
+    public List<string>? TouchedDataStores { get; set; }
     public List<string>? TouchedEntities { get; set; }
     public List<string>? PublishedMessages { get; set; }
     public JsonLocation? Location { get; set; }

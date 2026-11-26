@@ -89,7 +89,7 @@ internal static class UsageWriter
                     "Trace bidirectional dependency, slice, entrypoint, cross-service flow, and test-coverage impact for " +
                     "TARGET (--format json|md|html, -o, --render)."),
                 ("--impact-kind KIND",
-                    "Optional target kind for --impact: project, entity, dbcontext, service, notification, handler, request, entrypoint, or event."),
+                    "Optional target kind for --impact: project, entity, dbcontext, datastore, service, notification, handler, request, entrypoint, or event."),
                 ("--tdd-check FILE|DIR",
                     "Evaluate the closed-loop TDD phase for a *.slice.json file or directory across CQRS or universal kinds " +
                     "(Endpoint, Grpc, Worker, Consumer, Service; --format json|md|html, -o, --render, --strict)."),

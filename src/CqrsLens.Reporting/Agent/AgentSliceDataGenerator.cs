@@ -164,6 +164,8 @@ internal static class AgentSliceDataGenerator
             node["calledServices"] = StringArray(ep.CalledServices);
         if (ep.TouchedDbContexts.Count > 0)
             node["touchedDbContexts"] = StringArray(ep.TouchedDbContexts);
+        if (ep.TouchedDataStores.Count > 0)
+            node["touchedDataStores"] = StringArray(ep.TouchedDataStores);
         if (ep.TouchedEntities.Count > 0)
             node["touchedEntities"] = StringArray(ep.TouchedEntities);
         if (ep.PublishedMessages.Count > 0)

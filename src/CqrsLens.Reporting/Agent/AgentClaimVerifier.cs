@@ -61,6 +61,7 @@ internal static class AgentClaimVerifier
             "handled notification" or "does not handle notification" =>
                 VerifyHandlesNotification(result, shapes, spec, subjectText, objectText),
             "uses DbContext" or "does not use DbContext" => VerifyUsesDbContext(result, shapes, spec, subjectText, objectText),
+            "uses data store" or "does not use data store" => VerifyUsesDataStore(result, shapes, spec, subjectText, objectText),
             "depends on" or "does not depend on" => VerifyDependsOn(result, shapes, spec, subjectText, objectText),
             "belongs to layer" or "does not belong to layer" => VerifyLayer(result, shapes, spec, subjectText, objectText),
             "dispatched by" or "not dispatched by" => VerifyDispatchedBy(result, shapes, spec, subjectText, objectText),
@@ -1459,6 +1460,229 @@ internal static class AgentClaimVerifier
             EvidenceLine($"entrypoint `{ep.Name}` (`{ep.DisplayLabel}`){Loc(ep.Location)}"),
             EvidenceLine($"DbContext `{contextShape.Name}`{Loc(contextShape.Location)}"));
     }
+
+    private static ClaimCheck VerifyUsesDataStore(
+        AnalysisResult result,
+        IReadOnlyList<Shape> shapes,
+        ClaimRelation spec,
+        string subject,
+        string? claimed)
+    {
+        if (claimed is null)
+            return NotDeterminable(subject, spec.Display, claimed, "invalid claim", "relation requires an object.");
+
+        Shape? resolvedShape = null;
+        SystemEntrypointInfo? resolvedEp = null;
+        string? resolvedServiceKey = null;
+
+        var (epOutcome, epMatch) = ResolveEntrypoint(result, subject);
+        if (epOutcome == Match.Found && epMatch is not null)
+        {
+            resolvedEp = epMatch;
+            resolvedShape = new Shape("entrypoint", epMatch.Name, epMatch.Name, epMatch.ProjectName, epMatch.Location);
+        }
+        else if (epOutcome == Match.Ambiguous)
+        {
+            return AmbiguousEntrypointSubject(subject, spec, claimed);
+        }
+        else
+        {
+            var (shapeOutcome, shapeMatch) = ResolveShape(shapes, subject, "handler", "request", "project");
+            if (shapeOutcome == Match.Absent)
+            {
+                var ciProj = shapes.Where(s => s.Kind == "project" &&
+                    string.Equals(s.Name, subject, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (ciProj.Count == 1)
+                    (shapeOutcome, shapeMatch) = (Match.Found, ciProj[0]);
+                else if (ciProj.Count > 1)
+                    (shapeOutcome, shapeMatch) = (Match.Ambiguous, null);
+            }
+
+            if (shapeOutcome == Match.Found && shapeMatch is not null)
+            {
+                resolvedShape = shapeMatch;
+            }
+            else if (shapeOutcome == Match.Ambiguous)
+            {
+                return SubjectNotResolved(result, subject, spec, claimed, "entrypoint, handler, request, project or service");
+            }
+            else if (ResolveServiceEffectKey(result, subject) is { } svcKey)
+            {
+                resolvedServiceKey = svcKey;
+                var eff = result.ServiceClassEffects[svcKey];
+                resolvedShape = new Shape("service", CSharpScanner.SimpleName(svcKey), svcKey, eff.ProjectName, eff.Location);
+            }
+            else
+            {
+                return SubjectNotResolved(result, subject, spec, claimed, "entrypoint, handler, request, project or service");
+            }
+        }
+
+        var matchingStores = result.DataStores
+            .Where(s => DataStoreMatchesClaim(s, claimed))
+            .ToList();
+        if (matchingStores.Count == 0)
+        {
+            if (CheckIncompleteOrFiltered(result, resolvedShape!, subject, spec, claimed,
+                    "data store use", includeContractDiagnostics: false) is { } emptyGuardFailure)
+            {
+                return emptyGuardFailure;
+            }
+
+            if (spec.IsAbsence)
+            {
+                if (result.DataStores.Count == 0)
+                {
+                    return Supported(subject, spec, claimed, "the scan model holds no data stores at all",
+                        EvidenceLine("this scan inventories 0 data stores"));
+                }
+
+                return NotDeterminable(subject, spec.Display, claimed, "outside the scan model",
+                    $"no data store matching `{claimed}` is present in the scanned model ({result.DataStores.Count} data store(s) inventoried); unknown or unmodeled drivers cannot be proven absent statically.",
+                    EvidenceLine($"{resolvedShape!.Kind} `{resolvedShape.Name}`{Loc(resolvedShape.Location)}"));
+            }
+
+            return NotSupported(subject, spec, claimed,
+                $"no data store matching `{claimed}` is present in the scanned model ({result.DataStores.Count} data store(s) inventoried)",
+                EvidenceLine($"no data store matching `{claimed}` exists in the scan model"));
+        }
+
+        var subjectStores = new List<string>();
+        void AddStoreName(string name)
+        {
+            if (!string.IsNullOrWhiteSpace(name) && !subjectStores.Contains(name, StringComparer.Ordinal))
+                subjectStores.Add(name);
+        }
+
+        if (resolvedEp is not null)
+        {
+            foreach (var ds in resolvedEp.TouchedDataStores)
+                AddStoreName(ds);
+            foreach (var db in resolvedEp.TouchedDbContexts)
+                AddStoreName(CSharpScanner.SimpleName(db));
+        }
+        else if (resolvedServiceKey is not null)
+        {
+            var eff = result.ServiceClassEffects[resolvedServiceKey];
+            foreach (var ds in eff.TouchedDataStores)
+                AddStoreName(ds);
+            foreach (var db in eff.TouchedDbContexts)
+                AddStoreName(CSharpScanner.SimpleName(db));
+        }
+        else if (resolvedShape!.Kind == "project")
+        {
+            var projName = resolvedShape.FullName;
+            foreach (var store in result.DataStores)
+            {
+                if (string.Equals(store.ProjectName, projName, StringComparison.OrdinalIgnoreCase))
+                    AddStoreName(store.Name);
+            }
+            foreach (var ep in result.SystemEntrypoints.Where(e => string.Equals(e.ProjectName, projName, StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var ds in ep.TouchedDataStores)
+                    AddStoreName(ds);
+                foreach (var db in ep.TouchedDbContexts)
+                    AddStoreName(CSharpScanner.SimpleName(db));
+            }
+            foreach (var eff in result.ServiceClassEffects.Values.Where(v => string.Equals(v.ProjectName, projName, StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var ds in eff.TouchedDataStores)
+                    AddStoreName(ds);
+                foreach (var db in eff.TouchedDbContexts)
+                    AddStoreName(CSharpScanner.SimpleName(db));
+            }
+            foreach (var h in result.Handlers.Where(h => string.Equals(h.ProjectName, projName, StringComparison.OrdinalIgnoreCase)))
+            {
+                foreach (var edge in result.FlowEdges.Where(e => e.Kind == FlowEdgeKind.HandlerToDbContext && NamesMatch(e.From, h.FullName)))
+                    AddStoreName(CSharpScanner.SimpleName(edge.To));
+                foreach (var edge in result.ResolvedEdges.Where(e => e.Kind == FlowEdgeKind.HandlerToDbContextResolved && NamesMatch(e.From, h.FullName)))
+                    AddStoreName(CSharpScanner.SimpleName(edge.To));
+            }
+        }
+        else
+        {
+            foreach (var h in Owners(result, resolvedShape))
+            {
+                foreach (var edge in result.FlowEdges.Where(e => e.Kind == FlowEdgeKind.HandlerToDbContext && NamesMatch(e.From, h.FullName)))
+                    AddStoreName(CSharpScanner.SimpleName(edge.To));
+                foreach (var edge in result.ResolvedEdges.Where(e => e.Kind == FlowEdgeKind.HandlerToDbContextResolved && NamesMatch(e.From, h.FullName)))
+                    AddStoreName(CSharpScanner.SimpleName(edge.To));
+                foreach (var call in result.ServiceCallEdges.Where(e => NamesMatch(e.From, h.FullName)))
+                {
+                    if (result.ServiceClassEffects.TryGetValue(call.To, out var targetEff))
+                    {
+                        foreach (var ds in targetEff.TouchedDataStores)
+                            AddStoreName(ds);
+                        foreach (var db in targetEff.TouchedDbContexts)
+                            AddStoreName(CSharpScanner.SimpleName(db));
+                    }
+                }
+            }
+        }
+
+        var hits = matchingStores
+            .Where(ms => subjectStores.Any(ss =>
+                string.Equals(ss, ms.Name, StringComparison.OrdinalIgnoreCase) ||
+                NamesMatch(ss, ms.Name)))
+            .ToList();
+
+        if (hits.Count > 0)
+        {
+            var matched = hits[0];
+            var prov = string.IsNullOrWhiteSpace(matched.Provider) ? "" : $" [{matched.Provider}]";
+            var evidence = new[]
+            {
+                EvidenceLine($"{resolvedShape!.Kind} `{resolvedShape.Name}`{Loc(resolvedShape.Location)} uses data store `{matched.Name}` ({matched.Technology}{prov})"),
+                EvidenceLine($"data store `{matched.Name}`{Loc(matched.Location)}"),
+            };
+            return spec.IsAbsence
+                ? NotSupported(subject, spec, claimed, "the scan model records data store usage", evidence)
+                : Supported(subject, spec, claimed, "the scan model records data store usage", evidence);
+        }
+
+        if (CheckIncompleteOrFiltered(result, resolvedShape!, subject, spec, claimed,
+                "data store use", includeContractDiagnostics: false) is { } guardFailure)
+        {
+            return guardFailure;
+        }
+
+        if (spec.IsAbsence && result.DataStores.Count == 0)
+        {
+            return Supported(subject, spec, claimed, "the scan model holds no data stores at all",
+                EvidenceLine("this scan inventories 0 data stores"));
+        }
+
+        var storeList = subjectStores.Count == 0
+            ? "none"
+            : string.Join(", ", subjectStores.Take(MaxListItems).Select(s => $"`{s}`"));
+        return NotDeterminable(subject, spec.Display, claimed, "outside the scan model",
+            $"no hop from `{resolvedShape!.Name}` to data store `{claimed}` was recorded (recorded stores: {storeList}); unresolved interface/repository hops stop fail-closed, so usage/non-use cannot be settled statically.",
+            EvidenceLine($"{resolvedShape.Kind} `{resolvedShape.Name}`{Loc(resolvedShape.Location)}"));
+    }
+
+    private static string? ResolveServiceEffectKey(AnalysisResult result, string subject)
+    {
+        if (result.ServiceClassEffects.ContainsKey(subject))
+            return subject;
+
+        var ciFull = result.ServiceClassEffects.Keys
+            .Where(k => string.Equals(k, subject, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (ciFull.Count == 1)
+            return ciFull[0];
+
+        var simple = result.ServiceClassEffects.Keys
+            .Where(k => string.Equals(CSharpScanner.SimpleName(k), subject, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return simple.Count == 1 ? simple[0] : null;
+    }
+
+    private static bool DataStoreMatchesClaim(DataStoreInfo store, string claimed)
+        => string.Equals(store.Name, claimed, StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(store.Technology, claimed, StringComparison.OrdinalIgnoreCase) ||
+           (!string.IsNullOrWhiteSpace(store.Provider) &&
+            string.Equals(store.Provider, claimed, StringComparison.OrdinalIgnoreCase)) ||
+           NamesMatch(store.Name, claimed);
 
     private static ClaimCheck VerifyEntrypointCallsService(
         AnalysisResult result,

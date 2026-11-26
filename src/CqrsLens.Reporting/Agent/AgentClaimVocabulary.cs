@@ -34,6 +34,11 @@ internal static class AgentClaimVocabulary
         new("does not use DbContext", "does not use DbContext", IsAbsence: true, ObjectRequired: true,
             new[] { ClaimSubjectKind.Handler, ClaimSubjectKind.Request, ClaimSubjectKind.Entrypoint }),
 
+        new("uses data store", "uses data store", IsAbsence: false, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Entrypoint, ClaimSubjectKind.Handler, ClaimSubjectKind.Request, ClaimSubjectKind.Project }),
+        new("does not use data store", "does not use data store", IsAbsence: true, ObjectRequired: true,
+            new[] { ClaimSubjectKind.Entrypoint, ClaimSubjectKind.Handler, ClaimSubjectKind.Request, ClaimSubjectKind.Project }),
+
         new("depends on", "depends on", IsAbsence: false, ObjectRequired: true,
             new[] { ClaimSubjectKind.Handler, ClaimSubjectKind.NotificationHandler }),
         new("does not depend on", "does not depend on", IsAbsence: true, ObjectRequired: true,
@@ -140,6 +145,18 @@ internal static class AgentClaimVocabulary
         ["does not use dbcontext"] = "does not use DbContext",
         ["does not use db context"] = "does not use DbContext",
         ["uses no dbcontext"] = "does not use DbContext",
+
+        ["uses data store"] = "uses data store",
+        ["uses datastore"] = "uses data store",
+        ["accesses data store"] = "uses data store",
+        ["accesses store"] = "uses data store",
+        ["uses store"] = "uses data store",
+
+        ["does not use data store"] = "does not use data store",
+        ["does not use datastore"] = "does not use data store",
+        ["does not access data store"] = "does not use data store",
+        ["does not access store"] = "does not use data store",
+        ["uses no data store"] = "does not use data store",
 
         ["depends on"] = "depends on",
         ["depends upon"] = "depends on",

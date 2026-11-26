@@ -107,7 +107,7 @@ internal static class McpToolCatalog
             new JsonObject
             {
                 ["name"] = "trace_entity_impact",
-                ["description"] = "Traces an EF Core entity or DbSet across the entire architecture (direct endpoints, gRPC, workers, consumers, and services as well as CQRS). By default the entity name must match exactly, so 'Order' never matches OrderItem or PurchaseOrder. Returns the entity's schema (PKs, FKs, scalar properties, relationships) and every Direct Entrypoint, Worker, Consumer, Command, Query, and Handler that reads, writes, or depends on it.",
+                ["description"] = "Traces an entity, SQL table, Mongo collection, or DbSet across the entire architecture (EF Core, Linq2Db, Dapper, MongoDB, NHibernate, ADO.NET, Cosmos DB, Marten/RavenDB, direct endpoints, gRPC, workers, consumers, services, and CQRS). By default the entity name must match exactly, so 'Order' never matches OrderItem or PurchaseOrder. Returns schema/store details and every Direct Entrypoint, Worker, Consumer, Command, Query, and Handler that reads, writes, or depends on it.",
                 ["annotations"] = ReadOnlyAnnotation(),
                 ["inputSchema"] = new JsonObject
                 {
@@ -208,7 +208,7 @@ internal static class McpToolCatalog
             new JsonObject
             {
                 ["name"] = "verify_claim",
-                ["description"] = "Verifies one structured design claim against the scan model and fails closed. Give a subject (a named request, handler, validator, behavior, DbContext, entity, direct entrypoint/worker/consumer, service, or project), a relation from the fixed vocabulary (e.g. 'has handler', 'has no validator', 'has validator', 'publishes', 'handled notification', 'uses DbContext', 'touches entity', 'calls service', 'communicates with', 'depends on', 'references project', 'belongs to layer', 'dispatched by', 'has test reference', and their absence forms), and an object (or omit it for a bare existence/absence claim). Returns exactly one verdict — supported (with the model facts and File:Line provenance), not supported (with the contradicting facts), or not determinable (with the reason: unresolved dispatch, runtime-typed send, package-opaque wrapper, ambiguity, or outside the scan model). Claims about execution order or conventions are outside the model and return not determinable.",
+                ["description"] = "Verifies one structured design claim against the scan model and fails closed. Give a subject (a named request, handler, validator, behavior, DbContext, entity, direct entrypoint/worker/consumer, service, or project), a relation from the fixed vocabulary (e.g. 'has handler', 'has no validator', 'has validator', 'publishes', 'handled notification', 'uses DbContext', 'uses data store', 'touches entity', 'calls service', 'communicates with', 'depends on', 'references project', 'belongs to layer', 'dispatched by', 'has test reference', and their absence forms), and an object (or omit it for a bare existence/absence claim). Returns exactly one verdict — supported (with the model facts and File:Line provenance), not supported (with the contradicting facts), or not determinable (with the reason: unresolved dispatch, runtime-typed send, package-opaque wrapper, ambiguity, or outside the scan model). Claims about execution order or conventions are outside the model and return not determinable.",
                 ["annotations"] = ReadOnlyAnnotation(),
                 ["inputSchema"] = new JsonObject
                 {
@@ -223,7 +223,7 @@ internal static class McpToolCatalog
                         ["relation"] = new JsonObject
                         {
                             ["type"] = "string",
-                            ["description"] = "The relation to verify, e.g. 'has handler', 'has no validator', 'publishes', 'handled notification', 'uses DbContext', 'touches entity', 'calls service', 'communicates with', 'depends on', 'references project', 'belongs to layer', 'dispatched by', 'has test reference', or an absence form. Unknown relations return not determinable.",
+                            ["description"] = "The relation to verify, e.g. 'has handler', 'has no validator', 'publishes', 'handled notification', 'uses DbContext', 'uses data store', 'touches entity', 'calls service', 'communicates with', 'depends on', 'references project', 'belongs to layer', 'dispatched by', 'has test reference', or an absence form. Unknown relations return not determinable.",
                         },
                         ["object"] = new JsonObject
                         {

@@ -346,6 +346,7 @@ internal static class JsonReportDocumentFactory
                         TargetRequests = e.TargetRequests.Count > 0 ? e.TargetRequests.ToList() : null,
                         CalledServices = e.CalledServices.Count > 0 ? e.CalledServices.ToList() : null,
                         TouchedDbContexts = e.TouchedDbContexts.Count > 0 ? e.TouchedDbContexts.ToList() : null,
+                        TouchedDataStores = e.TouchedDataStores.Count > 0 ? e.TouchedDataStores.ToList() : null,
                         TouchedEntities = e.TouchedEntities.Count > 0 ? e.TouchedEntities.ToList() : null,
                         PublishedMessages = e.PublishedMessages.Count > 0 ? e.PublishedMessages.ToList() : null,
                         Location = ToJsonLocation(e.Location),
@@ -380,13 +381,45 @@ internal static class JsonReportDocumentFactory
                         MessageConsumerCount = p.MessageConsumerCount,
                         RequestCount = p.RequestCount,
                         DbContextCount = p.DbContextCount,
+                        DataStoreCount = p.DataStoreCount,
                         PublishedEventCount = p.PublishedEventCount,
                         ConsumedEventCount = p.ConsumedEventCount,
                     })
                     .ToList()
                 : null,
+            DataStores = result.DataStores.Count > 0
+                ? result.DataStores
+                    .Select(d => new JsonDataStore
+                    {
+                        Name = d.Name,
+                        Kind = DataStoreKindName(d.Kind),
+                        Technology = d.Technology,
+                        Provider = EmptyToNull(d.Provider),
+                        Project = EmptyToNull(d.ProjectName),
+                        Entities = d.Entities.Count > 0 ? d.Entities.ToList() : null,
+                        AccessedBy = d.AccessedBy.Count > 0 ? d.AccessedBy.ToList() : null,
+                        Location = ToJsonLocation(d.Location),
+                    })
+                    .ToList()
+                : null,
         };
     }
+
+    private static string DataStoreKindName(DataStoreKind kind) => kind switch
+    {
+        DataStoreKind.EfCore => "efCore",
+        DataStoreKind.Ef6 => "ef6",
+        DataStoreKind.Dapper => "dapper",
+        DataStoreKind.Linq2Db => "linq2db",
+        DataStoreKind.MongoDb => "mongoDb",
+        DataStoreKind.NHibernate => "nHibernate",
+        DataStoreKind.AdoNet => "adoNet",
+        DataStoreKind.Redis => "redis",
+        DataStoreKind.CosmosDb => "cosmosDb",
+        DataStoreKind.DocumentDb => "documentDb",
+        DataStoreKind.Repository => "repository",
+        _ => "unknown",
+    };
 
     private static string FlowEdgeKindName(FlowEdgeKind kind) => kind switch
     {

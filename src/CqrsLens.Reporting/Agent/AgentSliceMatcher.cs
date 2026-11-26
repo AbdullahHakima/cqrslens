@@ -106,6 +106,11 @@ internal static class AgentSliceMatcher
             score = Math.Max(score, NameScore(CSharpScanner.SimpleName(ctx), filter, 750, 650, 500));
         }
 
+        foreach (var ds in ep.TouchedDataStores)
+        {
+            score = Math.Max(score, NameScore(ds, filter, 750, 650, 500));
+        }
+
         foreach (var entity in ep.TouchedEntities)
         {
             var entityName = EntityNameFromLabel(entity);

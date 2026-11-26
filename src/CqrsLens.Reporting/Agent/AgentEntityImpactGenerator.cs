@@ -174,6 +174,8 @@ internal static class AgentEntityImpactGenerator
             names.Add(CSharpScanner.SimpleName(EntityNameFromLabel(label)));
         foreach (var label in result.SystemEntrypoints.SelectMany(e => e.TouchedEntities))
             names.Add(CSharpScanner.SimpleName(EntityNameFromLabel(label)));
+        foreach (var entity in result.DataStores.SelectMany(d => d.Entities))
+            names.Add(CSharpScanner.SimpleName(EntityNameFromLabel(entity)));
         return names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
     }
 

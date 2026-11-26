@@ -38,6 +38,12 @@ internal static class DirectFlowDiagramBuilder
                 g => g.Key,
                 g => g.Select(e => e.To).ToHashSet(StringComparer.Ordinal),
                 StringComparer.Ordinal);
+        var resolvedStoreByService = result.ServiceClassEffects
+            .Where(kv => kv.Value.TouchedDataStores.Count > 0)
+            .ToDictionary(
+                kv => kv.Key,
+                kv => kv.Value.TouchedDataStores.ToHashSet(StringComparer.Ordinal),
+                StringComparer.Ordinal);
 
         var groups = eligible
             .GroupBy(e => string.IsNullOrWhiteSpace(e.ProjectName) ? UnassignedProject : e.ProjectName!)
@@ -54,7 +60,8 @@ internal static class DirectFlowDiagramBuilder
                 .ToList();
 
             var capped = ranked.Take(MaxEntrypointsPerProject).ToList();
-            var section = BuildBoundedProjectSection(group.Key, capped, ranked.Count, resolvedDbByService);
+            var section = BuildBoundedProjectSection(
+                group.Key, capped, ranked.Count, resolvedDbByService, resolvedStoreByService);
             if (section is not null)
                 sections.Add(section);
         }
@@ -66,11 +73,13 @@ internal static class DirectFlowDiagramBuilder
         => entrypoint.ExecutionStyle != SystemExecutionStyle.Cqrs &&
            (entrypoint.CalledServices.Count > 0 ||
             entrypoint.TouchedDbContexts.Count > 0 ||
+            entrypoint.TouchedDataStores.Count > 0 ||
             entrypoint.PublishedMessages.Count > 0);
 
     internal static int RichnessScore(SystemEntrypointInfo entrypoint)
         => entrypoint.CalledServices.Count +
            entrypoint.TouchedDbContexts.Count * 2 +
+           entrypoint.TouchedDataStores.Count * 2 +
            entrypoint.PublishedMessages.Count * 2 +
            entrypoint.TouchedEntities.Count;
 
@@ -78,12 +87,14 @@ internal static class DirectFlowDiagramBuilder
         string projectName,
         List<SystemEntrypointInfo> candidates,
         int totalInProject,
-        IReadOnlyDictionary<string, HashSet<string>> resolvedDbByService)
+        IReadOnlyDictionary<string, HashSet<string>> resolvedDbByService,
+        IReadOnlyDictionary<string, HashSet<string>> resolvedStoreByService)
     {
         for (var count = candidates.Count; count >= 1; count--)
         {
             var slice = candidates.Take(count).ToList();
-            var (source, usedEntrypoints, edgeCount) = ComposeProject(projectName, slice, resolvedDbByService);
+            var (source, usedEntrypoints, edgeCount) = ComposeProject(
+                projectName, slice, resolvedDbByService, resolvedStoreByService);
             if (edgeCount == 0 || usedEntrypoints == 0)
                 return null;
 
@@ -104,7 +115,8 @@ internal static class DirectFlowDiagramBuilder
     private static (string Source, int UsedEntrypoints, int EdgeCount) ComposeProject(
         string projectName,
         IReadOnlyList<SystemEntrypointInfo> entrypoints,
-        IReadOnlyDictionary<string, HashSet<string>> resolvedDbByService)
+        IReadOnlyDictionary<string, HashSet<string>> resolvedDbByService,
+        IReadOnlyDictionary<string, HashSet<string>> resolvedStoreByService)
     {
         var ids = new MermaidIdAllocator();
         var allServices = entrypoints.SelectMany(e => e.CalledServices).Distinct(StringComparer.Ordinal).ToList();
@@ -145,6 +157,11 @@ internal static class DirectFlowDiagramBuilder
 
             var services = ep.CalledServices.Take(MaxServicesPerEntrypoint).ToList();
             var dbContexts = ep.TouchedDbContexts.Take(MaxDbContextsPerEntrypoint).ToList();
+            var shortContextNames = dbContexts.Select(ShortTypeName).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var dataStores = ep.TouchedDataStores
+                .Where(ds => !shortContextNames.Contains(ds))
+                .Take(MaxDbContextsPerEntrypoint)
+                .ToList();
             var events = ep.PublishedMessages.Take(MaxEventsPerEntrypoint).ToList();
 
             foreach (var svc in services)
@@ -174,6 +191,19 @@ internal static class DirectFlowDiagramBuilder
                         "uses", false));
                 }
 
+                foreach (var ds in dataStores)
+                {
+                    var dsOwner = services.FirstOrDefault(s =>
+                        resolvedStoreByService.TryGetValue(ServiceImplName(s), out var set) && set.Contains(ds))
+                        ?? primaryDbService;
+                    var ownerLabel = TruncateLabel(ShortTypeName(dsOwner, allServices), MaxLabelLength);
+                    var dsLabel = TruncateLabel(ds, MaxLabelLength);
+                    plannedEdges.Add((
+                        "svc|" + dsOwner, "svc", ownerLabel, "clsDirectService", false,
+                        "ds|" + ds, "ds", dsLabel, "clsDirectDbContext", false,
+                        "uses", false));
+                }
+
                 foreach (var evt in events)
                 {
                     var pubLabel = TruncateLabel(ShortTypeName(primaryPubService, allServices), MaxLabelLength);
@@ -192,6 +222,15 @@ internal static class DirectFlowDiagramBuilder
                     plannedEdges.Add((
                         epKey, epPrefix, epLabel, epClass, true,
                         "dbc|" + ctx, "dbc", ctxLabel, "clsDirectDbContext", false,
+                        "uses", false));
+                }
+
+                foreach (var ds in dataStores)
+                {
+                    var dsLabel = TruncateLabel(ds, MaxLabelLength);
+                    plannedEdges.Add((
+                        epKey, epPrefix, epLabel, epClass, true,
+                        "ds|" + ds, "ds", dsLabel, "clsDirectDbContext", false,
                         "uses", false));
                 }
 
@@ -317,6 +356,12 @@ internal static class DirectFlowDiagramBuilder
         => value.Length <= maxLength
             ? value
             : string.Concat(value.AsSpan(0, maxLength - 1).TrimEnd(), "…");
+
+    private static string ServiceImplName(string rawService)
+    {
+        var arrow = rawService.IndexOf(" -> ", StringComparison.Ordinal);
+        return arrow >= 0 ? rawService[(arrow + 4)..].Trim() : rawService.Trim();
+    }
 
     private static bool LooksLikeBusOrMessaging(string serviceName)
         => serviceName.Contains("EventBus", StringComparison.OrdinalIgnoreCase) ||

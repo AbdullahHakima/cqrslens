@@ -136,6 +136,10 @@ internal static class AgentSliceWriter
         {
             sb.AppendLine($"- **Touches DbContexts**: {JoinLimited(ep.TouchedDbContexts, MaxListItems, c => $"`{CSharpScanner.SimpleName(c)}`")}");
         }
+        if (ep.TouchedDataStores.Count > 0)
+        {
+            sb.AppendLine($"- **Touches Data Stores**: {JoinLimited(ep.TouchedDataStores, MaxListItems, ds => $"`{ds}`")}");
+        }
         if (ep.TouchedEntities.Count > 0)
         {
             sb.AppendLine($"- **Touches DbSets / Entities**: {JoinLimited(ep.TouchedEntities, MaxListItems, e => $"`{e}`")}");

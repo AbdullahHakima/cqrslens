@@ -50,11 +50,21 @@ internal static class DirectSequenceBuilder
                 g => g.Key,
                 g => g.Select(e => e.To).ToHashSet(StringComparer.Ordinal),
                 StringComparer.Ordinal);
+        var resolvedStoreByService = result.ServiceClassEffects
+            .Where(kv => kv.Value.TouchedDataStores.Count > 0)
+            .ToDictionary(
+                kv => kv.Key,
+                kv => kv.Value.TouchedDataStores.ToHashSet(StringComparer.Ordinal),
+                StringComparer.Ordinal);
+
+        var selected = hasMatchedFocus || eligible.Count <= cap
+            ? eligible.Take(cap).ToList()
+            : SelectDiverse(eligible, cap);
 
         var sequences = new List<DirectSequence>();
-        foreach (var ep in eligible.Take(cap))
+        foreach (var ep in selected)
         {
-            var seq = BuildOne(ep, contextsByFull, resolvedDbByService);
+            var seq = BuildOne(ep, contextsByFull, resolvedDbByService, resolvedStoreByService);
             if (MermaidDiagramText.IsWithinMermaidLimits(seq.Source))
                 sequences.Add(seq);
         }
@@ -62,10 +72,44 @@ internal static class DirectSequenceBuilder
         return sequences;
     }
 
+    private static List<SystemEntrypointInfo> SelectDiverse(
+        IReadOnlyList<SystemEntrypointInfo> ranked,
+        int cap)
+    {
+        const int maxPerOwner = 2;
+        var selected = new List<SystemEntrypointInfo>(cap);
+        var selectedIndices = new HashSet<int>();
+        var perOwner = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < ranked.Count && selected.Count < cap; i++)
+        {
+            var ep = ranked[i];
+            var dot = ep.Name.LastIndexOf('.');
+            var owner = dot > 0 ? ep.Name[..dot] : ep.Name;
+            var ownerKey = $"{ep.ProjectName}|{owner}";
+            var count = perOwner.GetValueOrDefault(ownerKey);
+            if (count >= maxPerOwner)
+                continue;
+
+            perOwner[ownerKey] = count + 1;
+            selected.Add(ep);
+            selectedIndices.Add(i);
+        }
+
+        for (var i = 0; i < ranked.Count && selected.Count < cap; i++)
+        {
+            if (selectedIndices.Add(i))
+                selected.Add(ranked[i]);
+        }
+
+        return selected;
+    }
+
     private static DirectSequence BuildOne(
         SystemEntrypointInfo ep,
         IReadOnlyDictionary<string, DbContextInfo> contextsByFull,
-        IReadOnlyDictionary<string, HashSet<string>> resolvedDbByService)
+        IReadOnlyDictionary<string, HashSet<string>> resolvedDbByService,
+        IReadOnlyDictionary<string, HashSet<string>> resolvedStoreByService)
     {
         var opTitle = OperationTitle(ep);
         var lines = new List<string>
@@ -90,13 +134,27 @@ internal static class DirectSequenceBuilder
 
         var contexts = ep.TouchedDbContexts.Take(MaxDbContextsPerSequence).ToList();
         var contextIds = new List<(string Id, string FullName)>(contexts.Count);
+        var shortContextNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < contexts.Count; i++)
         {
             var id = $"c{i + 1}";
             contextIds.Add((id, contexts[i]));
             var ctx = contextsByFull.TryGetValue(contexts[i], out var c) ? c : null;
-            participants.Add((id, DirectFlowDiagramBuilder.TruncateLabel(
-                ctx?.Name ?? MermaidDiagramText.ShortTypeName(contexts[i]), MaxParticipantLabelLength)));
+            var shortName = ctx?.Name ?? MermaidDiagramText.ShortTypeName(contexts[i]);
+            shortContextNames.Add(shortName);
+            participants.Add((id, DirectFlowDiagramBuilder.TruncateLabel(shortName, MaxParticipantLabelLength)));
+        }
+
+        var dataStores = ep.TouchedDataStores
+            .Where(ds => !shortContextNames.Contains(ds))
+            .Take(MaxDbContextsPerSequence)
+            .ToList();
+        var dataStoreIds = new List<(string Id, string Name)>(dataStores.Count);
+        for (var i = 0; i < dataStores.Count; i++)
+        {
+            var id = $"d{i + 1}";
+            dataStoreIds.Add((id, dataStores[i]));
+            participants.Add((id, DirectFlowDiagramBuilder.TruncateLabel(dataStores[i], MaxParticipantLabelLength)));
         }
 
         var events = ep.PublishedMessages.Take(MaxEventsPerSequence).ToList();
@@ -131,6 +189,15 @@ internal static class DirectSequenceBuilder
                 Arrow(fromId, ctxId, usesText, dashed: true);
             }
 
+            foreach (var (dsId, dsName) in dataStoreIds)
+            {
+                var dsOwner = serviceIds.FirstOrDefault(s =>
+                    resolvedStoreByService.TryGetValue(ServiceImplName(s.FullName), out var set) && set.Contains(dsName));
+                var fromId = dsOwner.Id ?? primaryDbSvc.Id;
+                var usesText = FormatDataStoreUsesText(ep);
+                Arrow(fromId, dsId, usesText, dashed: true);
+            }
+
             foreach (var evt in events)
                 Arrow(primaryPubSvc.Id, "bus", $"publishes {MermaidDiagramText.ShortTypeName(evt)}", dashed: true);
 
@@ -142,6 +209,9 @@ internal static class DirectSequenceBuilder
             foreach (var (ctxId, ctxFull) in contextIds)
                 Arrow("ep", ctxId, FormatUsesText(ep, ctxFull, contextsByFull));
 
+            foreach (var (dsId, _) in dataStoreIds)
+                Arrow("ep", dsId, FormatDataStoreUsesText(ep));
+
             foreach (var evt in events)
                 Arrow("ep", "bus", $"publishes {MermaidDiagramText.ShortTypeName(evt)}", dashed: true);
         }
@@ -150,7 +220,7 @@ internal static class DirectSequenceBuilder
         var kindLabel = SystemViewFilter.KindLabel(ep.Kind);
         var projPrefix = string.IsNullOrWhiteSpace(ep.ProjectName) ? "" : $"[{ep.ProjectName}] ";
         var caption = $"{projPrefix}{kindLabel} sequence for {opTitle}: " +
-                      BuildCaptionSummary(serviceIds.Count, contextIds.Count, events.Count);
+                      BuildCaptionSummary(serviceIds.Count, contextIds.Count, dataStoreIds.Count, events.Count);
 
         return new DirectSequence(
             opTitle,
@@ -216,6 +286,11 @@ internal static class DirectSequenceBuilder
             }
         }
 
+        return FormatDataStoreUsesText(ep);
+    }
+
+    private static string FormatDataStoreUsesText(SystemEntrypointInfo ep)
+    {
         var entities = ep.TouchedEntities
             .Select(AgentReportFormatter.EntityNameFromLabel)
             .Select(SimpleLeaf)
@@ -231,13 +306,21 @@ internal static class DirectSequenceBuilder
         return $"uses {string.Join(", ", top)}{extra}";
     }
 
-    private static string BuildCaptionSummary(int services, int dbContexts, int events)
+    private static string ServiceImplName(string rawService)
+    {
+        var arrow = rawService.IndexOf(" -> ", StringComparison.Ordinal);
+        return arrow >= 0 ? rawService[(arrow + 4)..].Trim() : rawService.Trim();
+    }
+
+    private static string BuildCaptionSummary(int services, int dbContexts, int dataStores, int events)
     {
         var parts = new List<string>();
         if (services > 0)
             parts.Add(MermaidDiagramText.CountText(services, "service"));
         if (dbContexts > 0)
             parts.Add(MermaidDiagramText.CountText(dbContexts, "DbContext"));
+        if (dataStores > 0)
+            parts.Add(MermaidDiagramText.CountText(dataStores, "data store"));
         if (events > 0)
             parts.Add(MermaidDiagramText.CountText(events, "published event"));
         return string.Join(" · ", parts) + ".";

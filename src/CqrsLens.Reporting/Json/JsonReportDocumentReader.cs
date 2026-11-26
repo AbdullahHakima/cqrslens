@@ -90,6 +90,15 @@ internal static class JsonReportDocumentReader
                 entity.Properties ??= new List<JsonEntityProperty>();
         }
 
+        if (document.DataStores is not null)
+        {
+            foreach (var store in document.DataStores)
+            {
+                store.Entities ??= new List<string>();
+                store.AccessedBy ??= new List<string>();
+            }
+        }
+
         return document;
     }
 }

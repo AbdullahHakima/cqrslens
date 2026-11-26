@@ -47,6 +47,10 @@ internal static class SystemOverviewMarkdownWriter
         if (flows.Count > 0)
             WriteIntegrationFlows(md, flows);
 
+        var dataStores = SystemViewFilter.VisibleNonEfDataStores(result, focusService, excludeTests);
+        if (dataStores.Count > 0)
+            WriteDataStores(md, dataStores);
+
         var entrypoints = SystemViewFilter.VisibleEntrypoints(result, focusService, excludeTests);
         if (entrypoints.Count > 0)
             WriteEntrypointsCatalog(md, entrypoints);
@@ -79,6 +83,9 @@ internal static class SystemOverviewMarkdownWriter
             var dataParts = new List<string>();
             if (profile.DbContextCount > 0)
                 dataParts.Add($"{profile.DbContextCount} DbCtx");
+            var nonEfStoreCount = Math.Max(0, profile.DataStoreCount - profile.DbContextCount);
+            if (nonEfStoreCount > 0)
+                dataParts.Add($"{nonEfStoreCount} Store{(nonEfStoreCount == 1 ? "" : "s")}");
             if (profile.PublishedEventCount > 0)
                 dataParts.Add($"{profile.PublishedEventCount} pub");
             if (profile.ConsumedEventCount > 0)
@@ -117,6 +124,37 @@ internal static class SystemOverviewMarkdownWriter
                           $"{MarkdownEscaping.TableCell(detail)} | {source} |");
         }
         md.AppendLine();
+    }
+
+    private static void WriteDataStores(
+        StringBuilder md,
+        IReadOnlyList<DataStoreInfo> stores)
+    {
+        md.AppendLine("### Data Stores & Persistence");
+        md.AppendLine();
+        md.AppendLine("| Store | Technology | Provider | Project | Entities / Tables | Accessed By |");
+        md.AppendLine("| --- | --- | --- | --- | --- | --- |");
+        foreach (var store in stores)
+        {
+            var provider = string.IsNullOrWhiteSpace(store.Provider) ? "—" : MarkdownEscaping.TableCell(store.Provider);
+            var project = string.IsNullOrWhiteSpace(store.ProjectName) ? "—" : TableCode(store.ProjectName);
+            var entities = store.Entities.Count > 0
+                ? MarkdownEscaping.TableCell(FormatLimited(store.Entities, 10))
+                : "—";
+            var accessed = store.AccessedBy.Count > 0
+                ? MarkdownEscaping.TableCell(FormatLimited(store.AccessedBy.Select(CSharpScanner.SimpleName), 5))
+                : "—";
+            md.AppendLine($"| {TableCode(store.Name)} | {MarkdownEscaping.TableCell(store.Technology)} | {provider} | {project} | {entities} | {accessed} |");
+        }
+        md.AppendLine();
+    }
+
+    private static string FormatLimited(IEnumerable<string> values, int limit)
+    {
+        var items = values.Where(v => !string.IsNullOrWhiteSpace(v)).Distinct(StringComparer.Ordinal).ToList();
+        if (items.Count <= limit)
+            return string.Join(", ", items);
+        return string.Join(", ", items.Take(limit)) + $" +{items.Count - limit} more";
     }
 
     private static void WriteEntrypointsCatalog(

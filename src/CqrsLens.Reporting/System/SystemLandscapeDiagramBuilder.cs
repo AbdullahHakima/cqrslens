@@ -318,17 +318,22 @@ internal static class SystemLandscapeDiagramBuilder
         }
 
         // Redis caches.
+        var redisCachedServices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var profile in result.ServiceProfiles
                      .Where(p => services.ContainsKey(p.ProjectName) &&
                                  p.Technologies.Contains("Redis", StringComparer.OrdinalIgnoreCase))
                      .OrderBy(p => p.ProjectName, StringComparer.OrdinalIgnoreCase))
         {
             if (AddNode("cache", "Cache · Redis", isBroker: false))
+            {
                 dataEdges.Add((profile.ProjectName, "cache", "caches"));
+                redisCachedServices.Add(profile.ProjectName);
+            }
         }
 
         // DbContexts → services that touch them (entrypoint tracing), else owner / dependents.
         var touchedBy = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        var storeTouchedBy = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
         foreach (var entrypoint in result.SystemEntrypoints)
         {
             if (string.IsNullOrWhiteSpace(entrypoint.ProjectName) || !services.ContainsKey(entrypoint.ProjectName))
@@ -339,6 +344,12 @@ internal static class SystemLandscapeDiagramBuilder
                 if (!touchedBy.TryGetValue(shortName, out var set))
                     touchedBy[shortName] = set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                 set.Add(entrypoint.ProjectName);
+            }
+            foreach (var ds in entrypoint.TouchedDataStores)
+            {
+                if (!storeTouchedBy.TryGetValue(ds, out var dsSet))
+                    storeTouchedBy[ds] = dsSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                dsSet.Add(entrypoint.ProjectName);
             }
         }
 
@@ -371,6 +382,59 @@ internal static class SystemLandscapeDiagramBuilder
                 continue; // focused view: skip stores unrelated to the visible services
 
             if (!AddNode(key, DbLabel(result, context), isBroker: false))
+                break;
+            foreach (var user in users)
+                dataEdges.Add((user, key, null));
+        }
+
+        // Non-EF DataStores (Linq2Db, Dapper, MongoDB, NHibernate, ADO.NET, Cosmos DB, Marten, RavenDB, Redis).
+        foreach (var store in result.DataStores
+                     .Where(d => d.Kind is not DataStoreKind.EfCore and not DataStoreKind.Ef6)
+                     .OrderBy(d => d.Kind)
+                     .ThenBy(d => d.Name, StringComparer.Ordinal))
+        {
+            if (store.Kind == DataStoreKind.Redis &&
+                store.ProjectName is not null &&
+                redisCachedServices.Contains(store.ProjectName))
+            {
+                continue;
+            }
+
+            var users = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (storeTouchedBy.TryGetValue(store.Name, out var tracedStoreUsers))
+                users.UnionWith(tracedStoreUsers);
+
+            foreach (var effect in result.ServiceClassEffects.Values)
+            {
+                if (!string.IsNullOrWhiteSpace(effect.ProjectName) &&
+                    services.ContainsKey(effect.ProjectName) &&
+                    effect.TouchedDataStores.Contains(store.Name, StringComparer.Ordinal))
+                {
+                    users.Add(effect.ProjectName);
+                }
+            }
+
+            if (store.ProjectName is not null && services.ContainsKey(store.ProjectName))
+                users.Add(store.ProjectName);
+            else if (users.Count == 0 && store.ProjectName is not null)
+            {
+                foreach (var project in result.Projects)
+                {
+                    if (services.ContainsKey(project.Name) &&
+                        project.ReferenceNames.Contains(store.ProjectName, StringComparer.OrdinalIgnoreCase))
+                        users.Add(project.Name);
+                }
+            }
+
+            if (users.Count == 0 && focusedView)
+                continue;
+
+            var key = $"ds_{store.Kind}_{store.Name}";
+            var label = !string.IsNullOrWhiteSpace(store.Provider) &&
+                        !store.Name.Contains(store.Provider, StringComparison.OrdinalIgnoreCase)
+                ? $"{store.Name} · {store.Provider}"
+                : store.Name;
+            if (!AddNode(key, label, isBroker: false))
                 break;
             foreach (var user in users)
                 dataEdges.Add((user, key, null));

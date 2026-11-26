@@ -124,9 +124,13 @@ public static class AgentSystemOverviewGenerator
                       (includeTests ? " (tests included)" : " (tests excluded from inventory)"));
         sb.AppendLine($"- **Visible services**: {profiles.Count} · **Entrypoints**: {entrypoints.Count} " +
                       $"({FormatEntrypointBreakdown(entrypoints)}) · **Integration flows**: {flows.Count}");
+        var nonEfStoreCount = result.DataStores.Count(d => d.Kind is not DataStoreKind.EfCore and not DataStoreKind.Ef6);
+        var dataStoresNote = nonEfStoreCount > 0
+            ? $", {result.DataStores.Count} data store(s) ({nonEfStoreCount} non-EF)"
+            : "";
         sb.AppendLine($"- **CQRS & Data**: {result.Requests.Count} request(s), {result.Handlers.Count} handler(s), " +
                       $"{result.Validators.Count} validator(s), {result.Behaviors.Count} behavior(s), " +
-                      $"{result.DbContexts.Count} DbContext(s)");
+                      $"{result.DbContexts.Count} DbContext(s){dataStoresNote}");
         sb.AppendLine($"- **Checks**: {errors} error(s), {warnings} warning(s)");
 
         var tech = profiles
@@ -191,6 +195,9 @@ public static class AgentSystemOverviewGenerator
                 surface.Add($"Requests {profile.RequestCount}");
             if (profile.DbContextCount > 0)
                 surface.Add($"DbContexts {profile.DbContextCount}");
+            var nonEfStores = Math.Max(0, profile.DataStoreCount - profile.DbContextCount);
+            if (nonEfStores > 0)
+                surface.Add($"DataStores {nonEfStores}");
             if (profile.PublishedEventCount > 0 || profile.ConsumedEventCount > 0)
                 surface.Add($"Events {profile.PublishedEventCount} pub/{profile.ConsumedEventCount} sub");
 
@@ -254,6 +261,11 @@ public static class AgentSystemOverviewGenerator
             .GroupBy(c => c.ProjectName!, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Select(c => c.Name).OrderBy(n => n, StringComparer.Ordinal).ToList(),
                 StringComparer.OrdinalIgnoreCase);
+        var dataStoresByProject = result.DataStores
+            .Where(d => d.Kind is not DataStoreKind.EfCore and not DataStoreKind.Ef6 && !string.IsNullOrWhiteSpace(d.ProjectName))
+            .GroupBy(d => d.ProjectName!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Select(d => d.Name).OrderBy(n => n, StringComparer.Ordinal).ToList(),
+                StringComparer.OrdinalIgnoreCase);
 
         var maxPerGroup = focused.Count > 0 ? MaxEntrypointsPerServiceFocused : MaxEntrypointsPerServiceUnfiltered;
         var groups = entrypoints
@@ -272,7 +284,10 @@ public static class AgentSystemOverviewGenerator
             var dbNote = dbContextsByProject.TryGetValue(group.Key, out var ownedContexts) && ownedContexts.Count > 0
                 ? $" · Owns DbContext(s): {string.Join(", ", ownedContexts.Select(c => $"`{c}`"))}"
                 : "";
-            sb.AppendLine($"### `{group.Key}` ({ordered.Count}){dbNote}");
+            var storeNote = dataStoresByProject.TryGetValue(group.Key, out var ownedStores) && ownedStores.Count > 0
+                ? $" · Owns DataStore(s): {string.Join(", ", ownedStores.Select(s => $"`{s}`"))}"
+                : "";
+            sb.AppendLine($"### `{group.Key}` ({ordered.Count}){dbNote}{storeNote}");
             sb.AppendLine();
 
             foreach (var entry in ordered.Take(maxPerGroup))
