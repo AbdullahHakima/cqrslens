@@ -170,7 +170,8 @@ internal static partial class RazorAndBlazorSystemScanner
                         methodEnd,
                         entrypoint,
                         matchedRequests,
-                        cshtmlInjects);
+                        cshtmlInjects,
+                        scopeToMethodBody: true);
 
                     target.Add(entrypoint);
                     emittedForPage = true;

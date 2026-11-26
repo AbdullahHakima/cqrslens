@@ -147,7 +147,8 @@ internal static partial class GrpcSystemScanner
                         methodStart,
                         methodEnd,
                         entrypoint,
-                        matchedRequests);
+                        matchedRequests,
+                        scopeToMethodBody: true);
 
                     target.Add(entrypoint);
                 }

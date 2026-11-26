@@ -157,6 +157,8 @@ internal static class ServiceProfileBuilder
                 MessageConsumerCount = consumerCount,
                 RequestCount = projRequests.Count,
                 DbContextCount = projDbContexts.Count,
+                DataStoreCount = result.DataStores.Count(d =>
+                    string.Equals(d.ProjectName, project.Name, StringComparison.OrdinalIgnoreCase)),
                 PublishedEventCount = publishedCount,
                 ConsumedEventCount = consumedSet.Count,
             };
@@ -303,6 +305,51 @@ internal static class ServiceProfileBuilder
             projFiles.Any(p => p.Scan.Usings.Any(u => string.Equals(u.Target, "Dapper", StringComparison.Ordinal))))
         {
             tech.Add("Dapper");
+        }
+
+        if (HasPackageContains(project, "linq2db") ||
+            projFiles.Any(p => p.Scan.Usings.Any(u => u.Target.StartsWith("LinqToDB", StringComparison.Ordinal))) ||
+            AnyCodeToken(projFiles, "LinqToDB."))
+        {
+            tech.Add("Linq2Db");
+        }
+
+        if (HasPackagePrefix(project, "NHibernate") ||
+            projFiles.Any(p => p.Scan.Usings.Any(u => u.Target.StartsWith("NHibernate", StringComparison.Ordinal))))
+        {
+            tech.Add("NHibernate");
+        }
+
+        if (HasPackagePrefix(project, "Microsoft.Azure.Cosmos") ||
+            projFiles.Any(p => p.Scan.Usings.Any(u => u.Target.StartsWith("Microsoft.Azure.Cosmos", StringComparison.Ordinal))))
+        {
+            tech.Add("Cosmos DB");
+        }
+
+        if (HasPackagePrefix(project, "Marten") ||
+            projFiles.Any(p => p.Scan.Usings.Any(u => u.Target.StartsWith("Marten", StringComparison.Ordinal))))
+        {
+            tech.Add("Marten");
+        }
+
+        if (HasPackagePrefix(project, "RavenDB.") ||
+            projFiles.Any(p => p.Scan.Usings.Any(u => u.Target.StartsWith("Raven.Client", StringComparison.Ordinal))))
+        {
+            tech.Add("RavenDB");
+        }
+
+        if (context.Result.DataStores.Any(d =>
+                d.Kind == DataStoreKind.AdoNet &&
+                string.Equals(d.ProjectName, project.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            tech.Add("ADO.NET");
+        }
+
+        if (HasPackageContains(project, "MySql") ||
+            AnyCodeToken(projFiles, "UseMySql") ||
+            AnyCodeToken(projFiles, "MySqlConnection"))
+        {
+            tech.Add("MySQL");
         }
 
         if (HasPackagePrefix(project, "Npgsql") ||

@@ -73,7 +73,8 @@ internal static partial class SystemDependencyTracer
         int bodySpanEnd,
         SystemEntrypointInfo entrypoint,
         IReadOnlyList<CqrsRequest> matchedRequests,
-        IReadOnlyList<string>? extraInjectedTypes = null)
+        IReadOnlyList<string>? extraInjectedTypes = null,
+        bool scopeToMethodBody = false)
     {
         foreach (var req in matchedRequests)
             SystemAnalysisContext.AddUniqueOrdinal(entrypoint.TargetRequests, req.FullName);
@@ -84,8 +85,18 @@ internal static partial class SystemDependencyTracer
             entrypoint.ExecutionStyle = SystemExecutionStyle.Cqrs;
         }
 
+        List<(string Body, int Start, int End)>? visitedHelpers = null;
+        HashSet<string>? referencedIdentifiers = null;
+        ClassMethodIndex? methodIndex = null;
+        if (scopeToMethodBody && ownerClass is not null && !string.IsNullOrWhiteSpace(bodyCode))
+        {
+            methodIndex = context.GetClassMethodIndex(ownerClass, file, scan, mask);
+            methodIndex.CollectScopedBodyAndIdentifiers(bodyCode, out referencedIdentifiers, out visitedHelpers);
+        }
+
         var rootTypes = CollectRootDependencyTypes(
-            context, ownerClass, file, mask, scan.Classes, parametersCode, bodyCode, extraInjectedTypes, matchedRequests);
+            context, ownerClass, file, mask, scan.Classes, parametersCode, bodyCode,
+            extraInjectedTypes, matchedRequests, scopeToMethodBody, methodIndex, referencedIdentifiers, visitedHelpers);
 
         var currentNs = ownerClass?.Namespace ?? scan.Namespace;
         IReadOnlyList<string> containing = ownerClass?.ContainingTypes ?? (IReadOnlyList<string>)Array.Empty<string>();
@@ -112,6 +123,7 @@ internal static partial class SystemDependencyTracer
                 visitedClasses,
                 entrypoint.CalledServices,
                 entrypoint.TouchedDbContexts,
+                entrypoint.TouchedDataStores,
                 entrypoint.TouchedEntities,
                 queue);
         }
@@ -128,9 +140,67 @@ internal static partial class SystemDependencyTracer
             bodySpanStart,
             bodySpanEnd,
             entrypoint.TouchedDbContexts,
+            entrypoint.TouchedDataStores,
             entrypoint.TouchedEntities,
             entrypoint.PublishedMessages,
             bodyAlreadyMasked: true);
+
+        if (scopeToMethodBody)
+        {
+            DataStoreDiscovery.InspectMethodBody(
+                context,
+                file,
+                scan,
+                ownerClass,
+                bodyCode,
+                bodySpanStart,
+                bodySpanEnd,
+                entrypoint.TouchedDataStores,
+                entrypoint.TouchedEntities);
+        }
+        else if (ownerClass is not null && context.GetClassDataAccess(ownerClass) is { } ownerAccess)
+        {
+            foreach (var ds in ownerAccess.DataStores)
+                SystemAnalysisContext.AddUniqueOrdinal(entrypoint.TouchedDataStores, ds);
+            foreach (var ent in ownerAccess.Entities)
+                SystemAnalysisContext.AddUniqueOrdinal(entrypoint.TouchedEntities, ent);
+        }
+
+        var combinedBodyCode = bodyCode;
+        if (visitedHelpers is { Count: > 0 })
+        {
+            foreach (var helper in visitedHelpers)
+            {
+                CollectDirectBodyEffects(
+                    context,
+                    file,
+                    scan,
+                    mask,
+                    ownerClass,
+                    string.Empty,
+                    helper.Body,
+                    helper.Start,
+                    helper.End,
+                    entrypoint.TouchedDbContexts,
+                    entrypoint.TouchedDataStores,
+                    entrypoint.TouchedEntities,
+                    entrypoint.PublishedMessages,
+                    bodyAlreadyMasked: true);
+
+                DataStoreDiscovery.InspectMethodBody(
+                    context,
+                    file,
+                    scan,
+                    ownerClass,
+                    helper.Body,
+                    helper.Start,
+                    helper.End,
+                    entrypoint.TouchedDataStores,
+                    entrypoint.TouchedEntities);
+            }
+
+            combinedBodyCode = bodyCode + "\n" + string.Join('\n', visitedHelpers.Select(h => h.Body));
+        }
 
         // BFS over memoized per-class summaries (depth <= MaxServiceHops) so shared services
         // are analyzed at most once across the entire solution.
@@ -143,6 +213,8 @@ internal static partial class SystemDependencyTracer
                 SystemAnalysisContext.AddUniqueOrdinal(entrypoint.CalledServices, svc);
             foreach (var db in summary.DirectDbContexts)
                 SystemAnalysisContext.AddUniqueOrdinal(entrypoint.TouchedDbContexts, db);
+            foreach (var ds in summary.DirectDataStores)
+                SystemAnalysisContext.AddUniqueOrdinal(entrypoint.TouchedDataStores, ds);
             foreach (var ent in summary.DirectEntities)
                 SystemAnalysisContext.AddUniqueOrdinal(entrypoint.TouchedEntities, ent);
             foreach (var msg in summary.DirectPublishedMessages)
@@ -159,7 +231,7 @@ internal static partial class SystemDependencyTracer
         }
 
         RollUpCqrsEffects(context, matchedRequests, entrypoint);
-        CollectScopedDbContextSetTouches(context, bodyCode, entrypoint);
+        CollectScopedDbContextSetTouches(context, combinedBodyCode, entrypoint);
         SortEntrypointLists(entrypoint);
     }
 
@@ -234,6 +306,7 @@ internal static partial class SystemDependencyTracer
             SourceLocation? Location,
             List<string> CalledServices,
             List<string> DbContexts,
+            List<string> DataStores,
             List<string> Entities,
             List<string> PublishedMessages)>(StringComparer.Ordinal);
 
@@ -253,6 +326,7 @@ internal static partial class SystemDependencyTracer
             var summary = GetOrComputeClassEffects(context, decl);
             if (summary.DirectCalledServices.Count == 0 &&
                 summary.DirectDbContexts.Count == 0 &&
+                summary.DirectDataStores.Count == 0 &&
                 summary.DirectEntities.Count == 0 &&
                 summary.DirectPublishedMessages.Count == 0)
             {
@@ -268,6 +342,7 @@ internal static partial class SystemDependencyTracer
                     new List<string>(),
                     new List<string>(),
                     new List<string>(),
+                    new List<string>(),
                     new List<string>());
                 effectsByFullName[decl.FullName] = bucket;
             }
@@ -276,6 +351,8 @@ internal static partial class SystemDependencyTracer
                 SystemAnalysisContext.AddUniqueOrdinal(bucket.CalledServices, svc);
             foreach (var db in summary.DirectDbContexts)
                 SystemAnalysisContext.AddUniqueOrdinal(bucket.DbContexts, db);
+            foreach (var ds in summary.DirectDataStores)
+                SystemAnalysisContext.AddUniqueOrdinal(bucket.DataStores, ds);
             foreach (var ent in summary.DirectEntities)
                 SystemAnalysisContext.AddUniqueOrdinal(bucket.Entities, ent);
             foreach (var msg in summary.DirectPublishedMessages)
@@ -286,6 +363,7 @@ internal static partial class SystemDependencyTracer
         {
             bucket.CalledServices.Sort(StringComparer.Ordinal);
             bucket.DbContexts.Sort(StringComparer.Ordinal);
+            bucket.DataStores.Sort(StringComparer.Ordinal);
             bucket.Entities.Sort(StringComparer.Ordinal);
             bucket.PublishedMessages.Sort(StringComparer.Ordinal);
 
@@ -294,6 +372,7 @@ internal static partial class SystemDependencyTracer
                 bucket.Location,
                 bucket.CalledServices,
                 bucket.DbContexts,
+                bucket.DataStores,
                 bucket.Entities,
                 bucket.PublishedMessages);
         }
@@ -355,8 +434,17 @@ internal static partial class SystemDependencyTracer
                 visitedClasses,
                 summary.DirectCalledServices,
                 summary.DirectDbContexts,
+                summary.DirectDataStores,
                 summary.DirectEntities,
                 nextQueue);
+        }
+
+        if (context.GetClassDataAccess(svcDecl) is { } svcDataAccess)
+        {
+            foreach (var ds in svcDataAccess.DataStores)
+                SystemAnalysisContext.AddUniqueOrdinal(summary.DirectDataStores, ds);
+            foreach (var ent in svcDataAccess.Entities)
+                SystemAnalysisContext.AddUniqueOrdinal(summary.DirectEntities, ent);
         }
 
         while (nextQueue.Count > 0)
@@ -379,6 +467,7 @@ internal static partial class SystemDependencyTracer
                 svcDecl.BodySpan.Start,
                 svcEnd,
                 summary.DirectDbContexts,
+                summary.DirectDataStores,
                 summary.DirectEntities,
                 summary.DirectPublishedMessages,
                 bodyAlreadyMasked: true);
@@ -400,6 +489,7 @@ internal static partial class SystemDependencyTracer
         HashSet<string> visitedClasses,
         List<string> calledServices,
         List<string> touchedDbContexts,
+        List<string> touchedDataStores,
         List<string> touchedEntities,
         Queue<(CSharpScanner.ClassDecl Class, int Depth)> queue)
     {
@@ -436,8 +526,9 @@ internal static partial class SystemDependencyTracer
             return;
         }
 
-        // Generic repository dependency (e.g., IRepository<Order>)
-        TryAddGenericRepoEntity(typeRef, ownerClass, context, touchedEntities);
+        // Generic repository dependency (e.g., IRepository<Order>) across EF Core or non-EF stores
+        TryAddGenericRepoEntity(
+            typeRef, ownerClass, context, scopeNs, scopeUsings, scopeContaining, touchedEntities, touchedDataStores);
 
         // Service resolution (interface -> concrete implementation)
         var resolution = LookupResolution(context, typeRef, scopeNs, scopeUsings, scopeContaining);
@@ -508,7 +599,11 @@ internal static partial class SystemDependencyTracer
         string parametersCode,
         string bodyCode,
         IReadOnlyList<string>? extraInjectedTypes,
-        IReadOnlyList<CqrsRequest> matchedRequests)
+        IReadOnlyList<CqrsRequest> matchedRequests,
+        bool scopeToMethodBody,
+        ClassMethodIndex? methodIndex,
+        HashSet<string>? referencedIdentifiers,
+        List<(string Body, int Start, int End)>? visitedHelpers)
     {
         var result = new List<string>();
 
@@ -527,21 +622,6 @@ internal static partial class SystemDependencyTracer
                 Add(DeepSliceSyntax.ExtractParameterType(rawParam));
         }
 
-        if (ownerClass is not null)
-        {
-            foreach (var dep in context.GetClassDependencies(ownerClass, file.Code, mask, classes))
-                Add(dep);
-
-            foreach (var prop in ownerClass.Properties)
-            {
-                if (prop.Attributes.Any(a => a.Contains("Inject", StringComparison.Ordinal)) ||
-                    IsServicePropertyType(prop.Type, matchedRequests))
-                {
-                    Add(prop.Type);
-                }
-            }
-        }
-
         if (extraInjectedTypes is not null)
         {
             foreach (var extra in extraInjectedTypes)
@@ -550,6 +630,55 @@ internal static partial class SystemDependencyTracer
 
         foreach (var located in ExtractServiceLocatorTypes(bodyCode))
             Add(located);
+
+        if (visitedHelpers is { Count: > 0 })
+        {
+            foreach (var helper in visitedHelpers)
+            {
+                foreach (var located in ExtractServiceLocatorTypes(helper.Body))
+                    Add(located);
+            }
+        }
+
+        if (ownerClass is not null)
+        {
+            if (scopeToMethodBody && methodIndex is not null && referencedIdentifiers is not null)
+            {
+                foreach (var (memberName, memberType) in methodIndex.MemberTypes)
+                {
+                    if (referencedIdentifiers.Contains(memberName))
+                        Add(memberType);
+                }
+
+                // Fall back to small owner dependencies only if method-scoped extraction
+                // found zero non-framework types (e.g. thin constructor-forwarding wrappers).
+                var hasNonFrameworkRoot = result.Any(t =>
+                    !IsFrameworkOrRequestType(CSharpScanner.UnqualifiedTypeName(t), matchedRequests));
+                if (!hasNonFrameworkRoot)
+                {
+                    var classDeps = context.GetClassDependencies(ownerClass, file.Code, mask, classes);
+                    if (classDeps.Count <= 3)
+                    {
+                        foreach (var dep in classDeps)
+                            Add(dep);
+                    }
+                }
+            }
+            else
+            {
+                foreach (var dep in context.GetClassDependencies(ownerClass, file.Code, mask, classes))
+                    Add(dep);
+
+                foreach (var prop in ownerClass.Properties)
+                {
+                    if (prop.Attributes.Any(a => a.Contains("Inject", StringComparison.Ordinal)) ||
+                        IsServicePropertyType(prop.Type, matchedRequests))
+                    {
+                        Add(prop.Type);
+                    }
+                }
+            }
+        }
 
         return result;
     }
@@ -601,10 +730,15 @@ internal static partial class SystemDependencyTracer
         int spanStart,
         int spanEnd,
         List<string> touchedDbContexts,
+        List<string> touchedDataStores,
         List<string> touchedEntities,
         List<string> publishedMessages,
         bool bodyAlreadyMasked)
     {
+        var scopeNs = ownerClass?.Namespace ?? scan.Namespace;
+        IReadOnlyList<UsingDirective> scopeUsings = ownerClass?.Usings ?? scan.Usings;
+        IReadOnlyList<string> scopeContaining = ownerClass?.ContainingTypes ?? (IReadOnlyList<string>)Array.Empty<string>();
+
         if (ownerClass is not null)
         {
             var namedMatch = NamedRepositoryRegex().Match(ownerClass.Name);
@@ -615,7 +749,10 @@ internal static partial class SystemDependencyTracer
             }
 
             foreach (var bt in CSharpScanner.SplitTopLevel(ownerClass.BaseList))
-                TryAddGenericRepoEntity(bt, ownerClass, context, touchedEntities);
+            {
+                TryAddGenericRepoEntity(
+                    bt, ownerClass, context, scopeNs, scopeUsings, scopeContaining, touchedEntities, touchedDataStores);
+            }
         }
 
         var hasDbMappings = context.DbSetMappings.DbSetsByProperty.Count > 0 ||
@@ -881,25 +1018,42 @@ internal static partial class SystemDependencyTracer
         string typeRef,
         CSharpScanner.ClassDecl? scopeDecl,
         SystemAnalysisContext context,
-        List<string> touchedEntities)
+        string scopeNamespace,
+        IReadOnlyList<UsingDirective> scopeUsings,
+        IReadOnlyList<string> scopeContaining,
+        List<string> touchedEntities,
+        List<string> touchedDataStores)
     {
-        if (context.DbSetMappings.DbSetsByEntity.Count == 0 || !typeRef.Contains('<', StringComparison.Ordinal))
+        if (!typeRef.Contains('<', StringComparison.Ordinal))
             return;
 
-        try
+        if (context.DbSetMappings.DbSetsByEntity.Count > 0)
         {
-            foreach (Match m in GenericRepositoryRegex().Matches(typeRef))
+            try
             {
-                var entitySimple = CSharpScanner.SimpleName(m.Groups["entity"].Value.Trim());
-                if (scopeDecl is not null &&
-                    !ReceiverTypeMapBuilder.IsEntityCandidate(entitySimple, scopeDecl, context.DbSetMappings.DbSetsByEntity))
-                    continue;
-                if (context.DbSetMappings.DbSetsByEntity.TryGetValue(entitySimple, out var label))
-                    SystemAnalysisContext.AddUniqueOrdinal(touchedEntities, label);
+                foreach (Match m in GenericRepositoryRegex().Matches(typeRef))
+                {
+                    var entitySimple = CSharpScanner.SimpleName(m.Groups["entity"].Value.Trim());
+                    if (scopeDecl is not null &&
+                        !ReceiverTypeMapBuilder.IsEntityCandidate(entitySimple, scopeDecl, context.DbSetMappings.DbSetsByEntity))
+                        continue;
+                    if (context.DbSetMappings.DbSetsByEntity.TryGetValue(entitySimple, out var label))
+                        SystemAnalysisContext.AddUniqueOrdinal(touchedEntities, label);
+                }
+            }
+            catch (RegexMatchTimeoutException)
+            {
             }
         }
-        catch (RegexMatchTimeoutException)
+
+        if (DataStoreDiscovery.TryResolveNonEfRepositoryEntity(
+                context, typeRef, scopeDecl, scopeNamespace, scopeUsings, scopeContaining,
+                out var nonEfEntity, out var nonEfStore))
         {
+            if (!string.IsNullOrEmpty(nonEfEntity))
+                SystemAnalysisContext.AddUniqueOrdinal(touchedEntities, nonEfEntity);
+            if (!string.IsNullOrEmpty(nonEfStore))
+                SystemAnalysisContext.AddUniqueOrdinal(touchedDataStores, nonEfStore);
         }
     }
 
@@ -1034,6 +1188,7 @@ internal static partial class SystemDependencyTracer
         ep.TargetRequests.Sort(StringComparer.Ordinal);
         ep.CalledServices.Sort(StringComparer.Ordinal);
         ep.TouchedDbContexts.Sort(StringComparer.Ordinal);
+        ep.TouchedDataStores.Sort(StringComparer.Ordinal);
         ep.TouchedEntities.Sort(StringComparer.Ordinal);
         ep.PublishedMessages.Sort(StringComparer.Ordinal);
     }

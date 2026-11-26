@@ -154,7 +154,8 @@ internal static partial class WorkerAndConsumerSystemScanner
         int spanStart,
         int spanEnd,
         SourceLocation? location,
-        List<SystemEntrypointInfo> target)
+        List<SystemEntrypointInfo> target,
+        bool scopeToMethodBody = false)
     {
         var matchedRequests = context.RequestsBySimple.Count > 0
             ? EndpointRequestMatcher.FindReferencedRequests(
@@ -190,7 +191,8 @@ internal static partial class WorkerAndConsumerSystemScanner
             spanStart,
             spanEnd,
             entrypoint,
-            matchedRequests);
+            matchedRequests,
+            scopeToMethodBody: scopeToMethodBody);
 
         target.Add(entrypoint);
     }
@@ -267,7 +269,8 @@ internal static partial class WorkerAndConsumerSystemScanner
                 methodStart,
                 methodEnd,
                 SourceLocation.Create(file.Path, context.Result.RootPath, file.Code, match.Index),
-                target);
+                target,
+                scopeToMethodBody: true);
         }
     }
 

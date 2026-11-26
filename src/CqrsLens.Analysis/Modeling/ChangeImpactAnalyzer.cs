@@ -8,7 +8,7 @@ public static class ChangeImpactAnalyzer
 {
     private static readonly string[] ValidTargetKinds =
     [
-        "project", "entity", "dbcontext", "service", "notification", "handler", "request",
+        "project", "entity", "dbcontext", "datastore", "service", "notification", "handler", "request",
         "entrypoint", "event",
     ];
 
@@ -513,6 +513,7 @@ public static class ChangeImpactAnalyzer
         private readonly Dictionary<string, List<ImpactNode>> notificationsBySimple = new(StringComparer.Ordinal);
         private readonly Dictionary<string, ImpactNode> dbContextsByFull = new(StringComparer.Ordinal);
         private readonly Dictionary<string, List<ImpactNode>> dbContextsBySimple = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, ImpactNode> dataStoresByName = new(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, ImpactNode> entitiesByFull = new(StringComparer.Ordinal);
         private readonly Dictionary<string, List<ImpactNode>> entitiesBySimple = new(StringComparer.Ordinal);
         private readonly Dictionary<string, ImpactNode> servicesByFull = new(StringComparer.Ordinal);
@@ -536,7 +537,7 @@ public static class ChangeImpactAnalyzer
             {
                 if (targetKind is null)
                 {
-                    return node.Kind is "project" or "entity" or "dbcontext" or "service" or
+                    return node.Kind is "project" or "entity" or "dbcontext" or "datastore" or "service" or
                         "notification" or "handler" or "request" or "entrypoint" or "event";
                 }
 
@@ -704,6 +705,25 @@ public static class ChangeImpactAnalyzer
                     var entitySimple = CSharpScanner.SimpleName(set.Entity);
                     var entityNode = ResolveOrAddEntity(set.Entity, entitySimple, dbContext.ProjectName, dbContext.Location, result);
                     AddEdge(node, entityNode, $"exposes DbSet {set.Property}");
+                }
+            }
+
+            foreach (var store in result.DataStores)
+            {
+                if (store.Kind is DataStoreKind.EfCore or DataStoreKind.Ef6)
+                    continue;
+
+                var node = AddNode("datastore", store.Name, store.Name, store.ProjectName, store.Location);
+                dataStoresByName.TryAdd(store.Name, node);
+                TrackOwned(result, node);
+
+                foreach (var entityName in store.Entities)
+                {
+                    var simple = CSharpScanner.SimpleName(entityName);
+                    if (string.IsNullOrWhiteSpace(simple))
+                        continue;
+                    var entityNode = ResolveOrAddEntity(entityName, simple, store.ProjectName, store.Location, result);
+                    AddEdge(node, entityNode, "exposes entity");
                 }
             }
 
@@ -1128,6 +1148,7 @@ public static class ChangeImpactAnalyzer
                 LinkPersistenceAndMessagesForNode(
                     svcNode,
                     effect.TouchedDbContexts,
+                    effect.TouchedDataStores,
                     effect.TouchedEntities,
                     effect.PublishedMessages);
             }
@@ -1195,6 +1216,7 @@ public static class ChangeImpactAnalyzer
         private void LinkPersistenceAndMessagesForNode(
             ImpactNode ownerNode,
             IReadOnlyList<string> dbContexts,
+            IReadOnlyList<string> dataStores,
             IReadOnlyList<string> entities,
             IReadOnlyList<string> publishedMessages)
         {
@@ -1202,6 +1224,12 @@ public static class ChangeImpactAnalyzer
             {
                 if (ResolveNode(dbName, dbContextsByFull, dbContextsBySimple) is { } dbNode)
                     AddEdge(ownerNode, dbNode, "uses DbContext");
+            }
+
+            foreach (var dsName in dataStores)
+            {
+                if (dataStoresByName.TryGetValue(dsName, out var dsNode))
+                    AddEdge(ownerNode, dsNode, "uses data store");
             }
 
             foreach (var entityLabel in entities)
@@ -1256,6 +1284,7 @@ public static class ChangeImpactAnalyzer
                 LinkPersistenceAndMessagesForNode(
                     epNode,
                     ep.TouchedDbContexts,
+                    ep.TouchedDataStores,
                     ep.TouchedEntities,
                     ep.PublishedMessages);
             }

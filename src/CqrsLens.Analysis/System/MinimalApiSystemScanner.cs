@@ -429,7 +429,8 @@ internal static partial class MinimalApiSystemScanner
                 bodyStart,
                 bodyEnd,
                 entrypoint,
-                matchedRequests);
+                matchedRequests,
+                scopeToMethodBody: true);
 
             target.Add(entrypoint);
         }
@@ -519,7 +520,8 @@ internal static partial class MinimalApiSystemScanner
                 targetMethod.BodyStart,
                 targetMethod.BodyEnd,
                 entrypoint,
-                matchedRequests);
+                matchedRequests,
+                scopeToMethodBody: true);
 
             target.Add(entrypoint);
         }

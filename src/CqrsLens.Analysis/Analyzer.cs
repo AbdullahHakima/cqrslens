@@ -129,11 +129,17 @@ public static class Analyzer
         phases.Record("Flow graph");
 
         var systemContext = SystemAnalysisContext.Create(parsedFiles, result, serviceHierarchy, pathFilter);
+        DataStoreDiscovery.Discover(systemContext);
+        phases.Record("Data stores");
+
         SystemEntrypointDiscovery.Discover(systemContext);
         phases.Record("System entrypoints");
 
         SystemDependencyTracer.PopulateServiceClassEffects(systemContext);
         phases.Record("Service effects");
+
+        DataStoreDiscovery.FinalizeAccessors(systemContext);
+        phases.Record("Data store accessors");
 
         IntegrationFlowDiscovery.Discover(systemContext);
         phases.Record("Integration flows");

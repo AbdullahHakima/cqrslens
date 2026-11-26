@@ -11,6 +11,9 @@ internal sealed class SystemAnalysisContext
     private readonly Dictionary<CSharpScanner.ClassDecl, Dictionary<string, string>> _classMemberMapCache = new();
     private readonly Dictionary<CSharpScanner.ClassDecl, List<string>> _classDepsCache = new();
     private readonly Dictionary<CSharpScanner.ClassDecl, CachedClassEffects> _classEffectsCache = new();
+    private readonly Dictionary<CSharpScanner.ClassDecl, ClassMethodIndex> _classMethodIndexCache = new();
+    private readonly Dictionary<CSharpScanner.ClassDecl, ClassDataAccess> _classDataAccessMap = new();
+    private readonly Dictionary<string, string> _genericRepoStoreByProject = new(StringComparer.OrdinalIgnoreCase);
 
     private SystemAnalysisContext(
         IReadOnlyList<(SourceFile File, CSharpScanner.FileScan Scan, SourceMask Mask)> parsedFiles,
@@ -139,6 +142,41 @@ internal sealed class SystemAnalysisContext
 
     public void SetCachedClassEffects(CSharpScanner.ClassDecl decl, CachedClassEffects effects)
         => _classEffectsCache[decl] = effects;
+
+    public ClassMethodIndex GetClassMethodIndex(
+        CSharpScanner.ClassDecl decl,
+        SourceFile file,
+        CSharpScanner.FileScan scan,
+        SourceMask mask)
+    {
+        if (_classMethodIndexCache.TryGetValue(decl, out var cached))
+            return cached;
+
+        var computed = ClassMethodIndex.Build(this, decl, file, scan, mask);
+        _classMethodIndexCache[decl] = computed;
+        return computed;
+    }
+
+    public ClassDataAccess? GetClassDataAccess(CSharpScanner.ClassDecl decl)
+        => _classDataAccessMap.TryGetValue(decl, out var access) ? access : null;
+
+    public ClassDataAccess GetOrCreateClassDataAccess(CSharpScanner.ClassDecl decl)
+    {
+        if (_classDataAccessMap.TryGetValue(decl, out var existing))
+            return existing;
+
+        existing = new ClassDataAccess();
+        _classDataAccessMap[decl] = existing;
+        return existing;
+    }
+
+    public string? GetGenericRepoStoreForProject(string? projectName)
+        => !string.IsNullOrWhiteSpace(projectName) && _genericRepoStoreByProject.TryGetValue(projectName, out var store)
+            ? store
+            : null;
+
+    public void SetGenericRepoStoreForProject(string projectName, string storeName)
+        => _genericRepoStoreByProject[projectName] = storeName;
 
     public bool IsTestProject(string? projectName)
         => !string.IsNullOrWhiteSpace(projectName) && TestProjects.Contains(projectName);
