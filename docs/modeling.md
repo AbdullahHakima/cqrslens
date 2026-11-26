@@ -14,7 +14,7 @@ and architecture decisions are the source of truth for the proposed behavior.
 | Does the implementation match the agreed slice? | `verify_slice_design` or `--slice-design` | Per-field status and source evidence for project, `kind`, request/operation, handler (CQRS), validator, endpoint/RPC/worker trigger, properties, publishes, dispatches, persistence (`dbContexts` / `entities`), dependencies, and `forbiddenDependencies`. Pass a directory to `--slice-design` to verify all `*.slice.json` files in one scan. |
 | What should fail first? | `plan_slice_tests` | Stated scenarios, payload/operation fields, collaborators with recommended test doubles, active behaviors, discovered test projects and test references, heuristic scenario-to-boundary mappings, and open questions. |
 | Where is the slice in the TDD loop? | `verify_tdd_cycle` or `--tdd-check` | Fail-closed phase (`spec_draft`, `red`, `green_incomplete`, `verified`, `drifted`, or `inconclusive`), matching passed/failed tests from optional `.trx` results, slice-scoped architecture checks (including `CircularServiceDependency`), and `nextActions`. |
-| Did the implementation match the decision? | Run tests with `--logger trx` and use `verify_tdd_cycle`, `diff_architecture`, `trace_request_impact`, or `verify_claim` | Runtime assertions, the observed project and architecture delta, and evidence for specific static claims (`has handler`, `calls service`, `references project`, `touches entity`, `uses DbContext`, `publishes`, `communicates with`, `has test reference`, etc.). |
+| Did the implementation match the decision? | Run tests with `--logger trx` and use `verify_tdd_cycle`, `diff_architecture`, `trace_request_impact`, or `verify_claim` | Runtime assertions, the observed project and architecture delta, and evidence for specific static claims (`has handler`, `calls service`, `references project`, `touches entity`, `uses DbContext`, `uses data store`, `publishes`, `communicates with`, `has test reference`, etc.). |
 
 ## MCP prompts
 
@@ -120,9 +120,9 @@ cqrslens . --impact "POST /api/catalog/items" --impact-kind entrypoint
 cqrslens . --impact OrderStatusChangedToAwaitingValidationIntegrationEvent --impact-kind event
 ```
 
-`--impact-kind` / `targetKind` supports 9 target kinds: `project`, `entity`,
-`dbcontext`, `service`, `notification`, `handler`, `request`, `entrypoint`, and
-`event`.
+`--impact-kind` / `targetKind` supports 10 target kinds: `project`, `entity`,
+`dbcontext`, `datastore`, `service`, `notification`, `handler`, `request`,
+`entrypoint`, and `event`.
 
 The request and validator are in `SampleShop.Application`. Open the source
 location for the validator. Its current rules require a positive customer ID and
@@ -269,15 +269,17 @@ CqrsLens works cleanly on repositories with zero MediatR/Wolverine usage (verifi
   cqrslens path/to/eShop --slice-design update-basket.slice.json --strict --format md -o update-basket.md
   ```
   Verified on `dotnet/eShop` (`3c6e531a`): produces `kind: "Grpc"`, owning project `Basket.API`, endpoint `GRPC BasketService.UpdateBasket` (non-`/` trigger strings are accepted for `GRPC`, `WORKER`, and `CONSUME`), `RedisBasketRepository`, and exits `0` under `--slice-design --strict`.
-- **Direct entity impact (`dotnet/eShop`, `CatalogItem`)**:
+- **Direct entity & non-EF store impact (`dotnet/eShop` `CatalogItem`, `nopCommerce` `Order`, `--impact-kind datastore`)**:
   ```bash
   cqrslens path/to/eShop --impact CatalogItem --impact-kind entity --format html -o impact.html
+  cqrslens path/to/nopCommerce/src --impact Order --impact-kind entity --format md -o order-impact.md
+  cqrslens path/to/eShop --impact "Redis (Basket.API)" --impact-kind datastore --format md -o redis-impact.md
   ```
-  Verified on `dotnet/eShop` (`3c6e531a`): identifies `6` affected projects, `36` impacted items, `26` existing test references, and renders `1` zero-JS SVG diagram.
+  Verified on `dotnet/eShop` (`3c6e531a`): `CatalogItem` identifies `6` affected projects, `36` impacted items, `26` existing test references, and renders `1` zero-JS SVG diagram. On zero-EF `nopCommerce` (`0344b617`), `Order` traces **`1,373` impacted items across `40` projects** (`49` test references) and links back to `Linq2Db (Nop.Data)`.
 - **Direct flows, direct sequences & cycle detection without Mediator**:
-  - When a codebase has zero CQRS requests/handlers/behaviors (such as `nopCommerce` `0344b617`, `41` projects, `962` system entrypoints, `116` integration flows), Console/Markdown/HTML reports automatically omit empty `0 Requests / 0 Handlers / 0 Behaviors` sections, adapt stat cards, and render **Direct Flows** and **Operation Sequences** (`12` `sequenceDiagram` blocks on `nopCommerce`, zero `participant Mediator` clutter).
+  - When a codebase has zero CQRS requests/handlers/behaviors (such as `nopCommerce` `0344b617`, `41` projects, `962` system entrypoints, `116` integration flows, `3` non-EF `DataStores` led by `Linq2Db (Nop.Data)` with `149` entities), Console/Markdown/HTML reports automatically omit empty `0 Requests / 0 Handlers / 0 Behaviors` sections, adapt stat cards (`Data stores`), and render **Direct Flows** and **Operation Sequences** (`12` controller-diversified `sequenceDiagram` blocks on `nopCommerce`, zero `participant Mediator` clutter).
   - `ArchitectureChecker` reports **`CircularServiceDependency`** (warning, configurable in `cqrslens.json` or suppressible via `rules`) when two or more non-test application services form a constructor-injected dependency cycle (`0` false positives across all `10` OSS gauntlet repos).
-  - `verify_claim` evaluates `touches entity`, `uses DbContext`, `calls service`, `publishes`, and **`communicates with`** (using scanned `IntegrationFlows`) across both CQRS handlers and direct `SystemEntrypoint` operations, failing closed as `not determinable` when static links are absent rather than guessing.
+  - `verify_claim` evaluates `touches entity`, `uses DbContext`, `uses data store` (covering `EF Core`, `EF6`, `Linq2Db`, `Dapper`, `MongoDB`, `NHibernate`, `ADO.NET`, `Redis`, `Cosmos DB`, `Marten`/`RavenDB`), `calls service`, `publishes`, and **`communicates with`** (using scanned `IntegrationFlows`) across both CQRS handlers and direct `SystemEntrypoint` operations, failing closed as `not determinable` when static links are absent rather than guessing.
 
 ## What the model covers
 

@@ -29,8 +29,25 @@ where they exist; the dates are not promises.
     `event`), and `verify_claim` (`communicates with` across `IntegrationFlows`
     plus direct `SystemEntrypoint` evidence) — verified end-to-end on `dotnet/eShop`
     non-MediatR `CatalogApi.CreateItem` (`Endpoint`), `BasketService.UpdateBasket`
-    (`Grpc`), and `CatalogItem` (`entity`), plus `12/12` `UniversalArchitectureTests`
-    (`799` passing xUnit tests total, `72/72` draft round-trips, `0` parity deltas).
+    (`Grpc`), and `CatalogItem` (`entity`), plus `12/12` `UniversalArchitectureTests`.
+  - **Universal Persistence & Method-Scoped Action Precision**:
+    - `ClassMethodIndex` and method-scoped `SystemDependencyTracer` trace
+      individual MVC controller actions, Minimal APIs, gRPC methods, and
+      `[CapSubscribe]` consumers through intra-class helper call chains instead
+      of inheriting whole-controller constructor pollution, while
+      `EndpointRoutes.ForSystemController` resolves inherited `[Area]` /
+      `[ActionName]` routes and `DirectSequenceBuilder` diversifies sequence
+      coverage across controllers.
+    - `DataStoreDiscovery` (`DataStores` in JSON/Markdown/HTML/Landscape/Direct
+      Flows/`--impact-kind datastore`/`get_architecture_dna`/`verify_claim`)
+      discovers `EF Core`, `EF6`, `Linq2Db` (incl. `IRepository<T>`), `Dapper`,
+      `MongoDB`, `NHibernate`, `ADO.NET`, `Redis`, `Cosmos DB`, and `Marten` /
+      `RavenDB` with false-positive guards (`AspNetCore.Http.ISession`,
+      non-Redis `IDatabase`), discovering **`34` DataStores** across the 10-repo
+      gauntlet (e.g., `nopCommerce` `Linq2Db (Nop.Data)` with `149` entities,
+      `dotnet/eShop` `Redis (Basket.API)` + `ADO.NET`, `eShopOnContainers`
+      `Dapper` + `Redis`) with **`0` Text ↔ Roslyn parity deltas** and **`803`**
+      passing xUnit tests (`0` failures, `0` warnings).
 - **Big-picture system intelligence & full coverage**:
   - System-wide entrypoint discovery (`SystemEntrypoints`) across HTTP Minimal
     APIs, MVC controllers, FastEndpoints, gRPC `*Base` services, Blazor

@@ -208,7 +208,8 @@ def check_parity(text_doc: dict, roslyn_doc: dict) -> dict:
         ("endpoints", lambda x: f"{x.get('httpMethod', '')} {x.get('route', '')} -> {x.get('targetRequestFullName') or x.get('targetRequestName') or ''}"),
         ("systemEntrypoints", lambda x: f"{x.get('project') or ''}|{x.get('kind', '')}|{x.get('executionStyle', '')}|{x.get('method', '')}|{x.get('routeOrTrigger', '')}|{x.get('name', '')}"),
         ("integrationFlows", lambda x: f"{x.get('kind', '')}|{x.get('fromProject', '')}->{x.get('toProject', '')}|{x.get('label', '')}|{x.get('messageType') or ''}"),
-        ("serviceProfiles", lambda x: f"{x.get('projectName', '')}|{x.get('runtimeRole', '')}|{x.get('httpEndpointCount', 0)}/{x.get('grpcEndpointCount', 0)}/{x.get('workerCount', 0)}/{x.get('messageConsumerCount', 0)}/{x.get('requestCount', 0)}/{x.get('dbContextCount', 0)}"),
+        ("dataStores", lambda x: f"{x.get('project') or ''}|{x.get('kind', '')}|{x.get('technology', '')}|{x.get('provider') or ''}|{x.get('name', '')}|{len(x.get('entities') or [])}|{len(x.get('accessedBy') or [])}"),
+        ("serviceProfiles", lambda x: f"{x.get('projectName', '')}|{x.get('runtimeRole', '')}|{x.get('httpEndpointCount', 0)}/{x.get('grpcEndpointCount', 0)}/{x.get('workerCount', 0)}/{x.get('messageConsumerCount', 0)}/{x.get('requestCount', 0)}/{x.get('dbContextCount', 0)}/{x.get('dataStoreCount', 0)}"),
     ]
     deltas = {}
     for key, selector in keys:
@@ -438,6 +439,7 @@ def test_repo(repo: dict[str, str], tool_dll: Path, corpus_dir: Path, work_root:
         "skippedFiles": len(text_doc.get("skippedFiles") or []),
         "resolvedEdges": len(text_doc.get("resolvedEdges") or []),
         "serviceCallEdges": len(text_doc.get("serviceCallEdges") or []),
+        "dataStores": len(text_doc.get("dataStores") or []),
         "systemEntrypoints": len(text_doc.get("systemEntrypoints") or []),
         "integrationFlows": len(text_doc.get("integrationFlows") or []),
         "serviceProfiles": len(text_doc.get("serviceProfiles") or []),
@@ -453,6 +455,7 @@ def test_repo(repo: dict[str, str], tool_dll: Path, corpus_dir: Path, work_root:
         "skippedFiles": len(roslyn_doc.get("skippedFiles") or []),
         "resolvedEdges": len(roslyn_doc.get("resolvedEdges") or []),
         "serviceCallEdges": len(roslyn_doc.get("serviceCallEdges") or []),
+        "dataStores": len(roslyn_doc.get("dataStores") or []),
         "systemEntrypoints": len(roslyn_doc.get("systemEntrypoints") or []),
         "integrationFlows": len(roslyn_doc.get("integrationFlows") or []),
         "serviceProfiles": len(roslyn_doc.get("serviceProfiles") or []),
@@ -464,7 +467,7 @@ def test_repo(repo: dict[str, str], tool_dll: Path, corpus_dir: Path, work_root:
     s = text_doc.get("summary", {})
     print(
         f"  text:   {s.get('projects')} proj, {s.get('requests')} req, {s.get('handlers')} hdl, "
-        f"{s.get('validators')} val, {s.get('dbContexts')} ctx, {s.get('endpoints')} ep, "
+        f"{s.get('validators')} val, {s.get('dbContexts')} ctx, {record['text']['dataStores']} ds, {s.get('endpoints')} ep, "
         f"{record['text']['systemEntrypoints']} sysEp, {record['text']['integrationFlows']} flows, {record['text']['serviceProfiles']} profiles, "
         f"{text_doc.get('elapsedMilliseconds')}ms (wall {text_wall_ms}ms)",
         flush=True,
@@ -472,7 +475,7 @@ def test_repo(repo: dict[str, str], tool_dll: Path, corpus_dir: Path, work_root:
     sr = roslyn_doc.get("summary", {})
     print(
         f"  roslyn: {sr.get('projects')} proj, {sr.get('requests')} req, {sr.get('handlers')} hdl, "
-        f"{sr.get('validators')} val, {sr.get('dbContexts')} ctx, {sr.get('endpoints')} ep, "
+        f"{sr.get('validators')} val, {sr.get('dbContexts')} ctx, {record['roslyn']['dataStores']} ds, {sr.get('endpoints')} ep, "
         f"{record['roslyn']['systemEntrypoints']} sysEp, {record['roslyn']['integrationFlows']} flows, {record['roslyn']['serviceProfiles']} profiles, "
         f"{roslyn_doc.get('elapsedMilliseconds')}ms (wall {roslyn_wall_ms}ms)",
         flush=True,
