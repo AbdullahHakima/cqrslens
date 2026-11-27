@@ -9,4 +9,5 @@ internal static class HtmlReportAssets
 
     internal const string Css = HtmlReportStyles.Css;
     internal const string MermaidBootstrapScript = HtmlReportScripts.MermaidBootstrapScript;
+    internal const string InteractiveDiagramScript = HtmlInteractiveScript.Script;
 }

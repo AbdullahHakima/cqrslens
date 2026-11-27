@@ -70,6 +70,114 @@ internal static class HtmlReportStyles
         .svg-diagram { background: #ffffff; border: 1px solid #dce1e8; border-radius: 12px; padding: 1.25rem;
                        overflow: auto; max-height: 78vh; box-shadow: 0 1px 3px rgba(15, 23, 42, .04); }
         .svg-diagram svg { display: block; width: auto; height: auto; max-width: none; margin: 0 auto; }
+        .svg-diagram.is-interactive { cursor: grab; user-select: none; }
+        .svg-diagram.is-interactive.is-dragging { cursor: grabbing; }
+        .svg-diagram.is-interactive .node, .svg-diagram.is-interactive .edge, .svg-diagram.is-interactive .edge-label,
+        .svg-diagram.is-interactive .er-entity, .svg-diagram.is-interactive .er-relationship,
+        .svg-diagram.is-interactive .er-relationship-label, .svg-diagram.is-interactive .seq-participant,
+        .svg-diagram.is-interactive .seq-message { cursor: pointer; }
+        .svg-diagram .node, .svg-diagram .edge, .svg-diagram .edge-label, .svg-diagram .subgraph,
+        .svg-diagram .er-entity, .svg-diagram .er-relationship, .svg-diagram .er-relationship-label,
+        .svg-diagram .seq-participant, .svg-diagram .seq-message, .svg-diagram .svg-seq-lifeline, .svg-diagram .seq-note {
+          transition: opacity .15s ease;
+        }
+        .svg-diagram .node:hover .svg-node-box,
+        .svg-diagram .er-entity:hover .svg-er-box,
+        .svg-diagram .seq-participant:hover .svg-seq-box { stroke-width: 2.3; filter: drop-shadow(0 2px 5px rgba(37, 99, 235, .25)); }
+        .svg-diagram .edge:hover .svg-edge-path,
+        .svg-diagram .er-relationship:hover .svg-er-line,
+        .svg-diagram .seq-message:hover .svg-seq-msg-line { stroke: #2563eb; stroke-width: 2.5; }
+        .diagram-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem;
+                           margin-bottom: .45rem; }
+        .diagram-search { padding: .34rem .65rem; border: 1px solid #cbd5e1; border-radius: 7px; font-size: .84rem;
+                          min-width: 190px; max-width: 280px; width: 100%; background: #ffffff; color: inherit; }
+        .diagram-mode-group, .diagram-zoom-group { display: flex; flex-wrap: wrap; align-items: center; gap: .28rem; }
+        .diagram-btn { cursor: pointer; padding: .26rem .56rem; border: 1px solid #cbd5e1; border-radius: 6px;
+                       background: #ffffff; color: #334155; font-size: .78rem; font-weight: 600; }
+        .diagram-btn:hover { background: #f1f5f9; }
+        .diagram-btn.is-active { background: #2563eb; border-color: #2563eb; color: #ffffff; }
+        .diagram-inspector { background: #f8fafc; border: 1px solid #dce1e8; border-radius: 9px; padding: .52rem .75rem;
+                             margin-bottom: .5rem; font-size: .83rem; display: flex; flex-direction: column; gap: .38rem; }
+        .inspector-hint { color: #64748b; font-size: .8rem; }
+        .inspector-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem; }
+        .inspector-header-left, .inspector-header-right, .inspector-edge-flow { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+        .inspector-title { font-weight: 700; color: #0f172a; }
+        .inspector-stats { font-size: .76rem; padding: .12rem .48rem; border-radius: 999px; background: #e2e8f0; color: #334155; font-weight: 600; }
+        .inspector-clear { cursor: pointer; padding: .18rem .52rem; border: 1px solid #cbd5e1; border-radius: 6px;
+                           background: #ffffff; color: #334155; font-size: .76rem; font-weight: 600; }
+        .inspector-clear:hover { background: #f1f5f9; }
+        .inspector-group { display: flex; flex-wrap: wrap; align-items: center; gap: .32rem; }
+        .inspector-group-label { font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; margin-right: .15rem; }
+        .chip-in-lbl { color: #0369a1; }
+        .chip-out-lbl { color: #b45309; }
+        .inspector-chip { cursor: pointer; padding: .16rem .52rem; border-radius: 999px; font-size: .77rem; font-weight: 600;
+                          border: 1px solid #cbd5e1; background: #ffffff; color: #1e293b; }
+        .inspector-chip.chip-in { background: #f0f9ff; border-color: #7dd3fc; color: #0369a1; }
+        .inspector-chip.chip-in:hover { background: #e0f2fe; }
+        .inspector-chip.chip-out { background: #fffbeb; border-color: #fcd34d; color: #b45309; }
+        .inspector-chip.chip-out:hover { background: #fef3c7; }
+        .inspector-chip.chip-match { background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }
+        .inspector-arrow { color: #475569; font-weight: 600; }
+        .svg-diagram svg.is-focusing .node.is-dim,
+        .svg-diagram svg.is-focusing .edge.is-dim,
+        .svg-diagram svg.is-focusing .edge-label.is-dim,
+        .svg-diagram svg.is-focusing .er-entity.is-dim,
+        .svg-diagram svg.is-focusing .er-relationship.is-dim,
+        .svg-diagram svg.is-focusing .er-relationship-label.is-dim,
+        .svg-diagram svg.is-focusing .seq-participant.is-dim,
+        .svg-diagram svg.is-focusing .seq-message.is-dim,
+        .svg-diagram svg.is-focusing .seq-note.is-dim,
+        .svg-diagram svg.is-focusing .svg-seq-lifeline.is-dim,
+        pre.mermaid svg.is-focusing g.node.is-dim,
+        pre.mermaid svg.is-focusing path.flowchart-link.is-dim { opacity: 0.13; }
+        .svg-diagram svg.is-focusing .subgraph.is-dim { opacity: 0.30; }
+        .svg-diagram svg.is-focusing .node.is-selected .svg-node-box,
+        .svg-diagram svg.is-focusing .er-entity.is-selected .svg-er-box,
+        .svg-diagram svg.is-focusing .seq-participant.is-selected .svg-seq-box { stroke: #2563eb; stroke-width: 2.8; filter: drop-shadow(0 0 6px rgba(37, 99, 235, .45)); }
+        .svg-diagram svg.is-focusing .node.is-selected .svg-node-text,
+        .svg-diagram svg.is-focusing .er-entity.is-selected .svg-er-title,
+        .svg-diagram svg.is-focusing .seq-participant.is-selected .svg-seq-text { font-weight: 700; }
+        .svg-diagram svg.is-focusing .node.is-neighbor-in .svg-node-box,
+        .svg-diagram svg.is-focusing .er-entity.is-neighbor-in .svg-er-box,
+        .svg-diagram svg.is-focusing .seq-participant.is-neighbor-in .svg-seq-box { stroke: #0284c7; stroke-width: 2.3; }
+        .svg-diagram svg.is-focusing .node.is-neighbor-out .svg-node-box,
+        .svg-diagram svg.is-focusing .er-entity.is-neighbor-out .svg-er-box,
+        .svg-diagram svg.is-focusing .seq-participant.is-neighbor-out .svg-seq-box { stroke: #d97706; stroke-width: 2.3; }
+        .svg-diagram svg.is-focusing .node.is-neighbor-both .svg-node-box,
+        .svg-diagram svg.is-focusing .er-entity.is-neighbor-both .svg-er-box,
+        .svg-diagram svg.is-focusing .seq-participant.is-neighbor-both .svg-seq-box { stroke: #7c3aed; stroke-width: 2.4; }
+        .svg-diagram svg.is-focusing .node.is-match .svg-node-box,
+        .svg-diagram svg.is-focusing .er-entity.is-match .svg-er-box,
+        .svg-diagram svg.is-focusing .seq-participant.is-match .svg-seq-box { stroke: #2563eb; stroke-width: 2.5; filter: drop-shadow(0 0 5px rgba(37, 99, 235, .35)); }
+        .svg-diagram svg.is-focusing .edge.is-in .svg-edge-path,
+        .svg-diagram svg.is-focusing .er-relationship.is-in .svg-er-line,
+        .svg-diagram svg.is-focusing .seq-message.is-in .svg-seq-msg-line { stroke: #0284c7; stroke-width: 2.5; }
+        .svg-diagram svg.is-focusing .edge.is-out .svg-edge-path,
+        .svg-diagram svg.is-focusing .er-relationship.is-out .svg-er-line,
+        .svg-diagram svg.is-focusing .seq-message.is-out .svg-seq-msg-line { stroke: #d97706; stroke-width: 2.5; }
+        .svg-diagram svg.is-focusing .edge.is-active .svg-edge-path,
+        .svg-diagram svg.is-focusing .er-relationship.is-active .svg-er-line,
+        .svg-diagram svg.is-focusing .seq-message.is-active .svg-seq-msg-line,
+        pre.mermaid svg.is-focusing path.flowchart-link.is-active { stroke: #2563eb; stroke-width: 2.8; }
+        .svg-diagram svg.is-focusing .edge-label.is-in .svg-edge-pill,
+        .svg-diagram svg.is-focusing .er-relationship-label.is-in .svg-er-pill,
+        .svg-diagram svg.is-focusing .seq-message.is-in .svg-seq-msg-bg { fill: #e0f2fe; stroke: #0284c7; stroke-width: 1.5; }
+        .svg-diagram svg.is-focusing .edge-label.is-in .svg-edge-text,
+        .svg-diagram svg.is-focusing .er-relationship-label.is-in .svg-er-pill-text,
+        .svg-diagram svg.is-focusing .seq-message.is-in .svg-seq-msg-text { fill: #0c4a6e; font-weight: 600; }
+        .svg-diagram svg.is-focusing .edge-label.is-out .svg-edge-pill,
+        .svg-diagram svg.is-focusing .er-relationship-label.is-out .svg-er-pill,
+        .svg-diagram svg.is-focusing .seq-message.is-out .svg-seq-msg-bg { fill: #fef3c7; stroke: #d97706; stroke-width: 1.5; }
+        .svg-diagram svg.is-focusing .edge-label.is-out .svg-edge-text,
+        .svg-diagram svg.is-focusing .er-relationship-label.is-out .svg-er-pill-text,
+        .svg-diagram svg.is-focusing .seq-message.is-out .svg-seq-msg-text { fill: #78350f; font-weight: 600; }
+        .svg-diagram svg.is-focusing .edge-label.is-active .svg-edge-pill,
+        .svg-diagram svg.is-focusing .er-relationship-label.is-active .svg-er-pill,
+        .svg-diagram svg.is-focusing .seq-message.is-active .svg-seq-msg-bg { fill: #dbeafe; stroke: #2563eb; stroke-width: 1.6; }
+        .svg-diagram svg.is-focusing .edge-label.is-active .svg-edge-text,
+        .svg-diagram svg.is-focusing .er-relationship-label.is-active .svg-er-pill-text,
+        .svg-diagram svg.is-focusing .seq-message.is-active .svg-seq-msg-text { fill: #1e3a8a; font-weight: 600; }
+        .svg-diagram svg.is-focusing .svg-seq-lifeline.is-active { stroke: #4f46e5; stroke-width: 1.8; }
         pre.mermaid { background: #ffffff; border: 1px solid #dce1e8; border-radius: 12px; padding: 1.25rem;
                       overflow: auto; max-height: 78vh; box-shadow: 0 1px 3px rgba(15, 23, 42, .04); }
         .mermaid-toolbar { display: flex; align-items: center; gap: .35rem; margin-bottom: .45rem; justify-content: flex-end; }
@@ -286,6 +394,69 @@ internal static class HtmlReportStyles
           .svg-er-key { fill: #fbbf24; }
           .svg-er-pill { fill: #1e293b; stroke: #475569; }
           .svg-er-pill-text { fill: #e2e8f0; }
+          .diagram-search, .diagram-btn, .inspector-clear { background: #1e293b; border-color: #334155; color: #e2e8f0; }
+          .diagram-btn:hover, .inspector-clear:hover { background: #334155; }
+          .diagram-btn.is-active { background: #2563eb; border-color: #3b82f6; color: #ffffff; }
+          .diagram-inspector { background: #161e2e; border-color: #273449; color: #e2e8f0; }
+          .inspector-title { color: #f8fafc; }
+          .inspector-stats { background: #1e293b; color: #cbd5e1; }
+          .inspector-hint, .inspector-arrow { color: #94a3b8; }
+          .chip-in-lbl { color: #38bdf8; }
+          .chip-out-lbl { color: #fbbf24; }
+          .inspector-chip.chip-in { background: #0c4a6e; border-color: #0284c7; color: #e0f2fe; }
+          .inspector-chip.chip-in:hover { background: #075985; }
+          .inspector-chip.chip-out { background: #451a03; border-color: #d97706; color: #fef3c7; }
+          .inspector-chip.chip-out:hover { background: #78350f; }
+          .inspector-chip.chip-match { background: #172554; border-color: #3b82f6; color: #dbeafe; }
+          .svg-diagram .edge:hover .svg-edge-path,
+          .svg-diagram .er-relationship:hover .svg-er-line,
+          .svg-diagram .seq-message:hover .svg-seq-msg-line { stroke: #60a5fa; }
+          .svg-arrow-in { fill: #38bdf8; }
+          .svg-arrow-out { fill: #fbbf24; }
+          .svg-arrow-active { fill: #60a5fa; }
+          .svg-diagram svg.is-focusing .node.is-selected .svg-node-box,
+          .svg-diagram svg.is-focusing .er-entity.is-selected .svg-er-box,
+          .svg-diagram svg.is-focusing .seq-participant.is-selected .svg-seq-box { stroke: #60a5fa; stroke-width: 2.8; filter: drop-shadow(0 0 7px rgba(96, 165, 250, .55)); }
+          .svg-diagram svg.is-focusing .node.is-neighbor-in .svg-node-box,
+          .svg-diagram svg.is-focusing .er-entity.is-neighbor-in .svg-er-box,
+          .svg-diagram svg.is-focusing .seq-participant.is-neighbor-in .svg-seq-box { stroke: #38bdf8; stroke-width: 2.3; }
+          .svg-diagram svg.is-focusing .node.is-neighbor-out .svg-node-box,
+          .svg-diagram svg.is-focusing .er-entity.is-neighbor-out .svg-er-box,
+          .svg-diagram svg.is-focusing .seq-participant.is-neighbor-out .svg-seq-box { stroke: #fbbf24; stroke-width: 2.3; }
+          .svg-diagram svg.is-focusing .node.is-neighbor-both .svg-node-box,
+          .svg-diagram svg.is-focusing .er-entity.is-neighbor-both .svg-er-box,
+          .svg-diagram svg.is-focusing .seq-participant.is-neighbor-both .svg-seq-box { stroke: #c084fc; stroke-width: 2.4; }
+          .svg-diagram svg.is-focusing .node.is-match .svg-node-box,
+          .svg-diagram svg.is-focusing .er-entity.is-match .svg-er-box,
+          .svg-diagram svg.is-focusing .seq-participant.is-match .svg-seq-box { stroke: #60a5fa; stroke-width: 2.5; filter: drop-shadow(0 0 6px rgba(96, 165, 250, .45)); }
+          .svg-diagram svg.is-focusing .edge.is-in .svg-edge-path,
+          .svg-diagram svg.is-focusing .er-relationship.is-in .svg-er-line,
+          .svg-diagram svg.is-focusing .seq-message.is-in .svg-seq-msg-line { stroke: #38bdf8; stroke-width: 2.5; }
+          .svg-diagram svg.is-focusing .edge.is-out .svg-edge-path,
+          .svg-diagram svg.is-focusing .er-relationship.is-out .svg-er-line,
+          .svg-diagram svg.is-focusing .seq-message.is-out .svg-seq-msg-line { stroke: #fbbf24; stroke-width: 2.5; }
+          .svg-diagram svg.is-focusing .edge.is-active .svg-edge-path,
+          .svg-diagram svg.is-focusing .er-relationship.is-active .svg-er-line,
+          .svg-diagram svg.is-focusing .seq-message.is-active .svg-seq-msg-line { stroke: #60a5fa; stroke-width: 2.8; }
+          .svg-diagram svg.is-focusing .edge-label.is-in .svg-edge-pill,
+          .svg-diagram svg.is-focusing .er-relationship-label.is-in .svg-er-pill,
+          .svg-diagram svg.is-focusing .seq-message.is-in .svg-seq-msg-bg { fill: #0c4a6e; stroke: #38bdf8; }
+          .svg-diagram svg.is-focusing .edge-label.is-in .svg-edge-text,
+          .svg-diagram svg.is-focusing .er-relationship-label.is-in .svg-er-pill-text,
+          .svg-diagram svg.is-focusing .seq-message.is-in .svg-seq-msg-text { fill: #e0f2fe; }
+          .svg-diagram svg.is-focusing .edge-label.is-out .svg-edge-pill,
+          .svg-diagram svg.is-focusing .er-relationship-label.is-out .svg-er-pill,
+          .svg-diagram svg.is-focusing .seq-message.is-out .svg-seq-msg-bg { fill: #451a03; stroke: #fbbf24; }
+          .svg-diagram svg.is-focusing .edge-label.is-out .svg-edge-text,
+          .svg-diagram svg.is-focusing .er-relationship-label.is-out .svg-er-pill-text,
+          .svg-diagram svg.is-focusing .seq-message.is-out .svg-seq-msg-text { fill: #fef3c7; }
+          .svg-diagram svg.is-focusing .edge-label.is-active .svg-edge-pill,
+          .svg-diagram svg.is-focusing .er-relationship-label.is-active .svg-er-pill,
+          .svg-diagram svg.is-focusing .seq-message.is-active .svg-seq-msg-bg { fill: #172554; stroke: #60a5fa; }
+          .svg-diagram svg.is-focusing .edge-label.is-active .svg-edge-text,
+          .svg-diagram svg.is-focusing .er-relationship-label.is-active .svg-er-pill-text,
+          .svg-diagram svg.is-focusing .seq-message.is-active .svg-seq-msg-text { fill: #dbeafe; }
+          .svg-diagram svg.is-focusing .svg-seq-lifeline.is-active { stroke: #818cf8; stroke-width: 1.8; }
         }
         """;
 }

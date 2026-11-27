@@ -54,7 +54,7 @@ internal static class UsageWriter
                 ("--format FORMAT",
                     "md (default), html, json, or agent. A matching -o extension implies the format."),
                 ("--render MODE",
-                    "HTML diagrams: mermaid (default) or svg (zero-JS inline SVG)."),
+                    "HTML diagrams: mermaid (default), interactive (offline interactive SVG), or svg (zero-JS inline SVG)."),
                 ("--view MODE",
                     "full (default) or overview (detected architecture styles, C4 landscape, service capabilities, entrypoints, and flows)."),
                 ("--focus NAME",

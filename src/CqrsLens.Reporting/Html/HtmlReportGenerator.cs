@@ -61,6 +61,10 @@ public static class HtmlReportGenerator
         {
             html.AppendLine("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:;\">");
         }
+        else if (renderMode == DiagramRenderMode.Interactive)
+        {
+            html.AppendLine("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;\">");
+        }
         html.AppendLine($"<title>Architecture Report — {Encode(rootName)}</title>");
         html.AppendLine("<style>");
         html.AppendLine(HtmlReportAssets.Css);
@@ -319,6 +323,12 @@ public static class HtmlReportGenerator
                 $"integrity=\"{HtmlReportAssets.MermaidIntegrity}\" crossorigin=\"anonymous\"></script>");
             html.AppendLine("<script>");
             html.AppendLine(HtmlReportAssets.MermaidBootstrapScript);
+            html.AppendLine("</script>");
+        }
+        else if (renderMode == DiagramRenderMode.Interactive)
+        {
+            html.AppendLine("<script>");
+            html.AppendLine(HtmlReportAssets.InteractiveDiagramScript);
             html.AppendLine("</script>");
         }
 

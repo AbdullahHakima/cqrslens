@@ -138,21 +138,92 @@ internal static class HtmlReportScripts
                     container.parentNode.insertBefore(bar, container);
                   };
 
+                  const wireMermaidFocus = (svgEl) => {
+                    if (!svgEl) return;
+                    const gNodes = [...svgEl.querySelectorAll('g.node')];
+                    const links = [...svgEl.querySelectorAll('path.flowchart-link')];
+                    if (gNodes.length === 0) return;
+
+                    const getNodeKey = (g) => {
+                      const raw = g.getAttribute('data-id') || g.id || '';
+                      const m = /^flowchart-(.+)-\d+$/.exec(raw);
+                      return m ? m[1] : raw;
+                    };
+                    const getEndpoints = (p) => {
+                      const raw = p.getAttribute('data-id') || p.id || '';
+                      const m = /^L_(.+?)_(.+?)_\d+$/.exec(raw);
+                      if (m) return [m[1], m[2]];
+                      let src = '';
+                      let dst = '';
+                      p.classList.forEach((c) => {
+                        if (c.startsWith('LS-')) src = c.slice(3);
+                        else if (c.startsWith('LE-')) dst = c.slice(3);
+                      });
+                      return [src, dst];
+                    };
+
+                    let focused = null;
+                    const clearMermaid = () => {
+                      focused = null;
+                      svgEl.classList.remove('is-focusing');
+                      gNodes.forEach((n) => n.classList.remove('is-selected', 'is-neighbor-in', 'is-neighbor-out', 'is-dim'));
+                      links.forEach((l) => l.classList.remove('is-active', 'is-dim'));
+                    };
+
+                    gNodes.forEach((g) => {
+                      g.style.cursor = 'pointer';
+                      const key = getNodeKey(g);
+                      g.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (focused === key) {
+                          clearMermaid();
+                          return;
+                        }
+                        focused = key;
+                        svgEl.classList.add('is-focusing');
+                        const rel = new Set([key]);
+                        links.forEach((l) => {
+                          const [s, d] = getEndpoints(l);
+                          const hit = s === key || d === key;
+                          l.classList.toggle('is-active', hit);
+                          l.classList.toggle('is-dim', !hit);
+                          if (hit) {
+                            if (s) rel.add(s);
+                            if (d) rel.add(d);
+                          }
+                        });
+                        gNodes.forEach((n) => {
+                          const nk = getNodeKey(n);
+                          n.classList.toggle('is-selected', nk === key);
+                          n.classList.toggle('is-dim', !rel.has(nk));
+                        });
+                      });
+                      const label = (g.textContent || '').trim();
+                      const anchorId = byName.get(label);
+                      if (anchorId) {
+                        g.addEventListener('dblclick', (e) => {
+                          e.stopPropagation();
+                          openRequestInspector(anchorId);
+                        });
+                      }
+                    });
+                    svgEl.addEventListener('click', (e) => {
+                      if (e.target === svgEl) clearMermaid();
+                    });
+                    document.addEventListener('keydown', (e) => {
+                      if (e.key === 'Escape' && focused !== null) clearMermaid();
+                    });
+                  };
+
                   for (let i = 0; i < nodes.length; i++) {
                     const node = nodes[i];
                     const source = node.textContent ?? '';
                     try {
                       const { svg } = await mermaid.render('cqrslens-diagram-' + i, source);
                       node.innerHTML = svg;
-                      attachZoomControls(node, node.querySelector('svg'));
-                      node.querySelectorAll('g.node').forEach((g) => {
-                        const label = (g.textContent || '').trim();
-                        const anchorId = byName.get(label);
-                        if (anchorId) {
-                          g.style.cursor = 'pointer';
-                          g.addEventListener('click', () => openRequestInspector(anchorId));
-                        }
-                      });
+                      const svgEl = node.querySelector('svg');
+                      attachZoomControls(node, svgEl);
+                      wireMermaidFocus(svgEl);
                     } catch (error) {
                       showSource(node, 'This diagram could not be rendered. ' +
                         (error && error.message ? error.message : String(error)));

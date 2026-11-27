@@ -71,6 +71,10 @@ internal static class ModelingHtmlDocument
         {
             html.AppendLine("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; img-src data:;\">");
         }
+        else if (renderMode == DiagramRenderMode.Interactive)
+        {
+            html.AppendLine("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;\">");
+        }
         html.AppendLine($"<title>{Encode(title)}</title>");
         html.AppendLine("<style>");
         html.AppendLine(HtmlReportAssets.Css);
@@ -95,6 +99,12 @@ internal static class ModelingHtmlDocument
                 $"integrity=\"{HtmlReportAssets.MermaidIntegrity}\" crossorigin=\"anonymous\"></script>");
             html.AppendLine("<script>");
             html.AppendLine(HtmlReportAssets.MermaidBootstrapScript);
+            html.AppendLine("</script>");
+        }
+        else if (renderMode == DiagramRenderMode.Interactive)
+        {
+            html.AppendLine("<script>");
+            html.AppendLine(HtmlReportAssets.InteractiveDiagramScript);
             html.AppendLine("</script>");
         }
 

@@ -199,13 +199,13 @@ internal static class HtmlDiagramSectionRenderer
     /// RENDERING SEAM: turns a Mermaid diagram source into its HTML representation.
     /// In <see cref="DiagramRenderMode.Mermaid"/> mode this emits a
     /// <c>&lt;pre class="mermaid"&gt;</c> block rendered in the browser by Mermaid.js.
-    /// In <see cref="DiagramRenderMode.Svg"/> mode this compiles the diagram to
-    /// deterministic inline SVG ahead of time for zero-JS HTML reports.
+    /// In <see cref="DiagramRenderMode.Svg"/> and <see cref="DiagramRenderMode.Interactive"/>
+    /// modes this compiles the diagram to deterministic inline SVG ahead of time.
     /// </summary>
     internal static string Render(
         string mermaidCode,
         DiagramRenderMode renderMode = DiagramRenderMode.Mermaid)
-        => renderMode == DiagramRenderMode.Svg
+        => renderMode is DiagramRenderMode.Svg or DiagramRenderMode.Interactive
             ? MermaidSvgRenderer.Render(mermaidCode)
             : $"<pre class=\"mermaid\">{Encode(mermaidCode)}</pre>";
 }

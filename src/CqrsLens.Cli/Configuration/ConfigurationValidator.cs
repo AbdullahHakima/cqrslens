@@ -61,8 +61,9 @@ internal static class ConfigurationValidator
         return value.Trim().ToLowerInvariant() switch
         {
             "mermaid" => DiagramRenderMode.Mermaid,
+            "interactive" => DiagramRenderMode.Interactive,
             "svg" => DiagramRenderMode.Svg,
-            _ => throw Invalid(path, $"unknown render mode '{value}' - use mermaid or svg"),
+            _ => throw Invalid(path, $"unknown render mode '{value}' - use mermaid, interactive, or svg"),
         };
     }
 

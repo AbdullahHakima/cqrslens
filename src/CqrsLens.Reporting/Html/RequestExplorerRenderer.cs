@@ -33,7 +33,7 @@ internal static class RequestExplorerRenderer
         html.AppendLine($"<label for=\"cqrs-filter-issues\" class=\"filter-pill\">With Findings ({issueCount})</label>");
         html.AppendLine("</div>");
 
-        if (renderMode == DiagramRenderMode.Mermaid)
+        if (renderMode != DiagramRenderMode.Svg)
         {
             html.AppendLine("<div class=\"explorer-actions\">");
             html.AppendLine("<input type=\"search\" id=\"cqrs-explorer-search\" class=\"explorer-search\" placeholder=\"Filter by request, handler, validator, project, or file…\" aria-label=\"Filter requests\">");

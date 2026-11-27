@@ -90,7 +90,7 @@ public static class CliParser
                     options.TestResultsPath = ReadNonEmptyValue(reader, "--test-results", "a value, e.g. --test-results TestResults/run.trx");
                     break;
                 case "--render":
-                    options.RenderMode = ParseRenderMode(reader.ReadValue("--render", "a value: mermaid or svg"));
+                    options.RenderMode = ParseRenderMode(reader.ReadValue("--render", "a value: mermaid, interactive, or svg"));
                     options.RenderModeSpecified = true;
                     break;
                 case "--view":
@@ -310,8 +310,9 @@ public static class CliParser
         => value.ToLowerInvariant() switch
         {
             "mermaid" => DiagramRenderMode.Mermaid,
+            "interactive" => DiagramRenderMode.Interactive,
             "svg" => DiagramRenderMode.Svg,
-            _ => throw new CliParseException($"error: unknown render mode '{value}' - use mermaid or svg."),
+            _ => throw new CliParseException($"error: unknown render mode '{value}' - use mermaid, interactive, or svg."),
         };
 
     private static ReportViewMode ParseViewMode(string value)
