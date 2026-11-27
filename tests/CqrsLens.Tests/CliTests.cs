@@ -323,6 +323,29 @@ public class CliTests : IDisposable
     }
 
     [Fact]
+    public void InteractiveRenderMode_AndConfigRenderInteractive_ProduceOfflineInteractiveHtmlReport()
+    {
+        WriteValidFixture();
+        var cliOutput = Path.Combine(_root, "interactive-cli.html");
+        var cliResult = Run(new[] { _root, "-o", cliOutput, "--render", "interactive" });
+
+        Assert.Equal(ExitCodes.Success, cliResult.Code);
+        var cliHtml = File.ReadAllText(cliOutput);
+        Assert.Contains("<div class=\"svg-diagram\"><svg ", cliHtml);
+        Assert.Contains("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;\">", cliHtml);
+        Assert.DoesNotContain("mermaid.min.js", cliHtml, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("diagram-toolbar", cliHtml);
+
+        File.WriteAllText(Path.Combine(_root, ".cqrslens.json"), "{ \"render\": \"interactive\" }");
+        var cfgOutput = Path.Combine(_root, "interactive-cfg.html");
+        var cfgResult = Run(new[] { _root, "-o", cfgOutput });
+        Assert.Equal(ExitCodes.Success, cfgResult.Code);
+        var cfgHtml = File.ReadAllText(cfgOutput);
+        Assert.Contains("diagram-toolbar", cfgHtml);
+        Assert.DoesNotContain("mermaid.min.js", cfgHtml, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void UnknownAnalysisMode_IsRejected()
     {
         var result = Run(new[] { _root, "--analysis", "magic" });

@@ -254,6 +254,120 @@ public sealed class DiagramReadabilityAndLayoutTests
         Assert.DoesNotContain("<script", impactHtml, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public void DenseSubgraphFlowchart_NeverPlacesPillsOverSubgraphTitles_AndWidensInternalRowGaps()
+    {
+        var landscapeMermaid = """
+            flowchart LR
+                subgraph grp_api [APIs & Services]
+                    api1[Plugin.Misc.News]
+                    api2[Plugin.Misc.Polls]
+                    api3[Nop.Web]
+                end
+                subgraph grp_workers [Workers & Processors]
+                    w1[Plugin.Misc.Dynamics365]
+                    w2[Plugin.Misc.NopMobileApp]
+                    w3[Plugin.Misc.PowerBI]
+                    w4[Nop.Services]
+                end
+                subgraph grp_data [Data & Messaging]
+                    bus([Event Bus])
+                end
+                api1 -->|delivers 11 events| w1
+                api2 -->|delivers 7 events| w2
+                api3 -->|delivers 19 events| bus
+                w1 -->|publishes 12 events| bus
+                w2 -->|publishes 7 events| bus
+                w3 -->|delivers 4 events| bus
+                w4 -->|publishes 19 events| bus
+            """;
+
+        var landscapeSvg = MermaidSvgRenderer.Render(landscapeMermaid);
+        AssertCleanFlowchartGeometry(landscapeSvg, expectSubgraphs: true, minExpectedSubgraphs: 3);
+
+        var layerResult = new AnalysisResult { RootPath = "/workspace/LayersDemo" };
+        var projs = Enumerable.Range(1, 10)
+            .Select(i => new ProjectInfo
+            {
+                Name = $"Shop.Module{i:00}.FeatureWithFairlyLongProjectName",
+                FilePath = $"/workspace/LayersDemo/src/M{i:00}.csproj",
+                DirectoryPath = $"/workspace/LayersDemo/src/M{i:00}",
+                Layer = "Other",
+            })
+            .ToList();
+        projs[0].ReferenceNames.Add(projs[9].Name);
+        layerResult.Projects.AddRange(projs);
+
+        var layerMermaid = DiagramBuilder.LayerGraph(layerResult)!;
+        var layerSvg = MermaidSvgRenderer.Render(layerMermaid);
+        AssertCleanFlowchartGeometry(layerSvg, expectSubgraphs: true, minExpectedSubgraphs: 1);
+
+        var doc = ParseEmbeddedSvg(layerSvg, out _, out _);
+        var nodeRects = doc.Descendants(SvgNs + "g")
+            .Where(g => (g.Attribute("class")?.Value ?? "").Split(' ').Contains("node"))
+            .Select(g => ToBox(g.Element(SvgNs + "rect")!))
+            .ToList();
+        var distinctYs = nodeRects.Select(b => b.Y).Distinct().OrderBy(y => y).ToList();
+        Assert.True(distinctYs.Count >= 2, "Expected wrapped rows inside dense src subgraph.");
+        var gapBetweenRows = distinctYs[1] - (distinctYs[0] + nodeRects.First(b => Math.Abs(b.Y - distinctYs[0]) < 0.1).H);
+        Assert.True(gapBetweenRows >= 40.0, $"Expected intra-subgraph row gap >= 40px for cross-row arrows, got {gapBetweenRows}.");
+    }
+
+    [Fact]
+    public void InteractiveRenderMode_EmitsOfflineInteractiveSvgWithHitTargetsAndStrictOfflineCsp()
+    {
+        var result = BuildMultiTierSystemResult();
+
+        var fullInteractive = HtmlReportGenerator.Generate(result, DiagramRenderMode.Interactive, CqrsMapSplitMode.Count, ReportViewMode.Full);
+        var overviewInteractive = HtmlReportGenerator.Generate(result, DiagramRenderMode.Interactive, CqrsMapSplitMode.Count, ReportViewMode.Overview);
+        var impactInteractive = ImpactReportGenerator.GenerateHtml(
+            ChangeImpactAnalyzer.Analyze(result, "Shop.Orders.Api", "project"),
+            DiagramRenderMode.Interactive);
+        var proposalInteractive = ProposalReportGenerator.GenerateHtml(
+            result,
+            new ArchitectureProposalEvaluation("passed", 0, [], [], []),
+            DiagramRenderMode.Interactive);
+        var sliceDesign = new SliceDesign(1, "Shop.Orders.Api", "PlaceEnterpriseOrderCommand", "Command", "int", "PlaceEnterpriseOrderHandler", null, null, []);
+        var sliceEval = new SliceDesignEvaluation("matched", sliceDesign, []);
+        var sliceInteractive = SliceDesignReportGenerator.GenerateHtml(sliceEval, DiagramRenderMode.Interactive);
+        var tddInteractive = TddReportGenerator.GenerateHtml(
+            new TddCycleEvaluation("verified", "matched", false, false, 0, 0, 0, [], [], [], [], [], [], "sample scope"),
+            DiagramRenderMode.Interactive);
+
+        foreach (var html in new[] { fullInteractive, overviewInteractive, impactInteractive, proposalInteractive, sliceInteractive, tddInteractive })
+        {
+            Assert.Contains("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:;\">", html);
+            Assert.DoesNotContain("mermaid.min.js", html, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("https://cdn.jsdelivr.net", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("diagram-toolbar", html);
+            Assert.Contains("diagram-inspector", html);
+            Assert.Contains("is-focusing", html);
+            Assert.Contains("<div class=\"svg-diagram\"><svg ", html);
+        }
+
+        Assert.Contains("id=\"cqrs-explorer-search\"", fullInteractive);
+        Assert.Contains("data-edge-index=\"", fullInteractive);
+        Assert.Contains("class=\"svg-edge-hit\"", fullInteractive);
+        Assert.Contains("id=\"arrow-in\"", fullInteractive);
+        Assert.Contains("id=\"arrow-out\"", fullInteractive);
+        Assert.Contains("id=\"arrow-active\"", fullInteractive);
+
+        var erSvg = MermaidSvgRenderer.Render(DiagramBuilder.ErDiagram(new DbContextInfo
+        {
+            Name = "Ctx",
+            Namespace = "Shop.Data",
+            Entities = { new EntityInfo { Name = "A", Namespace = "Shop" }, new EntityInfo { Name = "B", Namespace = "Shop" } },
+            Relationships = { new EntityRelationshipInfo("Shop.A", "Shop.B", "Bs", "A", "AId", true, EntityRelationshipKind.OneToMany) },
+        })!);
+        Assert.Contains("data-edge-index=\"0\"", erSvg);
+        Assert.Contains("class=\"svg-edge-hit\"", erSvg);
+
+        var seqSvg = MermaidSvgRenderer.Render("sequenceDiagram\nparticipant A as Alpha\nparticipant B as Beta\nA->>B: Call");
+        Assert.Contains("data-edge-index=\"0\"", seqSvg);
+        Assert.Contains("class=\"svg-edge-hit\"", seqSvg);
+        Assert.Contains("data-participant=\"A\"", seqSvg);
+    }
+
     private static AnalysisResult BuildMultiTierSystemResult()
     {
         var result = new AnalysisResult { RootPath = "/workspace/ShopDemo" };
@@ -328,9 +442,17 @@ public sealed class DiagramReadabilityAndLayoutTests
     {
         var doc = ParseEmbeddedSvg(svg, out var canvasW, out var canvasH);
 
-        var subgraphs = doc.Descendants(SvgNs + "g")
+        var subgraphsWithLabels = doc.Descendants(SvgNs + "g")
             .Where(g => g.Attribute("class")?.Value == "subgraph")
-            .Select(g => ToBox(g.Element(SvgNs + "rect")!))
+            .Select(g => (
+                Box: ToBox(g.Element(SvgNs + "rect")!),
+                TitleW: Math.Min(
+                    Num(g.Element(SvgNs + "rect")!, "width"),
+                    Math.Max(84.0, (g.Element(SvgNs + "text")?.Value.Length ?? 8) * 7.8 + 20.0))))
+            .ToList();
+        var subgraphs = subgraphsWithLabels.Select(s => s.Box).ToList();
+        var sgTitleBoxes = subgraphsWithLabels
+            .Select(s => new Box(s.Box.X + 4.0, s.Box.Y, Math.Max(0.0, s.TitleW - 8.0), 28.0))
             .ToList();
 
         var nodes = doc.Descendants(SvgNs + "g")
@@ -351,6 +473,7 @@ public sealed class DiagramReadabilityAndLayoutTests
         Assert.Equal(0, CountPairwiseOverlaps(nodes));
         Assert.Equal(0, CountPairwiseOverlaps(pills));
         Assert.Equal(0, CountCrossOverlaps(pills, nodes));
+        Assert.Equal(0, CountCrossOverlaps(pills, sgTitleBoxes));
 
         foreach (var box in subgraphs.Concat(nodes).Concat(pills))
         {
