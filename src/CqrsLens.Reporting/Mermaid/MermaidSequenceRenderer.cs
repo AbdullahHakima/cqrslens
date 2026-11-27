@@ -285,24 +285,37 @@ internal static class MermaidSequenceRenderer
             "<marker id=\"arrow-default\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" " +
             "markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">" +
             "<path class=\"svg-arrow-default\" d=\"M 0 1 L 10 5 L 0 9 z\" fill=\"#475569\"/></marker>");
+        svg.Append(
+            "<marker id=\"arrow-in\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" " +
+            "markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">" +
+            "<path class=\"svg-arrow-in\" d=\"M 0 1 L 10 5 L 0 9 z\" fill=\"#0284c7\"/></marker>");
+        svg.Append(
+            "<marker id=\"arrow-out\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" " +
+            "markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">" +
+            "<path class=\"svg-arrow-out\" d=\"M 0 1 L 10 5 L 0 9 z\" fill=\"#d97706\"/></marker>");
+        svg.Append(
+            "<marker id=\"arrow-active\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" " +
+            "markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">" +
+            "<path class=\"svg-arrow-active\" d=\"M 0 1 L 10 5 L 0 9 z\" fill=\"#2563eb\"/></marker>");
         svg.Append("</defs>");
 
         // Lifelines.
         for (var i = 0; i < participants.Count; i++)
         {
             svg.Append(
-                $"<line class=\"svg-seq-lifeline\" x1=\"{F(center[i])}\" y1=\"{F(headerBottom)}\" " +
+                $"<line class=\"svg-seq-lifeline\" data-participant=\"{E(participants[i].Id)}\" x1=\"{F(center[i])}\" y1=\"{F(headerBottom)}\" " +
                 $"x2=\"{F(center[i])}\" y2=\"{F(lifelineBottom)}\" " +
                 "stroke=\"#94a3b8\" stroke-width=\"1.2\" stroke-dasharray=\"4 4\"/>");
         }
 
         // Rows.
+        var msgIdx = 0;
         for (var i = 0; i < rows.Count; i++)
         {
             switch (rows[i])
             {
                 case MessageRow(var message):
-                    WriteMessage(svg, message, index, center, rowY[i]);
+                    WriteMessage(svg, message, msgIdx++, index, center, rowY[i]);
                     break;
                 case NoteRow(var note):
                     WriteNote(svg, note, index, center, rowY[i], canvasWidth);
@@ -344,6 +357,7 @@ internal static class MermaidSequenceRenderer
     private static void WriteMessage(
         StringBuilder svg,
         Message message,
+        int msgIdx,
         IReadOnlyDictionary<string, int> index,
         double[] center,
         double y)
@@ -352,7 +366,8 @@ internal static class MermaidSequenceRenderer
             return;
 
         var dash = message.Dashed ? " stroke-dasharray=\"5 3\"" : "";
-        svg.Append($"<g class=\"seq-message\" data-from=\"{E(message.From)}\" data-to=\"{E(message.To)}\">");
+        var labelAttr = string.IsNullOrWhiteSpace(message.Text) ? "" : $" data-label=\"{E(message.Text)}\"";
+        svg.Append($"<g class=\"seq-message\" data-edge-index=\"{msgIdx}\" data-from=\"{E(message.From)}\" data-to=\"{E(message.To)}\"{labelAttr}>");
         if (!string.IsNullOrWhiteSpace(message.Text))
             svg.Append($"<title>{E(message.Text)}</title>");
 
@@ -362,9 +377,10 @@ internal static class MermaidSequenceRenderer
         {
             var cx = center[from];
             var loopX = cx + 42.0;
+            var loopPath = $"M {F(cx)} {F(y - 10)} L {F(loopX)} {F(y - 10)} L {F(loopX)} {F(y + 10)} L {F(cx + 2)} {F(y + 10)}";
+            svg.Append($"<path class=\"svg-edge-hit\" d=\"{loopPath}\" fill=\"none\" stroke=\"transparent\" stroke-width=\"14\"/>");
             svg.Append(
-                $"<path class=\"svg-seq-msg-line\" d=\"M {F(cx)} {F(y - 10)} L {F(loopX)} {F(y - 10)} " +
-                $"L {F(loopX)} {F(y + 10)} L {F(cx + 2)} {F(y + 10)}\" fill=\"none\" " +
+                $"<path class=\"svg-seq-msg-line\" d=\"{loopPath}\" fill=\"none\" " +
                 $"stroke=\"#475569\" stroke-width=\"1.5\"{dash} marker-end=\"url(#arrow-default)\"/>");
             if (lines.Count > 0)
             {
@@ -377,6 +393,8 @@ internal static class MermaidSequenceRenderer
         {
             var x1 = center[from];
             var x2 = center[to];
+            svg.Append(
+                $"<line class=\"svg-edge-hit\" x1=\"{F(x1)}\" y1=\"{F(y)}\" x2=\"{F(x2)}\" y2=\"{F(y)}\" stroke=\"transparent\" stroke-width=\"14\"/>");
             svg.Append(
                 $"<line class=\"svg-seq-msg-line\" x1=\"{F(x1)}\" y1=\"{F(y)}\" x2=\"{F(x2)}\" y2=\"{F(y)}\" " +
                 $"stroke=\"#475569\" stroke-width=\"1.5\"{dash} marker-end=\"url(#arrow-default)\"/>");

@@ -67,6 +67,18 @@ internal static class FlowchartSvgWriter
             "<marker id=\"arrow-violation\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" " +
             "markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">" +
             "<path class=\"svg-arrow-violation\" d=\"M 0 1 L 10 5 L 0 9 z\" fill=\"#dc2626\"/></marker>");
+        svg.Append(
+            "<marker id=\"arrow-in\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" " +
+            "markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">" +
+            "<path class=\"svg-arrow-in\" d=\"M 0 1 L 10 5 L 0 9 z\" fill=\"#0284c7\"/></marker>");
+        svg.Append(
+            "<marker id=\"arrow-out\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" " +
+            "markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">" +
+            "<path class=\"svg-arrow-out\" d=\"M 0 1 L 10 5 L 0 9 z\" fill=\"#d97706\"/></marker>");
+        svg.Append(
+            "<marker id=\"arrow-active\" viewBox=\"0 0 10 10\" refX=\"9\" refY=\"5\" " +
+            "markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\">" +
+            "<path class=\"svg-arrow-active\" d=\"M 0 1 L 10 5 L 0 9 z\" fill=\"#2563eb\"/></marker>");
         svg.Append("</defs>");
 
         // Paint order: Subgraphs -> Edge curves -> Nodes -> Collision-free Edge Label Pills.
@@ -396,10 +408,13 @@ internal static class FlowchartSvgWriter
             var dash = item.LinkStyle?.StrokeDasharray ?? (item.Edge.IsDotted ? "4 3" : null);
             var marker = item.IsViolation ? "url(#arrow-violation)" : "url(#arrow-default)";
             var violationCls = item.IsViolation ? " is-violation" : "";
+            var labelAttr = string.IsNullOrWhiteSpace(item.Edge.Label) ? "" : $" data-label=\"{E(item.Edge.Label)}\"";
 
-            svg.Append($"<g class=\"edge{violationCls}\" data-source=\"{E(item.Source.Id)}\" data-target=\"{E(item.Target.Id)}\">");
+            svg.Append($"<g class=\"edge{violationCls}\" data-edge-index=\"{item.Index}\" data-source=\"{E(item.Source.Id)}\" data-target=\"{E(item.Target.Id)}\"{labelAttr}>");
             if (!string.IsNullOrWhiteSpace(item.Edge.Label))
                 svg.Append($"<title>{E(item.Edge.Label)}</title>");
+            svg.Append(
+                $"<path class=\"svg-edge-hit\" d=\"{item.PathData}\" fill=\"none\" stroke=\"transparent\" stroke-width=\"14\"/>");
             svg.Append(
                 $"<path class=\"svg-edge-path{violationCls}\" d=\"{item.PathData}\" fill=\"none\" " +
                 $"stroke=\"{E(stroke)}\" stroke-width=\"{E(strokeWidth)}\"");
@@ -452,9 +467,14 @@ internal static class FlowchartSvgWriter
         double canvasWidth,
         double canvasHeight)
     {
-        var nodeBoxes = model.NodeOrder
+        var obstacleBoxes = model.NodeOrder
             .Select(n => (X: n.X - NodeBoxMargin, Y: n.Y - NodeBoxMargin, W: n.Width + NodeBoxMargin * 2, H: n.Height + NodeBoxMargin * 2))
             .ToList();
+        foreach (var sg in model.Subgraphs.Where(s => s.Nodes.Count > 0))
+        {
+            var titleWidth = Math.Max(0.0, Math.Min(sg.Width - 8.0, Math.Max(84.0, sg.Label.Length * FlowchartLayout.CharWidth + 28.0)));
+            obstacleBoxes.Add((X: sg.X + 4.0, Y: sg.Y, W: titleWidth, H: 30.0));
+        }
         var placedPills = new List<(double X, double Y, double W, double H)>();
 
         foreach (var item in planned)
@@ -481,7 +501,7 @@ internal static class FlowchartSvgWriter
                         continue;
                     }
 
-                    if (OverlapsAny(px, py, pillW, pillH, nodeBoxes, margin: 0.0))
+                    if (OverlapsAny(px, py, pillW, pillH, obstacleBoxes, margin: 0.0))
                         continue;
 
                     if (OverlapsAny(px, py, pillW, pillH, placedPills, margin: PillGap))
@@ -507,7 +527,7 @@ internal static class FlowchartSvgWriter
             var violationCls = item.IsViolation ? " is-violation" : "";
 
             svg.Append(
-                $"<g class=\"edge-label{violationCls}\" data-source=\"{E(item.Source.Id)}\" data-target=\"{E(item.Target.Id)}\">");
+                $"<g class=\"edge-label{violationCls}\" data-edge-index=\"{item.Index}\" data-source=\"{E(item.Source.Id)}\" data-target=\"{E(item.Target.Id)}\">");
             if (!string.IsNullOrWhiteSpace(item.Edge.Label))
                 svg.Append($"<title>{E(item.Edge.Label)}</title>");
             svg.Append(

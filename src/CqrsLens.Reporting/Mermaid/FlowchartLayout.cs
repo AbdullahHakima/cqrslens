@@ -125,7 +125,7 @@ internal static class FlowchartLayout
         var populatedSubgraphs = subgraphs.Where(s => s.Nodes.Count > 0).ToList();
 
         if (!isLeftToRight && populatedSubgraphs.Count > 0)
-            return LayoutTopDownBands(nodeOrder, populatedSubgraphs, edges, hGap, vGap);
+            return LayoutTopDownBands(nodeOrder, populatedSubgraphs, edges, hGap, 56.0);
 
         if (isLeftToRight && populatedSubgraphs.Count >= 2 && nodeOrder.All(n => n.Subgraph is not null))
             return LayoutLeftToRightSubgraphs(nodeOrder, populatedSubgraphs, edges);
@@ -217,11 +217,23 @@ internal static class FlowchartLayout
         {
             var sg = populatedSubgraphs[i];
             var rows = sgWrappedRows[i];
+            var rowGap = InnerRowGap;
+            if (rows.Count > 1)
+            {
+                var rowOf = new Dictionary<string, int>(StringComparer.Ordinal);
+                for (var rIdx = 0; rIdx < rows.Count; rIdx++)
+                {
+                    foreach (var n in rows[rIdx])
+                        rowOf[n.Id] = rIdx;
+                }
+                if (edges.Any(e => rowOf.TryGetValue(e.SourceId, out var r1) && rowOf.TryGetValue(e.TargetId, out var r2) && r1 != r2))
+                    rowGap = 44.0;
+            }
             var sgWidth = rowWidths[i];
             sg.X = (canvasWidth - sgWidth) / 2.0;
             sg.Y = currentY;
             sg.Width = sgWidth;
-            var rowsHeight = rows.Count * NodeHeight + Math.Max(0, rows.Count - 1) * InnerRowGap;
+            var rowsHeight = rows.Count * NodeHeight + Math.Max(0, rows.Count - 1) * rowGap;
             sg.Height = SgPadTop + rowsHeight + SgPadBottom;
 
             var nodeY = sg.Y + SgPadTop;
@@ -235,7 +247,7 @@ internal static class FlowchartLayout
                     node.Y = nodeY;
                     startX += node.Width + hGap;
                 }
-                nodeY += NodeHeight + InnerRowGap;
+                nodeY += NodeHeight + rowGap;
             }
 
             currentY += sg.Height + vGap;

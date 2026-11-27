@@ -45,9 +45,10 @@ internal static class ErDiagramSvgWriter
                 continue;
             }
 
+            var displayLabel = $"{rel.Label} ({FormatCardinality(rel.Connector)})";
             svg.Append(
-                $"<g class=\"er-relationship\" data-principal=\"{E(rel.PrincipalId)}\" " +
-                $"data-dependent=\"{E(rel.DependentId)}\" data-connector=\"{E(rel.Connector)}\">");
+                $"<g class=\"er-relationship\" data-edge-index=\"{i}\" data-principal=\"{E(rel.PrincipalId)}\" " +
+                $"data-dependent=\"{E(rel.DependentId)}\" data-connector=\"{E(rel.Connector)}\" data-label=\"{E(displayLabel)}\">");
 
             if (string.Equals(rel.PrincipalId, rel.DependentId, StringComparison.Ordinal))
             {
@@ -55,18 +56,19 @@ internal static class ErDiagramSvgWriter
                 var loopLeftX = principal.X + principal.Width * 0.3;
                 var loopRightX = principal.X + principal.Width * 0.7;
                 var loopTopY = principal.Y - 28;
-                svg.Append(
-                    $"<path class=\"svg-er-line\" d=\"M {F(loopLeftX)} {F(principal.Y)} L {F(loopLeftX)} {F(loopTopY)} " +
-                    $"L {F(loopRightX)} {F(loopTopY)} L {F(loopRightX)} {F(principal.Y)}\" " +
-                    "fill=\"none\" stroke=\"#475569\" stroke-width=\"1.5\"/>");
+                var loopPath =
+                    $"M {F(loopLeftX)} {F(principal.Y)} L {F(loopLeftX)} {F(loopTopY)} " +
+                    $"L {F(loopRightX)} {F(loopTopY)} L {F(loopRightX)} {F(principal.Y)}";
+                svg.Append($"<path class=\"svg-edge-hit\" d=\"{loopPath}\" fill=\"none\" stroke=\"transparent\" stroke-width=\"14\"/>");
+                svg.Append($"<path class=\"svg-er-line\" d=\"{loopPath}\" fill=\"none\" stroke=\"#475569\" stroke-width=\"1.5\"/>");
             }
             else
             {
                 ComputePerimeterAnchors(principal, dependent, out var x1, out var y1, out var c1x, out var c1y, out var c2x, out var c2y, out var x2, out var y2);
                 curves[i] = (x1, y1, c1x, c1y, c2x, c2y, x2, y2);
-                svg.Append(
-                    $"<path class=\"svg-er-line\" d=\"M {F(x1)} {F(y1)} C {F(c1x)} {F(c1y)}, {F(c2x)} {F(c2y)}, {F(x2)} {F(y2)}\" " +
-                    "fill=\"none\" stroke=\"#475569\" stroke-width=\"1.5\"/>");
+                var curvePath = $"M {F(x1)} {F(y1)} C {F(c1x)} {F(c1y)}, {F(c2x)} {F(c2y)}, {F(x2)} {F(y2)}";
+                svg.Append($"<path class=\"svg-edge-hit\" d=\"{curvePath}\" fill=\"none\" stroke=\"transparent\" stroke-width=\"14\"/>");
+                svg.Append($"<path class=\"svg-er-line\" d=\"{curvePath}\" fill=\"none\" stroke=\"#475569\" stroke-width=\"1.5\"/>");
             }
 
             svg.Append("</g>");
@@ -222,8 +224,8 @@ internal static class ErDiagramSvgWriter
             var textY = py + pillHeight / 2.0 + 4.0;
 
             svg.Append(
-                $"<g class=\"er-relationship-label\" data-principal=\"{E(rel.PrincipalId)}\" " +
-                $"data-dependent=\"{E(rel.DependentId)}\">");
+                $"<g class=\"er-relationship-label\" data-edge-index=\"{i}\" data-principal=\"{E(rel.PrincipalId)}\" " +
+                $"data-dependent=\"{E(rel.DependentId)}\" data-label=\"{E(displayLabel)}\">");
             svg.Append(
                 $"<rect class=\"svg-er-pill\" x=\"{F(px)}\" y=\"{F(py)}\" " +
                 $"width=\"{F(pillWidth)}\" height=\"{F(pillHeight)}\" rx=\"4\" " +
